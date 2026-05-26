@@ -12,7 +12,7 @@ Enterprise Infrastructure Lifecycle Engine — a React SPA that walks infra PMs 
 | Styling | Tailwind CSS v3 + custom CSS in `index.css` |
 | State | Zustand v5 (`src/store/useStore.js`) |
 | AI integration | Anthropic API via a Cloudflare Worker proxy (CORS — see below) |
-| Excel export | SheetJS (loaded from CDN in `netlify.toml` CSP) |
+| Excel export | `xlsx-js-style` (npm — fork of SheetJS with cell style support) |
 | Hosting | Netlify (static deploy) |
 | Repo | github.com/joyfulmake/infra-lifecycle-engine |
 
@@ -52,8 +52,9 @@ src/
     designTasks.js        — AI design task definitions
     designDefaults.js     — default values per HW/OS/DB/APP combo
     incidentFixTasks.js   — fix task definitions per incident
-    suggestDb.js          — AI suggestion logic
-    exportExcel.js        — Excel export helper
+    smartScan.js          — standalone CVE/EOL scan + auto-suggest incidents/UUM codes
+    suggestDb.js          — suggestion engine (matchSuggestKeys — min 3 chars)
+    exportExcel.js        — 12-sheet styled Excel export using xlsx-js-style
 ```
 
 ## State management
@@ -111,4 +112,8 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **Zustand + Sets**: Zustand doesn't serialize ES6 Sets across renders correctly. All multi-select state uses plain arrays (`selInc`, `selUUM`, `selFix`).
 - **Tailwind v3 vs v4**: This project uses Tailwind **v3** (`tailwindcss@^3.4`). Do not upgrade to v4 without updating the PostCSS config and removing the `@tailwind` directives.
 - **React 19**: Some third-party component libraries haven't updated peer deps for React 19 yet. Check compatibility before adding dependencies.
-- **SheetJS CDN**: Excel export uses SheetJS loaded from `https://cdn.sheetjs.com`. It's referenced in the CSP. If moving to npm install, update the CSP accordingly.
+- **xlsx-js-style**: Excel export uses `xlsx-js-style` npm package (API-compatible with SheetJS, adds cell `s` style property). The CDN SheetJS script in `index.html` is still loaded (legacy; safe to remove eventually). Do NOT upgrade to `xlsx` v0.19+ — it removes community cell styles.
+- **Auto-suggestions**: `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3. Use `minChars=0` to get placeholder hints without the 3-char gate.
+- **RTM sign-off**: Requires every row to be explicitly set via `s.setRtmRow(id, status)` — auto-populated defaults do not count as reviewed. The "Confirm current statuses" button bulk-marks all rows.
+- **Phase guidemark**: Current phase determined by workflow gate flags in order. `PHASE_HINTS` map in PhasePanel.jsx drives the bottom guidemark text.
+- **AI auto-select**: `runSmartScan(ctx)` returns `{ findings, riskLevel, suggestedInc, suggestedUUM }`. PhasePanel pre-selects them post-scan; user sees accept/clear banner.
