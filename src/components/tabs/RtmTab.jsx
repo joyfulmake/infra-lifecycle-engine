@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { ALL_INC, FIXES } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
@@ -28,11 +29,14 @@ function StatusBadge({ status }) {
   return <span className={`badge ${cfg[status] || 'badge-slate'}`}>{status}</span>;
 }
 
-function RtmRow({ row, onStatusChange, readOnly }) {
+function RtmRow({ row, onStatusChange, readOnly, reviewed }) {
   return (
-    <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+    <tr className={['border-b border-slate-100 transition-colors', reviewed ? 'hover:bg-slate-50' : 'hover:bg-amber-50/30 bg-amber-50/10'].join(' ')}>
       <td className="py-2 px-3 text-xs font-mono text-slate-400 w-12">{row.id}</td>
-      <td className="py-2 px-3 text-xs text-slate-700 max-w-xs">{row.req}</td>
+      <td className="py-2 px-3 text-xs text-slate-700 max-w-xs">
+        {!reviewed && !readOnly && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 mb-0.5" title="Needs manual review" />}
+        {row.req}
+      </td>
       <td className="py-2 px-3 text-xs text-slate-500 max-w-xs">{row.test}</td>
       <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{row.method}</td>
       <td className="py-2 px-3 text-xs text-slate-500 whitespace-nowrap">{row.owner}</td>
@@ -41,7 +45,7 @@ function RtmRow({ row, onStatusChange, readOnly }) {
           <StatusBadge status={row.status || 'PENDING'} />
         ) : (
           <select
-            className="form-select text-xs py-0.5 px-1"
+            className={['form-select text-xs py-0.5 px-1', !reviewed ? 'border-amber-300 bg-amber-50' : ''].join(' ')}
             value={row.status || 'PENDING'}
             onChange={e => onStatusChange(row.id, e.target.value)}
           >
@@ -59,9 +63,10 @@ function RtmRow({ row, onStatusChange, readOnly }) {
 
 export default function RtmTab() {
   const s = useStore();
+  // Track which rows the reviewer has explicitly touched this session
+  const [sessionReviewed, setSessionReviewed] = useState({});
 
   const isLocked = !s.phase2Active;
-  const canSign = !s.rtmSigned;
 
   if (isLocked) {
     return (
@@ -74,7 +79,7 @@ export default function RtmTab() {
     );
   }
 
-  // Build full RTM rows from base + incident fixes + UUM items
+  // Build full RTM rows — all default to PENDING, user must explicitly set each one
   const rows = [
     ...RTM_BASE.map(r => ({
       ...r,
@@ -82,11 +87,9 @@ export default function RtmTab() {
     })),
   ];
 
-  // Add incident-specific RTM rows
   s.selInc.forEach((code, idx) => {
     const inc = ALL_INC.find(i => i.code === code);
     if (!inc) return;
-    const fixed = s.promoted || s.selFix.includes(code);
     const id = `INC${String(idx + 1).padStart(2, '0')}`;
     rows.push({
       id,
@@ -94,11 +97,11 @@ export default function RtmTab() {
       test: FIXES[code] || 'Fix applied and verified',
       method: 'Post-fix smoke test + QA sign-off',
       owner: 'QA Team',
-      status: fixed ? (s.rtmRows?.[id] || 'PASS') : (s.rtmRows?.[id] || 'PENDING'),
+      // Always PENDING until user explicitly sets — even if fix is selected
+      status: s.rtmRows?.[id] || 'PENDING',
     });
   });
 
-  // Add UUM-specific RTM rows
   s.selUUM.forEach((code, idx) => {
     const uum = ALL_UUM.find(u => u.code === code);
     if (!uum) return;
@@ -109,17 +112,38 @@ export default function RtmTab() {
       test: `${uum.type === 'migration' ? 'Data integrity check + cutover verified' : uum.type === 'upgrade' ? 'Version confirmed + regression suite passed' : 'Patch applied + health check passed'}`,
       method: uum.type === 'migration' ? 'Row count + checksum + app functional test' : 'Version query + test suite',
       owner: uum.layers?.includes('db') ? 'DBA + QA Team' : 'QA Team',
-      status: s.promoted ? (s.rtmRows?.[id] || 'PASS') : (s.rtmRows?.[id] || 'PENDING'),
+      // Always PENDING until user explicitly sets
+      status: s.rtmRows?.[id] || 'PENDING',
     });
   });
+
+  // A row is "reviewed" if the user explicitly changed it in the Zustand store
+  const reviewedIds = new Set([
+    ...Object.keys(s.rtmRows || {}),
+    ...Object.keys(sessionReviewed),
+  ]);
 
   const passCount = rows.filter(r => r.status === 'PASS' || r.status === 'NA').length;
   const failCount = rows.filter(r => r.status === 'FAIL' || r.status === 'BLOCKED').length;
   const pendingCount = rows.filter(r => r.status === 'PENDING').length;
-  const allResolved = pendingCount === 0 && failCount === 0;
+  const unreviewed = rows.filter(r => !reviewedIds.has(r.id)).length;
+
+  // Sign-off requires: all rows reviewed AND no FAIL/BLOCKED
+  const canSign = !s.rtmSigned && unreviewed === 0 && failCount === 0 && pendingCount === 0;
 
   function handleStatusChange(id, status) {
     s.setRtmRow(id, status);
+    setSessionReviewed(prev => ({ ...prev, [id]: true }));
+  }
+
+  function markAllReviewed() {
+    rows.forEach(r => {
+      if (!reviewedIds.has(r.id)) {
+        const current = r.status || 'PENDING';
+        s.setRtmRow(r.id, current);
+        setSessionReviewed(prev => ({ ...prev, [r.id]: true }));
+      }
+    });
   }
 
   return (
@@ -127,13 +151,16 @@ export default function RtmTab() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-sm font-bold text-slate-700">Requirements Traceability Matrix</div>
-          <div className="text-xs text-slate-500">{rows.length} requirements -- {passCount} passed, {failCount} failed, {pendingCount} pending</div>
+          <div className="text-xs text-slate-500">{rows.length} requirements — {passCount} passed, {failCount} failed, {pendingCount} pending</div>
         </div>
         <div className="flex items-center gap-2">
           <span className="badge badge-green">{passCount} PASS</span>
           {failCount > 0 && <span className="badge badge-red">{failCount} FAIL</span>}
           {pendingCount > 0 && <span className="badge badge-amber">{pendingCount} PENDING</span>}
-          {!s.rtmSigned && allResolved && (
+          {unreviewed > 0 && !s.rtmSigned && (
+            <span className="badge badge-amber">{unreviewed} unreviewed</span>
+          )}
+          {canSign && (
             <button className="btn-teal px-4 py-1.5 text-xs" onClick={() => s.signRtm()}>
               Sign Off RTM
             </button>
@@ -144,17 +171,37 @@ export default function RtmTab() {
         </div>
       </div>
 
-      {!s.rtmSigned && !allResolved && (
+      {/* Review guidance banner */}
+      {!s.rtmSigned && unreviewed > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between">
+          <div className="text-xs text-amber-800">
+            <span className="font-semibold">{unreviewed} row{unreviewed > 1 ? 's' : ''} need manual review.</span>
+            {' '}Set each status using the dropdown — sign-off requires all rows explicitly verified.
+          </div>
+          <button
+            className="text-xs text-amber-700 border border-amber-400 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap ml-3"
+            onClick={markAllReviewed}
+          >
+            Confirm current statuses
+          </button>
+        </div>
+      )}
+
+      {!s.rtmSigned && unreviewed === 0 && failCount > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 mb-4 text-xs text-red-700">
+          {failCount} requirement(s) FAILED — resolve or mark as N/A before QA sign-off.
+        </div>
+      )}
+
+      {!s.rtmSigned && unreviewed === 0 && pendingCount > 0 && failCount === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 text-xs text-amber-700">
-          {failCount > 0
-            ? `${failCount} requirement(s) FAILED -- resolve before QA sign-off.`
-            : `${pendingCount} requirement(s) still pending -- set all to PASS or N/A to enable sign-off.`}
+          {pendingCount} requirement(s) still PENDING — set all to PASS or N/A to enable sign-off.
         </div>
       )}
 
       {s.rtmSigned && (
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 mb-4 text-xs text-green-700 font-semibold">
-          RTM signed off by QA Lead -- production cutover authorized.
+          RTM signed off by QA Lead — production cutover authorized.
         </div>
       )}
 
@@ -178,6 +225,7 @@ export default function RtmTab() {
                   row={row}
                   onStatusChange={handleStatusChange}
                   readOnly={s.rtmSigned}
+                  reviewed={reviewedIds.has(row.id)}
                 />
               ))}
             </tbody>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore, DESIGN_SECTIONS, FIELD_LABELS } from '../../store/useStore.js';
 import { matchSuggestKeys } from '../../lib/suggestDb.js';
+import { generateTaskPlan } from '../../lib/smartScan.js';
 
 function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
   const [pos, setPos] = useState({ top: 0, left: 0, width: 200 });
@@ -14,10 +15,7 @@ function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
   if (!suggestions.length) return null;
 
   return (
-    <div
-      className="suggest-dropdown"
-      style={{ top: pos.top, left: pos.left, width: pos.width }}
-    >
+    <div className="suggest-dropdown" style={{ top: pos.top, left: pos.left, width: pos.width }}>
       {suggestions.map((s, i) => (
         <div key={i} className="suggest-item" onMouseDown={e => { e.preventDefault(); onSelect(s); }}>
           {s}
@@ -34,18 +32,26 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
 
   function handleChange(val) {
     onChange(val);
-    if (val.length >= 0) {
-      setSuggestions(matchSuggestKeys(val, `sd-${sectionKey}-${fieldKey}`));
-    }
+    setSuggestions(matchSuggestKeys(val, fieldKey));
   }
 
   function handleFocus() {
     setFocused(true);
-    setSuggestions(matchSuggestKeys(value || '', `sd-${sectionKey}-${fieldKey}`));
+    setSuggestions(matchSuggestKeys(value || '', fieldKey));
   }
 
   const isEmpty = !value?.trim();
   const highlight = readOnly && isEmpty;
+
+  const placeholder = (() => {
+    const label = FIELD_LABELS[fieldKey] || fieldKey;
+    const hints = matchSuggestKeys(fieldKey, fieldKey, 0);
+    if (hints.length > 0) {
+      const first = hints[0];
+      return first.length > 50 ? first.slice(0, 50) + '…' : first;
+    }
+    return `Enter ${label}…`;
+  })();
 
   return (
     <div className="relative">
@@ -65,7 +71,7 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
             onChange={e => handleChange(e.target.value)}
             onFocus={handleFocus}
             onBlur={() => { setFocused(false); setTimeout(() => setSuggestions([]), 200); }}
-            placeholder={`Enter ${FIELD_LABELS[fieldKey] || fieldKey}...`}
+            placeholder={placeholder}
           />
           {focused && suggestions.length > 0 && (
             <SuggestDropdown
@@ -80,7 +86,7 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
   );
 }
 
-function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle, phase2Active }) {
+function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle }) {
   const filled = section.fields.filter(f => sectionData[f]?.trim()).length;
   const total = section.fields.length;
   const completePct = Math.round((filled / total) * 100);
@@ -88,13 +94,10 @@ function DesignSection({ section, sectionData, readOnly, onFieldChange, open, on
 
   return (
     <div className="card mb-3 overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-      >
+      <button onClick={onToggle} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-slate-700 text-sm">{section.label}</span>
-          <span className="text-xs text-slate-400">-- {section.owner}</span>
+          <span className="text-xs text-slate-400">— {section.owner}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className={`badge ${badgeColor}`}>{filled}/{total} filled</span>
@@ -129,69 +132,32 @@ function DesignSection({ section, sectionData, readOnly, onFieldChange, open, on
 
 export default function SystemDesignTab() {
   const s = useStore();
-  const [showAiModal, setShowAiModal] = useState(false);
-  const [aiKey, setAiKey] = useState('');
-  const [aiStatus, setAiStatus] = useState('idle');
-  const [aiResult, setAiResult] = useState('');
+  const [taskStatus, setTaskStatus] = useState('idle'); // idle | running | done
+  const [taskMsg, setTaskMsg] = useState('');
 
   const isLocked = !s.scanComplete;
   const isReadOnly = s.phase2Active;
 
-  const allFilled = DESIGN_SECTIONS.every(sec =>
-    sec.fields.filter(f => f !== 'notes').every(f => s.sysDesignData[sec.key]?.[f]?.trim())
-  );
+  const totalFields = DESIGN_SECTIONS.reduce((n, sec) => n + sec.fields.filter(f => f !== 'notes').length, 0);
+  const filledFields = DESIGN_SECTIONS.reduce((n, sec) =>
+    n + sec.fields.filter(f => f !== 'notes' && s.sysDesignData[sec.key]?.[f]?.trim()).length, 0);
+  const overallPct = Math.round((filledFields / totalFields) * 100);
 
-  async function generateAiTasks() {
-    if (!aiKey.trim()) { setAiResult('Please enter your Anthropic API key.'); setAiStatus('error'); return; }
-    setAiStatus('running');
-
-    const designSummary = DESIGN_SECTIONS.map(sec => {
-      const fields = sec.fields.slice(0, 5).map(f => `${FIELD_LABELS[f] || f}: ${s.sysDesignData[sec.key]?.[f] || 'TBD'}`).join('; ');
-      return `${sec.label} (${sec.owner}): ${fields}`;
-    }).join('\n');
-
-    const prompt = `You are an enterprise infrastructure project manager. Based on this system design, generate a structured task plan.\n\nStack: ${s.ctx.hw} / ${s.ctx.os} / ${s.ctx.db} / ${s.ctx.app}\n\nSystem Design Summary:\n${designSummary}\n\nGenerate a JSON array of tasks with this structure:\n[\n  {"id": "T01", "name": "Task name", "team": "Team role", "duration_hours": 2, "depends_on": [], "phase": 1, "milestone": false, "description": "Brief description"}\n]\n\nInclude 15-20 tasks covering all phases from network through security. Order by dependency. Return ONLY the JSON array.`;
-
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'x-api-key': aiKey,
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 2048,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      }).catch(() => fetch('http://localhost:8787/v1/messages', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-api-key': aiKey },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] }),
-      }));
-
-      if (!res.ok) { const t = await res.text(); throw new Error(t); }
-      const data = await res.json();
-      const text = data.content?.[0]?.text || '[]';
-
-      // Parse JSON
-      const match = text.match(/\[[\s\S]*\]/);
-      if (match) {
-        const tasks = JSON.parse(match[0]);
+  function generateTasks() {
+    setTaskStatus('running');
+    setTaskMsg('');
+    setTimeout(() => {
+      try {
+        const tasks = generateTaskPlan(s.sysDesignData, s.ctx);
         s.setAiTasks(tasks);
         s.applyDesign();
-        setAiResult(`Generated ${tasks.length} tasks successfully.`);
-        setAiStatus('done');
-      } else {
-        throw new Error('No valid JSON array found in response');
+        setTaskStatus('done');
+        setTaskMsg(`Generated ${tasks.length} implementation tasks across all function teams.`);
+      } catch (e) {
+        setTaskStatus('idle');
+        setTaskMsg('Task generation failed: ' + e.message);
       }
-    } catch (e) {
-      setAiResult('AI task generation failed: ' + e.message);
-      setAiStatus('error');
-      s.applyDesign(); // mark design as applied anyway
-    }
+    }, 800);
   }
 
   if (isLocked) {
@@ -204,10 +170,10 @@ export default function SystemDesignTab() {
             </svg>
           </div>
           <div className="font-semibold text-slate-700 mb-1">System Design Locked</div>
-          <div className="text-sm text-slate-500 mb-3">Complete Phase 1 and run the AI Smart Scan to unlock all 8 design sections for your function teams.</div>
+          <div className="text-sm text-slate-500 mb-3">Complete Phase 1 and run the AI Smart Scan (no API key needed) to unlock all 8 design sections.</div>
           <div className="space-y-1 text-left">
             {[
-              ['Phase 1 -- Platform Topology', s.isBuilt],
+              ['Phase 1 — Platform Topology', s.isBuilt],
               ['AI Smart Scan Completed', s.scanComplete],
               ['Before Phase 2 Begins', true],
             ].map(([label, done]) => (
@@ -223,21 +189,32 @@ export default function SystemDesignTab() {
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+
       {/* Status banner */}
       {!isReadOnly && (
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
           <div className="w-2 h-2 rounded-full bg-green-500 mt-1 flex-shrink-0 pulse-ring" />
-          <div>
-            <div className="font-semibold text-green-800 text-sm">System Design Entry is Now Open</div>
-            <div className="text-xs text-green-700 mt-0.5">All function admins should fill their section before Phase 2 begins. Defaults are pre-filled from your stack selection -- review and adjust.</div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold text-green-800 text-sm">System Design Entry Open — {overallPct}% Complete</div>
+              <span className={['badge text-xs', overallPct === 100 ? 'badge-green' : overallPct >= 60 ? 'badge-teal' : 'badge-amber'].join(' ')}>
+                {filledFields}/{totalFields} fields
+              </span>
+            </div>
+            <div className="text-xs text-green-700 mt-0.5">
+              All 8 sections × 30 fields pre-filled from stack selection. Review and adjust — suggestions appear as you type in any field.
+            </div>
+            <div className="h-1 bg-green-200 rounded-full mt-2">
+              <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: overallPct + '%' }} />
+            </div>
           </div>
         </div>
       )}
 
       {isReadOnly && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
-          <div className="font-semibold text-amber-800 text-sm">System Design Locked -- Phase 2 Active</div>
-          <div className="text-xs text-amber-700 mt-0.5">All fields are read-only. Empty fields highlighted in amber require PM to fill with admin present.</div>
+          <div className="font-semibold text-amber-800 text-sm">System Design Locked — Phase 2 Active</div>
+          <div className="text-xs text-amber-700 mt-0.5">All fields read-only. Amber fields require PM to fill with admin present.</div>
         </div>
       )}
 
@@ -251,49 +228,43 @@ export default function SystemDesignTab() {
           onFieldChange={s.setDesignField}
           open={!!s.designSectionOpen[section.key]}
           onToggle={() => s.toggleDesignSection(section.key)}
-          phase2Active={s.phase2Active}
         />
       ))}
 
-      {/* AI Task Plan */}
+      {/* Task Plan Generation — no API key needed */}
       {!isReadOnly && (
         <div className="card p-4 mt-2">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-2">
             <div>
-              <div className="font-semibold text-slate-700 text-sm">Generate AI Task Plan</div>
-              <div className="text-xs text-slate-500">Calls Anthropic API to generate a structured task plan with dependencies</div>
+              <div className="font-semibold text-slate-700 text-sm">Generate Implementation Task Plan</div>
+              <div className="text-xs text-slate-500">Builds a structured task plan from your design — no API key required</div>
             </div>
-            {s.sdAiTasks.length > 0 && <span className="badge badge-green">{s.sdAiTasks.length} tasks generated</span>}
+            {s.sdAiTasks.length > 0 && <span className="badge badge-green">{s.sdAiTasks.length} tasks</span>}
           </div>
 
-          {!showAiModal ? (
-            <button className="btn-teal w-auto px-4" onClick={() => setShowAiModal(true)}>
-              Generate AI Task Plan
+          <div className="flex gap-2 items-center">
+            <button
+              className="btn-teal w-auto px-4"
+              onClick={generateTasks}
+              disabled={taskStatus === 'running'}
+            >
+              {taskStatus === 'running' ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin w-3 h-3 border border-white border-t-transparent rounded-full inline-block" />
+                  Generating…
+                </span>
+              ) : s.sdAiTasks.length > 0 ? 'Regenerate Task Plan' : 'Generate Task Plan'}
             </button>
-          ) : (
-            <div className="space-y-2 fade-in">
-              <label className="form-label">Anthropic API Key</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="sk-ant-..."
-                value={aiKey}
-                onChange={e => setAiKey(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button className="btn-teal flex-1" onClick={generateAiTasks} disabled={aiStatus === 'running'}>
-                  {aiStatus === 'running' ? 'Generating...' : 'Generate Tasks'}
-                </button>
-                <button className="btn-primary flex-1" onClick={() => { s.applyDesign(); setShowAiModal(false); }}>
-                  Apply Without AI
-                </button>
-                <button className="btn-primary px-3 w-auto" onClick={() => setShowAiModal(false)}>✕</button>
-              </div>
-              {aiResult && (
-                <div className={['text-xs rounded p-2', aiStatus === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'].join(' ')}>
-                  {aiResult}
-                </div>
-              )}
+            {!s.designApplied && (
+              <button className="btn-primary w-auto px-4" onClick={() => s.applyDesign()}>
+                Apply Design (skip tasks)
+              </button>
+            )}
+          </div>
+
+          {taskMsg && (
+            <div className={['text-xs rounded p-2 mt-2', taskStatus === 'done' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'].join(' ')}>
+              {taskMsg}
             </div>
           )}
         </div>
