@@ -46,8 +46,8 @@ const TABS = [
   {
     id: 'closure',
     label: 'Closure',
-    unlocked: s => s.promoted,
-    lockMsg: 'Execute production cutover first',
+    unlocked: s => s.rtmSigned,
+    lockMsg: 'Complete RTM sign-off first',
   },
 ];
 

@@ -3,6 +3,11 @@ import { useStore } from '../../store/useStore.js';
 import { ALL_INC, FIXES } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 
+// Resolve any incident code — checks catalog first, then customInc
+function resolveInc(code, customInc) {
+  return ALL_INC.find(i => i.code === code) || (customInc || []).find(c => c.code === code) || null;
+}
+
 const RTM_BASE = [
   { id: 'R01', req: 'Platform provisioned per approved topology', test: 'Physical/VM inventory matches CMDB', method: 'Config review + CMDB diff', owner: 'Unix Admin' },
   { id: 'R02', req: 'OS patched to approved baseline', test: 'OS version + patch level verified', method: 'rpm -qa / dpkg -l / oslevel', owner: 'Unix Admin' },
@@ -88,7 +93,7 @@ export default function RtmTab() {
   ];
 
   s.selInc.forEach((code, idx) => {
-    const inc = ALL_INC.find(i => i.code === code);
+    const inc = resolveInc(code, s.customInc);
     if (!inc) return;
     const id = `INC${String(idx + 1).padStart(2, '0')}`;
     rows.push({
@@ -97,8 +102,8 @@ export default function RtmTab() {
       test: FIXES[code] || 'Fix applied and verified',
       method: 'Post-fix smoke test + QA sign-off',
       owner: 'QA Team',
-      // Always PENDING until user explicitly sets — even if fix is selected
       status: s.rtmRows?.[id] || 'PENDING',
+      isCustom: !!(s.customInc || []).find(c => c.code === code),
     });
   });
 
@@ -136,14 +141,15 @@ export default function RtmTab() {
     setSessionReviewed(prev => ({ ...prev, [id]: true }));
   }
 
+  // "Confirm current statuses" — sets all still-PENDING rows to PASS
   function markAllReviewed() {
+    const next = {};
     rows.forEach(r => {
-      if (!reviewedIds.has(r.id)) {
-        const current = r.status || 'PENDING';
-        s.setRtmRow(r.id, current);
-        setSessionReviewed(prev => ({ ...prev, [r.id]: true }));
-      }
+      const status = (r.status === 'PENDING' || !reviewedIds.has(r.id)) ? 'PASS' : r.status;
+      s.setRtmRow(r.id, status);
+      next[r.id] = true;
     });
+    setSessionReviewed(prev => ({ ...prev, ...next }));
   }
 
   function markAll(status) {
@@ -198,14 +204,14 @@ export default function RtmTab() {
       {!s.rtmSigned && unreviewed > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between">
           <div className="text-xs text-amber-800">
-            <span className="font-semibold">{unreviewed} row{unreviewed > 1 ? 's' : ''} need manual review.</span>
-            {' '}Set each status using the dropdown — sign-off requires all rows explicitly verified.
+            <span className="font-semibold">{unreviewed} row{unreviewed > 1 ? 's' : ''} still unreviewed.</span>
+            {' '}Use dropdowns to set each status, or confirm all pending as PASS below.
           </div>
           <button
-            className="text-xs text-amber-700 border border-amber-400 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap ml-3"
+            className="text-xs text-green-700 border border-green-400 bg-green-50 rounded px-2 py-0.5 hover:bg-green-100 whitespace-nowrap ml-3"
             onClick={markAllReviewed}
           >
-            Confirm current statuses
+            Confirm all unreviewed → PASS
           </button>
         </div>
       )}
@@ -255,6 +261,40 @@ export default function RtmTab() {
           </table>
         </div>
       </div>
+
+      {/* Next Build Targets — items not fully passed become improvement targets */}
+      {(() => {
+        const targets = rows.filter(r => r.status === 'FAIL' || r.status === 'BLOCKED' || r.status === 'PENDING');
+        if (targets.length === 0) return null;
+        return (
+          <div className="card mt-4 overflow-hidden border-l-4 border-blue-400">
+            <div className="bg-blue-50 px-4 py-2 border-b border-blue-200 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-blue-700 uppercase tracking-wide">Next Build Improvement Targets</div>
+                <div className="text-xs text-blue-500">{targets.length} requirement{targets.length > 1 ? 's' : ''} not cleared — carry forward to next build cycle</div>
+              </div>
+              <span className="badge badge-blue">{targets.length} items</span>
+            </div>
+            <div className="divide-y divide-blue-50">
+              {targets.map(r => (
+                <div key={r.id} className="px-4 py-2 flex items-start gap-3 hover:bg-blue-50/30 transition-colors">
+                  <span className="text-xs font-mono text-blue-400 w-10 flex-shrink-0 pt-0.5">{r.id}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-slate-700">{r.req}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{r.method} — {r.owner}</div>
+                  </div>
+                  <span className={['badge text-xs flex-shrink-0', r.status === 'FAIL' || r.status === 'BLOCKED' ? 'badge-red' : 'badge-amber'].join(' ')}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-blue-50 px-4 py-2 border-t border-blue-100">
+              <div className="text-xs text-blue-600">
+                These {targets.length} item{targets.length > 1 ? 's' : ''} will be automatically pre-populated as open requirements when you create the next build with the same environment.
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

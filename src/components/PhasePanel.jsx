@@ -49,6 +49,60 @@ function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
   );
 }
 
+// HW → compatible OS matrix
+const HW_OS_COMPAT = {
+  'IBM Power10 / Power11': ['AIX 7.3', 'AIX 7.2', 'RHEL 9.x', 'RHEL 8.x', 'Ubuntu 24.04 LTS', 'Ubuntu 22.04 LTS', 'SUSE SLES 15 SP6'],
+  'IBM Power9':            ['AIX 7.3', 'AIX 7.2', 'AIX 6.1 (EOL)', 'RHEL 9.x', 'RHEL 8.x', 'RHEL 7.x (EOL)', 'Ubuntu 22.04 LTS', 'SUSE SLES 15 SP6', 'SUSE SLES 12 SP5'],
+  'IBM Power7 / Power8':   ['AIX 7.2', 'AIX 6.1 (EOL)', 'RHEL 7.x (EOL)', 'SUSE SLES 12 SP5'],
+  'IBM z16 Mainframe':     ['z/OS 3.1', 'RHEL 9.x', 'Ubuntu 22.04 LTS'],
+  'Oracle Exadata X10M':   ['Oracle Linux 9', 'RHEL 8.x'],
+};
+
+// Option-filtered input — suggestions come from an options array, not suggestDb
+function FilteredSuggestInput({ options, value, onChange, placeholder, className }) {
+  const [focused, setFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const inputRef = useRef(null);
+
+  function getSuggestions(val) {
+    if (!val || val.trim().length < 2) return options.slice(0, 6);
+    const lower = val.toLowerCase();
+    return options.filter(o => o.toLowerCase().includes(lower)).slice(0, 6);
+  }
+
+  function handleChange(val) {
+    onChange(val);
+    setSuggestions(getSuggestions(val));
+  }
+
+  function handleFocus() {
+    setFocused(true);
+    setSuggestions(getSuggestions(value || ''));
+  }
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        className={className || 'w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none focus:bg-white/15'}
+        placeholder={placeholder}
+        value={value || ''}
+        onChange={e => handleChange(e.target.value)}
+        onFocus={handleFocus}
+        onBlur={() => { setFocused(false); setTimeout(() => setSuggestions([]), 200); }}
+      />
+      {focused && suggestions.length > 0 && (
+        <SuggestDropdown
+          suggestions={suggestions}
+          onSelect={s => { onChange(s); setSuggestions([]); }}
+          anchorEl={inputRef.current}
+        />
+      )}
+    </div>
+  );
+}
+
 // Input with suggestion support — styled for dark panel
 function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', className = '' }) {
   const [focused, setFocused] = useState(false);
@@ -288,6 +342,11 @@ export default function PhasePanel() {
   const [reqOpen, setReqOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [customIncOpen, setCustomIncOpen] = useState(false);
+  const [buildsOpen, setBuildsOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [savedBuilds, setSavedBuilds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('opsmanifest_builds') || '[]'); } catch { return []; }
+  });
   const [newCustomInc, setNewCustomInc] = useState({ title: '', desc: '', sev: 'HIGH', owner: '' });
   const [newChange, setNewChange] = useState({ type: 'Emergency', title: '', datetime: '', desc: '', impact: 'High', owner: '' });
   const [aiSuggestBanner, setAiSuggestBanner] = useState(null); // { inc: [], uum: [] }
@@ -383,6 +442,40 @@ export default function PhasePanel() {
     }
   }
 
+  function handleSaveBuild() {
+    if (!saveName.trim()) return;
+    const build = {
+      id: Date.now(),
+      name: saveName.trim(),
+      savedAt: new Date().toISOString(),
+      isBuilt: s.isBuilt, scanComplete: s.scanComplete, designApplied: s.designApplied,
+      phase2Active: s.phase2Active, cabApproved: s.cabApproved, cabDeclined: s.cabDeclined,
+      rtmSigned: s.rtmSigned, promoted: s.promoted,
+      ctx: s.ctx, requirements: s.requirements,
+      selInc: s.selInc, selUUM: s.selUUM, selFix: s.selFix,
+      customInc: s.customInc, sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,
+      scanResults: s.scanResults, rtmRows: s.rtmRows,
+      closureChecks: s.closureChecks, closureNotes: s.closureNotes,
+      emergencyChanges: s.emergencyChanges, lockedDesignFields: s.lockedDesignFields,
+    };
+    const updated = [build, ...savedBuilds].slice(0, 20);
+    localStorage.setItem('opsmanifest_builds', JSON.stringify(updated));
+    setSavedBuilds(updated);
+    setSaveName('');
+  }
+
+  function handleLoadBuild(build) {
+    if (!window.confirm(`Load build "${build.name}"? Current unsaved state will be replaced.`)) return;
+    s.loadBuild(build);
+    setBuildsOpen(false);
+  }
+
+  function handleDeleteBuild(id) {
+    const updated = savedBuilds.filter(b => b.id !== id);
+    localStorage.setItem('opsmanifest_builds', JSON.stringify(updated));
+    setSavedBuilds(updated);
+  }
+
   // Requirements field config: [label, key, type, options?, suggestId?]
   const reqFields = [
     ['Project Name', 'projectName', 'text', null, 'projectName'],
@@ -465,34 +558,104 @@ export default function PhasePanel() {
             </div>
           )}
 
-          {/* Stack selects */}
+          {/* Stack selects — HW drives OS compatibility filter */}
           <div className="space-y-1.5">
-            {[
-              ['Hardware', HW_OPTIONS, hwSel, setHwSel, hwCustom, setHwCustom],
-              ['OS', OS_OPTIONS, osSel, setOsSel, osCustom, setOsCustom],
-              ['Database', DB_OPTIONS, dbSel, setDbSel, dbCustom, setDbCustom],
-              ['Application', APP_OPTIONS, appSel, setAppSel, appCustom, setAppCustom],
-            ].map(([label, opts, sel, setSel, custom, setCustom]) => (
-              <div key={label}>
-                <label className="text-xs text-white/50 block mb-0.5">{label}</label>
-                <select
-                  className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
-                  value={sel}
-                  onChange={e => { setSel(e.target.value); setCustom(''); }}
-                >
-                  {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                  <option value="__custom">+ Custom...</option>
-                </select>
-                {sel === '__custom' && (
-                  <input
-                    className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none"
-                    placeholder={`Custom ${label}...`}
-                    value={custom}
-                    onChange={e => setCustom(e.target.value)}
-                  />
-                )}
-              </div>
-            ))}
+            {/* Hardware */}
+            <div>
+              <label className="text-xs text-white/50 block mb-0.5">Hardware</label>
+              <select
+                className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                value={hwSel}
+                onChange={e => { setHwSel(e.target.value); setHwCustom(''); setOsSel(OS_OPTIONS[0]); setOsCustom(''); }}
+              >
+                {HW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="__custom">+ Custom...</option>
+              </select>
+              {hwSel === '__custom' && (
+                <FilteredSuggestInput
+                  options={HW_OPTIONS}
+                  value={hwCustom}
+                  onChange={setHwCustom}
+                  placeholder="Type hardware model (e.g. IBM Power10, Dell R760)..."
+                />
+              )}
+            </div>
+
+            {/* OS — filtered by selected HW */}
+            <div>
+              {(() => {
+                const effectiveHW = hwCustom || (hwSel !== '__custom' ? hwSel : '');
+                const compatOS = HW_OS_COMPAT[effectiveHW] || OS_OPTIONS;
+                const isFiltered = !!HW_OS_COMPAT[effectiveHW];
+                return (
+                  <>
+                    <label className="text-xs text-white/50 block mb-0.5">
+                      OS
+                      {isFiltered && <span className="ml-1 text-teal/70 text-xs">(filtered for {effectiveHW.split(' ')[0]} {effectiveHW.split(' ')[1] || ''})</span>}
+                    </label>
+                    <select
+                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                      value={osSel}
+                      onChange={e => { setOsSel(e.target.value); setOsCustom(''); }}
+                    >
+                      {compatOS.map(o => <option key={o} value={o}>{o}</option>)}
+                      {!isFiltered && <option value="__custom">+ Custom...</option>}
+                      {isFiltered && <option value="__custom">+ Other (custom)...</option>}
+                    </select>
+                    {osSel === '__custom' && (
+                      <FilteredSuggestInput
+                        options={OS_OPTIONS}
+                        value={osCustom}
+                        onChange={setOsCustom}
+                        placeholder="Type OS name (e.g. RHEL 9, Ubuntu 24.04, AIX 7.3)..."
+                      />
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Database */}
+            <div>
+              <label className="text-xs text-white/50 block mb-0.5">Database</label>
+              <select
+                className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                value={dbSel}
+                onChange={e => { setDbSel(e.target.value); setDbCustom(''); }}
+              >
+                {DB_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="__custom">+ Custom...</option>
+              </select>
+              {dbSel === '__custom' && (
+                <FilteredSuggestInput
+                  options={DB_OPTIONS}
+                  value={dbCustom}
+                  onChange={setDbCustom}
+                  placeholder="Type DB name (e.g. Oracle 19c, PostgreSQL 16, MySQL 8.4)..."
+                />
+              )}
+            </div>
+
+            {/* Application */}
+            <div>
+              <label className="text-xs text-white/50 block mb-0.5">Application</label>
+              <select
+                className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                value={appSel}
+                onChange={e => { setAppSel(e.target.value); setAppCustom(''); }}
+              >
+                {APP_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="__custom">+ Custom...</option>
+              </select>
+              {appSel === '__custom' && (
+                <FilteredSuggestInput
+                  options={APP_OPTIONS}
+                  value={appCustom}
+                  onChange={setAppCustom}
+                  placeholder="Type app server (e.g. Tomcat 10, Spring Boot 3, Node.js 22)..."
+                />
+              )}
+            </div>
           </div>
           <button className="btn-teal mt-2" onClick={handleBuild}>Build Environment</button>
         </div>
@@ -641,13 +804,22 @@ export default function PhasePanel() {
               </div>
             )}
 
-            <button className="btn-red mt-1" disabled={s.selInc.length === 0 || s.phase2Active} onClick={handleInjectIncidents}>
-              {s.phase2Active ? 'Phase 2 Active' : 'Inject Incidents'}
-            </button>
-
             <div className="text-xs text-white/60 mb-1 font-semibold mt-3">Schedule UUM Items</div>
             <div className="text-xs text-white/40 mb-1">{s.selUUM.length} selected</div>
             <ItemList items={ALL_UUM} selected={s.selUUM} onToggle={s.toggleUUM} colorClass="bg-amber-900/30 border-l-2 border-amber-500" />
+
+            {/* Injection summary + confirm */}
+            {!s.phase2Active && (s.selInc.length > 0 || s.selUUM.length > 0) && (
+              <div className="bg-white/5 border border-white/10 rounded-lg p-2 mt-2 text-xs text-white/60">
+                <div className="font-semibold text-white/80 mb-1">Ready to inject to this build:</div>
+                {s.selInc.length > 0 && <div className="text-red-300">{s.selInc.length} incident{s.selInc.length > 1 ? 's' : ''}</div>}
+                {s.selUUM.length > 0 && <div className="text-amber-300">{s.selUUM.length} UUM item{s.selUUM.length > 1 ? 's' : ''}</div>}
+                {s.selFix.length > 0 && <div className="text-green-300">{s.selFix.length} fix runbook{s.selFix.length > 1 ? 's' : ''}</div>}
+              </div>
+            )}
+            <button className="btn-red mt-1" disabled={s.selInc.length === 0 || s.phase2Active} onClick={handleInjectIncidents}>
+              {s.phase2Active ? 'Phase 2 Active' : `Inject to Build (${s.selInc.length} inc + ${s.selUUM.length} UUM)`}
+            </button>
           </div>
         )}
 
@@ -779,6 +951,50 @@ export default function PhasePanel() {
             )}
           </div>
         )}
+
+        {/* Save / Load Builds */}
+        <div className="pb-2">
+          <button onClick={() => setBuildsOpen(o => !o)} className="w-full text-left text-xs text-white/60 hover:text-white/90 flex items-center gap-1 mb-1">
+            <span>{buildsOpen ? '▾' : '▸'}</span> Saved Builds ({savedBuilds.length})
+          </button>
+          {buildsOpen && (
+            <div className="bg-white/5 rounded-lg p-2 space-y-2 fade-in">
+              <div className="text-xs text-white/40 leading-snug">Builds are saved locally in your browser. Export to Excel to share with your team.</div>
+              {s.isBuilt && (
+                <div className="flex gap-1">
+                  <input
+                    className="flex-1 text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none"
+                    placeholder="Build name to save..."
+                    value={saveName}
+                    onChange={e => setSaveName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveBuild()}
+                  />
+                  <button className="btn-teal px-2 py-1 text-xs w-auto" onClick={handleSaveBuild} disabled={!saveName.trim()}>Save</button>
+                </div>
+              )}
+              {savedBuilds.length === 0 && (
+                <div className="text-xs text-white/30 text-center py-2">No saved builds yet</div>
+              )}
+              {savedBuilds.map(b => (
+                <div key={b.id} className="bg-white/5 border border-white/10 rounded p-2 flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-white/80 truncate">{b.name}</div>
+                    <div className="text-xs text-white/40">{b.ctx?.hw?.split(' ')[0] || '?'} / {b.ctx?.os?.split(' ')[0] || '?'} — {new Date(b.savedAt).toLocaleDateString()}</div>
+                    <div className="flex gap-1 mt-1">
+                      {b.isBuilt && <span className="badge badge-teal" style={{ fontSize: 9 }}>Built</span>}
+                      {b.rtmSigned && <span className="badge badge-green" style={{ fontSize: 9 }}>RTM Signed</span>}
+                      {b.promoted && <span className="badge badge-green" style={{ fontSize: 9 }}>Live</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button className="text-xs text-teal hover:text-white" onClick={() => handleLoadBuild(b)}>Load</button>
+                    <button className="text-xs text-white/30 hover:text-red-400" onClick={() => handleDeleteBuild(b.id)}>Del</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Export */}
         {s.isBuilt && (
