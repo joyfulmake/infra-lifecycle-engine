@@ -5,12 +5,19 @@ import GanttTab from './tabs/GanttTab.jsx';
 import RaidTab from './tabs/RaidTab.jsx';
 import RtmTab from './tabs/RtmTab.jsx';
 import ClosureTab from './tabs/ClosureTab.jsx';
+import InfraDiagramTab from './tabs/InfraDiagramTab.jsx';
 
 const TABS = [
   {
     id: 'exec',
     label: 'Executive Summary',
     unlocked: () => true,
+  },
+  {
+    id: 'diagram',
+    label: 'Infra Diagram',
+    unlocked: s => s.isBuilt,
+    lockMsg: 'Build environment first',
   },
   {
     id: 'design',
@@ -47,6 +54,7 @@ const TABS = [
 function TabContent({ activeTab }) {
   switch (activeTab) {
     case 'exec': return <ExecSummaryTab />;
+    case 'diagram': return <InfraDiagramTab />;
     case 'design': return <SystemDesignTab />;
     case 'gantt': return <GanttTab />;
     case 'raid': return <RaidTab />;

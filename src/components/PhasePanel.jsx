@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore, DESIGN_SECTIONS, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS } from '../store/useStore.js';
 import { ALL_INC, FIXES } from '../lib/incidents.js';
 import { ALL_UUM } from '../lib/uumItems.js';
@@ -15,26 +16,36 @@ const LOCK_ICON = (
 
 const SEV_COLOR = { CRITICAL: 'text-red-400 bg-red-900/30 border-red-700', HIGH: 'text-orange-300 bg-orange-900/30 border-orange-700', MEDIUM: 'text-amber-300 bg-amber-900/30 border-amber-700', LOW: 'text-green-400 bg-green-900/30 border-green-700', INFO: 'text-sky-300 bg-sky-900/30 border-sky-700' };
 
-// Floating suggestion dropdown — works on both light and dark backgrounds
+// Floating suggestion dropdown rendered via Portal — works outside overflow:hidden ancestors
 function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 240 });
+  const [pos, setPos] = useState(null);
 
   useEffect(() => {
     if (!anchorEl) return;
-    const rect = anchorEl.getBoundingClientRect();
-    setPos({ top: rect.bottom + window.scrollY + 2, left: rect.left + window.scrollX, width: Math.max(rect.width, 260) });
-  }, [anchorEl, suggestions]);
+    const update = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 260) });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [anchorEl]);
 
-  if (!suggestions.length) return null;
+  if (!suggestions.length || !pos) return null;
 
-  return (
-    <div className="suggest-dropdown" style={{ top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}>
+  return createPortal(
+    <div className="suggest-dropdown" style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}>
       {suggestions.map((s, i) => (
         <div key={i} className="suggest-item" onMouseDown={e => { e.preventDefault(); onSelect(s); }}>
           {s}
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -276,6 +287,8 @@ export default function PhasePanel() {
   const [appSel, setAppSel] = useState(APP_OPTIONS[0]);
   const [reqOpen, setReqOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
+  const [customIncOpen, setCustomIncOpen] = useState(false);
+  const [newCustomInc, setNewCustomInc] = useState({ title: '', desc: '', sev: 'HIGH', owner: '' });
   const [newChange, setNewChange] = useState({ type: 'Emergency', title: '', datetime: '', desc: '', impact: 'High', owner: '' });
   const [aiSuggestBanner, setAiSuggestBanner] = useState(null); // { inc: [], uum: [] }
 
@@ -285,6 +298,7 @@ export default function PhasePanel() {
     if (!s.scanComplete) return 'scan';
     if (!s.designApplied) return 'design';
     if (!s.phase2Active) return 'phase2';
+    if (s.cabDeclined) return 'cabdeclined';
     if (!s.cabApproved) return 'cab';
     if (!s.rtmSigned) return 'rtm';
     if (!s.promoted) return 'cutover';
@@ -292,14 +306,15 @@ export default function PhasePanel() {
   })();
 
   const PHASE_HINTS = {
-    phase1: 'Select HW / OS / DB / App stack and click Build Environment.',
-    scan:   'Click Run AI Smart Scan — no API key needed. Unlocks System Design.',
-    design: 'Fill all 8 design sections with your team, then Generate Task Plan.',
-    phase2: 'Select incidents and UUM items relevant to your change, then Inject.',
-    cab:    'Set CAB Authorization to "Valid — Approved" before proceeding.',
-    rtm:    'Open RTM tab → manually review each row → set status → Sign Off.',
-    cutover:'All gates green — execute Production Cutover to go live.',
-    export: 'Download the full 12-sheet Excel workbook for stakeholder review.',
+    phase1:      'Select HW / OS / DB / App stack and click Build Environment.',
+    scan:        'Click Run AI Smart Scan — no API key needed. Unlocks System Design.',
+    design:      'Fill all 8 design sections with your team, then Generate Task Plan.',
+    phase2:      'Select incidents and UUM items relevant to your change, then Inject.',
+    cab:         'Set CAB Authorization to "Valid — Approved" before proceeding.',
+    cabdeclined: 'Change DECLINED by CAB. Execute rollback plan, then resubmit with revised scope.',
+    rtm:         'Open RTM tab → manually review each row → set status → Sign Off.',
+    cutover:     'All gates green — execute Production Cutover to go live.',
+    export:      'Download the full 12-sheet Excel workbook for stakeholder review.',
   };
 
   const phases = [
@@ -556,6 +571,76 @@ export default function PhasePanel() {
               </>
             )}
 
+            {/* Custom incident form */}
+            <button
+              onClick={() => setCustomIncOpen(o => !o)}
+              className="w-full text-left text-xs text-white/50 hover:text-white/80 flex items-center gap-1 mt-1 mb-1"
+            >
+              <span>{customIncOpen ? '▾' : '▸'}</span> Add Custom Incident / Ticket
+            </button>
+            {customIncOpen && (
+              <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
+                <div>
+                  <label className="text-xs text-white/50 block mb-0.5">Title / Short Description</label>
+                  <SuggestInput fieldId="title" value={newCustomInc.title} onChange={v => setNewCustomInc(p => ({ ...p, title: v }))} placeholder="e.g. SSL cert expiry on app server" />
+                </div>
+                <div>
+                  <label className="text-xs text-white/50 block mb-0.5">Full Description</label>
+                  <SuggestInput fieldId="desc" value={newCustomInc.desc} onChange={v => setNewCustomInc(p => ({ ...p, desc: v }))} placeholder="Detail the issue or ticket scope" />
+                </div>
+                <div>
+                  <label className="text-xs text-white/50 block mb-0.5">Severity</label>
+                  <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
+                    value={newCustomInc.sev} onChange={e => setNewCustomInc(p => ({ ...p, sev: e.target.value }))}>
+                    {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-white/50 block mb-0.5">Assigned Owner</label>
+                  <SuggestInput fieldId="owner" value={newCustomInc.owner} onChange={v => setNewCustomInc(p => ({ ...p, owner: v }))} placeholder="Team or person responsible" />
+                </div>
+                <button
+                  className="btn-amber w-full mt-1"
+                  onClick={() => {
+                    if (!newCustomInc.title.trim()) return;
+                    const id = `custom_${Date.now()}`;
+                    s.addCustomInc({
+                      id, code: id,
+                      short: newCustomInc.title.substring(0, 60),
+                      txt: `${newCustomInc.title}: ${newCustomInc.desc}`,
+                      grp: 'Custom Entries',
+                      sev: newCustomInc.sev,
+                      owner: newCustomInc.owner,
+                    });
+                    s.toggleInc(id);
+                    setNewCustomInc({ title: '', desc: '', sev: 'HIGH', owner: '' });
+                    setCustomIncOpen(false);
+                  }}
+                >Add & Select</button>
+              </div>
+            )}
+
+            {/* Custom incidents display */}
+            {s.customInc?.length > 0 && (
+              <div className="mb-2">
+                <div className="text-xs text-white/50 mb-1">Custom Entries ({s.customInc.length})</div>
+                {s.customInc.map(ci => {
+                  const sel = s.selInc.includes(ci.code);
+                  return (
+                    <div key={ci.id} className={['text-xs rounded p-1.5 mb-1 cursor-pointer border flex items-start gap-2', sel ? 'bg-amber-900/30 border-amber-700 text-amber-200' : 'bg-white/5 border-white/10 text-white/60'].join(' ')}
+                      onClick={() => s.toggleInc(ci.code)}>
+                      <span className={['flex-shrink-0 w-3 h-3 rounded border flex items-center justify-center text-xs font-bold mt-0.5', sel ? 'bg-amber-500 border-amber-500 text-white' : 'border-white/30'].join(' ')}>{sel ? '✓' : ''}</span>
+                      <div>
+                        <div className="font-medium">{ci.short}</div>
+                        <div className="text-white/40 text-xs">{ci.sev} — {ci.owner || 'Unassigned'}</div>
+                      </div>
+                      <button className="ml-auto text-white/30 hover:text-red-400 text-xs" onClick={e => { e.stopPropagation(); s.removeCustomInc(ci.id); if (sel) s.toggleInc(ci.code); }}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <button className="btn-red mt-1" disabled={s.selInc.length === 0 || s.phase2Active} onClick={handleInjectIncidents}>
               {s.phase2Active ? 'Phase 2 Active' : 'Inject Incidents'}
             </button>
@@ -570,20 +655,39 @@ export default function PhasePanel() {
         {s.phase2Active && (
           <div>
             <div className="section-hdr">CAB Gate</div>
-            <div className={['rounded-lg border p-2', s.cabApproved ? 'border-green-600 bg-green-900/20' : 'border-red-600 bg-red-900/20'].join(' ')}>
+            <div className={['rounded-lg border p-2', s.cabApproved ? 'border-green-600 bg-green-900/20' : s.cabDeclined ? 'border-red-500 bg-red-900/30' : 'border-red-600 bg-red-900/20'].join(' ')}>
               <label className="text-xs text-white/60 block mb-1">CAB Authorization</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
-                value={s.cabApproved ? 'valid' : 'invalid'}
-                onChange={e => s.setCabApproved(e.target.value === 'valid')}
+                value={s.cabApproved ? 'valid' : s.cabDeclined ? 'declined' : 'invalid'}
+                onChange={e => {
+                  if (e.target.value === 'valid') s.setCabApproved(true);
+                  else if (e.target.value === 'declined') s.setCabDeclined(true);
+                  else { s.setCabApproved(false); }
+                }}
               >
-                <option value="invalid">Invalid / Pending</option>
-                <option value="valid">Valid — Approved</option>
+                <option value="invalid">Pending / Awaiting Review</option>
+                <option value="valid">Approved — Proceed</option>
+                <option value="declined">DECLINED — Rollback Required</option>
               </select>
-              <div className={['text-xs mt-1.5 font-semibold text-center py-1 rounded', s.cabApproved ? 'text-green-400' : 'text-red-400'].join(' ')}>
-                {s.cabApproved ? 'CAB APPROVED — Proceed to cutover' : 'CAB BLOCKED — Awaiting approval'}
+              <div className={['text-xs mt-1.5 font-semibold text-center py-1 rounded',
+                s.cabApproved ? 'text-green-400' : s.cabDeclined ? 'text-red-300 bg-red-900/40' : 'text-red-400'
+              ].join(' ')}>
+                {s.cabApproved ? 'CAB APPROVED — Proceed to cutover' : s.cabDeclined ? 'CHANGE DECLINED — Rollback Required' : 'CAB BLOCKED — Awaiting approval'}
               </div>
             </div>
+            {s.cabDeclined && (
+              <div className="bg-red-900/20 border border-red-700 rounded-lg p-2 mt-2 fade-in">
+                <div className="text-xs font-bold text-red-300 mb-1">Rollback Plan</div>
+                {['Notify all stakeholders of decline decision', 'Snapshot current state before rollback', 'Revert application deployment', 'Revert database schema changes', 'Restore OS/kernel baseline config', 'Re-validate network routing', 'Confirm service health post-rollback', 'File post-change incident report'].map((step, i) => (
+                  <div key={i} className="text-xs text-red-200 flex items-start gap-1.5 mb-0.5">
+                    <span className="text-red-400 flex-shrink-0 font-mono">RB{String(i + 1).padStart(2, '0')}</span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+                <div className="mt-2 text-xs text-red-300 font-medium">Rollback steps visible in Gantt tab.</div>
+              </div>
+            )}
           </div>
         )}
 

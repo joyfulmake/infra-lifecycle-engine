@@ -146,6 +146,15 @@ export default function RtmTab() {
     });
   }
 
+  function markAll(status) {
+    const next = {};
+    rows.forEach(r => {
+      s.setRtmRow(r.id, status);
+      next[r.id] = true;
+    });
+    setSessionReviewed(prev => ({ ...prev, ...next }));
+  }
+
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
       <div className="flex items-center justify-between mb-4">
@@ -153,12 +162,26 @@ export default function RtmTab() {
           <div className="text-sm font-bold text-slate-700">Requirements Traceability Matrix</div>
           <div className="text-xs text-slate-500">{rows.length} requirements — {passCount} passed, {failCount} failed, {pendingCount} pending</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="badge badge-green">{passCount} PASS</span>
           {failCount > 0 && <span className="badge badge-red">{failCount} FAIL</span>}
           {pendingCount > 0 && <span className="badge badge-amber">{pendingCount} PENDING</span>}
           {unreviewed > 0 && !s.rtmSigned && (
             <span className="badge badge-amber">{unreviewed} unreviewed</span>
+          )}
+          {!s.rtmSigned && (
+            <>
+              <button
+                className="text-xs px-2 py-1 rounded border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 whitespace-nowrap"
+                onClick={() => markAll('PASS')}
+                title="Mark all requirements as PASS"
+              >All PASS</button>
+              <button
+                className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 bg-slate-50 hover:bg-slate-100 whitespace-nowrap"
+                onClick={() => markAll('NA')}
+                title="Mark all requirements as N/A"
+              >All N/A</button>
+            </>
           )}
           {canSign && (
             <button className="btn-teal px-4 py-1.5 text-xs" onClick={() => s.signRtm()}>

@@ -1,34 +1,49 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore, DESIGN_SECTIONS, FIELD_LABELS } from '../../store/useStore.js';
 import { matchSuggestKeys } from '../../lib/suggestDb.js';
 import { generateTaskPlan } from '../../lib/smartScan.js';
 
 function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 200 });
+  const [pos, setPos] = useState(null);
 
   useEffect(() => {
     if (!anchorEl) return;
-    const rect = anchorEl.getBoundingClientRect();
-    setPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 280) });
+    const update = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 280) });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
   }, [anchorEl]);
 
-  if (!suggestions.length) return null;
+  if (!suggestions.length || !pos) return null;
 
-  return (
-    <div className="suggest-dropdown" style={{ top: pos.top, left: pos.left, width: pos.width }}>
+  return createPortal(
+    <div className="suggest-dropdown" style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}>
       {suggestions.map((s, i) => (
         <div key={i} className="suggest-item" onMouseDown={e => { e.preventDefault(); onSelect(s); }}>
           {s}
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 
-function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
+function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode }) {
+  const s = useStore();
   const [focused, setFocused] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
+  const lockKey = `${sectionKey}.${fieldKey}`;
+  const lockData = s.lockedDesignFields?.[lockKey];
+  const isLocked = !!lockData;
 
   function handleChange(val) {
     onChange(val);
@@ -40,8 +55,16 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
     setSuggestions(matchSuggestKeys(value || '', fieldKey));
   }
 
+  function toggleLock() {
+    if (isLocked) {
+      s.unlockDesignField(lockKey);
+    } else {
+      s.lockDesignField(lockKey, { lockedBy: 'Tech Lead', value: value || '' });
+    }
+  }
+
   const isEmpty = !value?.trim();
-  const highlight = readOnly && isEmpty;
+  const highlight = readOnly && isEmpty && !isLocked;
 
   const placeholder = (() => {
     const label = FIELD_LABELS[fieldKey] || fieldKey;
@@ -55,8 +78,25 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
 
   return (
     <div className="relative">
-      <label className="form-label text-slate-500">{FIELD_LABELS[fieldKey] || fieldKey}</label>
-      {readOnly ? (
+      <div className="flex items-center justify-between mb-0.5">
+        <label className="form-label text-slate-500 mb-0">{FIELD_LABELS[fieldKey] || fieldKey}</label>
+        {(techMode || isLocked) && (
+          <button
+            type="button"
+            onClick={toggleLock}
+            title={isLocked ? `Locked by ${lockData.lockedBy} — click to unlock` : 'Lock this field (Tech Review)'}
+            className={['text-xs px-1 py-0 rounded border transition-colors', isLocked ? 'border-amber-400 text-amber-600 bg-amber-50 hover:bg-amber-100' : 'border-slate-200 text-slate-400 hover:border-amber-400 hover:text-amber-500'].join(' ')}
+          >
+            {isLocked ? '🔒' : '🔓'}
+          </button>
+        )}
+      </div>
+      {isLocked && !techMode ? (
+        <div className="text-xs px-2 py-1.5 rounded border border-amber-300 bg-amber-50 text-amber-800 flex items-center gap-1.5">
+          <span className="flex-1 truncate">{value || '—'}</span>
+          <span className="text-amber-500 text-xs whitespace-nowrap flex-shrink-0">Tech Review</span>
+        </div>
+      ) : readOnly && !techMode ? (
         <div className={['text-xs px-2 py-1.5 rounded border min-h-7',
           highlight ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-100 bg-slate-50 text-slate-700',
         ].join(' ')}>
@@ -76,7 +116,7 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
           {focused && suggestions.length > 0 && (
             <SuggestDropdown
               suggestions={suggestions}
-              onSelect={s => { onChange(s); setSuggestions([]); }}
+              onSelect={v => { onChange(v); setSuggestions([]); }}
               anchorEl={inputRef.current}
             />
           )}
@@ -86,11 +126,41 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly }) {
   );
 }
 
-function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle }) {
+function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle, techMode, presentMode }) {
   const filled = section.fields.filter(f => sectionData[f]?.trim()).length;
   const total = section.fields.length;
   const completePct = Math.round((filled / total) * 100);
   const badgeColor = completePct === 100 ? 'badge-green' : completePct >= 60 ? 'badge-teal' : 'badge-amber';
+
+  if (presentMode) {
+    const filledFields = section.fields.filter(f => f !== 'notes' && sectionData[f]?.trim());
+    if (filledFields.length === 0) return null;
+    return (
+      <div className="card mb-4 overflow-hidden">
+        <div className="bg-slate-800 px-4 py-2 flex items-center justify-between">
+          <div>
+            <span className="font-bold text-white text-sm">{section.label}</span>
+            <span className="text-slate-400 text-xs ml-2">— {section.owner}</span>
+          </div>
+          <span className={`badge ${badgeColor}`}>{filled}/{total}</span>
+        </div>
+        <div className="p-4 grid grid-cols-2 gap-3">
+          {filledFields.map(field => (
+            <div key={field} className="border border-slate-100 rounded-lg p-2.5 bg-slate-50">
+              <div className="text-xs text-slate-400 font-medium mb-1 uppercase tracking-wide">{FIELD_LABELS[field] || field}</div>
+              <div className="text-sm font-semibold text-slate-800">{sectionData[field]}</div>
+            </div>
+          ))}
+          {sectionData.notes?.trim() && (
+            <div className="col-span-2 border border-blue-100 rounded-lg p-2.5 bg-blue-50">
+              <div className="text-xs text-blue-400 font-medium mb-1 uppercase tracking-wide">Notes</div>
+              <div className="text-xs text-blue-800">{sectionData.notes}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card mb-3 overflow-hidden">
@@ -121,6 +191,7 @@ function DesignSection({ section, sectionData, readOnly, onFieldChange, open, on
                 value={sectionData[field]}
                 onChange={val => onFieldChange(section.key, field, val)}
                 readOnly={readOnly}
+                techMode={techMode}
               />
             ))}
           </div>
@@ -134,6 +205,8 @@ export default function SystemDesignTab() {
   const s = useStore();
   const [taskStatus, setTaskStatus] = useState('idle'); // idle | running | done
   const [taskMsg, setTaskMsg] = useState('');
+  const [presentMode, setPresentMode] = useState(false);
+  const [techMode, setTechMode] = useState(false);
 
   const isLocked = !s.scanComplete;
   const isReadOnly = s.phase2Active;
@@ -190,28 +263,60 @@ export default function SystemDesignTab() {
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
 
+      {/* Header with mode toggles */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          {!isReadOnly && (
+            <div className="text-xs text-slate-500">
+              {filledFields}/{totalFields} fields filled &mdash;{' '}
+              <span className={overallPct === 100 ? 'text-green-600 font-semibold' : 'text-amber-600'}>{overallPct}% complete</span>
+            </div>
+          )}
+          {isReadOnly && (
+            <div className="text-xs text-amber-600 font-medium">Phase 2 Active — fields locked</div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setTechMode(t => !t); setPresentMode(false); }}
+            className={['text-xs px-3 py-1 rounded border transition-colors', techMode ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold' : 'border-slate-200 text-slate-500 hover:border-amber-300'].join(' ')}
+            title="Tech Review Mode — lock fields that PM cannot override"
+          >
+            {techMode ? 'Exit Tech Review' : 'Tech Review Mode'}
+          </button>
+          <button
+            onClick={() => { setPresentMode(p => !p); setTechMode(false); }}
+            className={['text-xs px-3 py-1 rounded border transition-colors', presentMode ? 'bg-slate-800 border-slate-700 text-white font-semibold' : 'border-slate-200 text-slate-500 hover:border-slate-400'].join(' ')}
+            title="Stakeholder Presentation — show filled fields as decision cards"
+          >
+            {presentMode ? 'Edit Mode' : 'Present View'}
+          </button>
+        </div>
+      </div>
+
       {/* Status banner */}
-      {!isReadOnly && (
-        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
-          <div className="w-2 h-2 rounded-full bg-green-500 mt-1 flex-shrink-0 pulse-ring" />
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-green-800 text-sm">System Design Entry Open — {overallPct}% Complete</div>
-              <span className={['badge text-xs', overallPct === 100 ? 'badge-green' : overallPct >= 60 ? 'badge-teal' : 'badge-amber'].join(' ')}>
-                {filledFields}/{totalFields} fields
-              </span>
-            </div>
-            <div className="text-xs text-green-700 mt-0.5">
-              All 8 sections × 30 fields pre-filled from stack selection. Review and adjust — suggestions appear as you type in any field.
-            </div>
-            <div className="h-1 bg-green-200 rounded-full mt-2">
-              <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: overallPct + '%' }} />
-            </div>
+      {techMode && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-2 mb-4 text-xs text-amber-800">
+          <span className="font-bold">Tech Review Mode active.</span> Use the lock icon on each field to protect values from PM override. Locked fields are clearly marked throughout the session.
+        </div>
+      )}
+
+      {presentMode && (
+        <div className="bg-slate-800 rounded-lg px-4 py-3 mb-4">
+          <div className="text-white font-bold text-sm mb-0.5">System Design — Stakeholder Summary</div>
+          <div className="text-slate-400 text-xs">
+            {s.requirements.projectName || 'Infrastructure Project'} &mdash; {s.requirements.envType || 'Production'} &mdash; {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
           </div>
         </div>
       )}
 
-      {isReadOnly && (
+      {!presentMode && !isReadOnly && (
+        <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 mb-4 text-xs text-green-700">
+          All 8 sections pre-filled from stack selection. Review and adjust — suggestions appear after 3 characters in any field.
+        </div>
+      )}
+
+      {!presentMode && isReadOnly && !techMode && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4">
           <div className="font-semibold text-amber-800 text-sm">System Design Locked — Phase 2 Active</div>
           <div className="text-xs text-amber-700 mt-0.5">All fields read-only. Amber fields require PM to fill with admin present.</div>
@@ -224,10 +329,12 @@ export default function SystemDesignTab() {
           key={section.key}
           section={section}
           sectionData={s.sysDesignData[section.key] || {}}
-          readOnly={isReadOnly}
+          readOnly={isReadOnly && !techMode}
           onFieldChange={s.setDesignField}
-          open={!!s.designSectionOpen[section.key]}
-          onToggle={() => s.toggleDesignSection(section.key)}
+          open={presentMode || !!s.designSectionOpen[section.key]}
+          onToggle={() => !presentMode && s.toggleDesignSection(section.key)}
+          techMode={techMode}
+          presentMode={presentMode}
         />
       ))}
 

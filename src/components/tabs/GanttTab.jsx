@@ -335,9 +335,52 @@ export default function GanttTab() {
         );
       })}
 
-      {uumTaskGroups.length === 0 && (
+      {uumTaskGroups.length === 0 && !s.cabDeclined && (
         <div className="card p-4 text-center text-xs text-slate-400">
           No UUM items selected — add items in Phase 2 to see their task sequences and change windows here.
+        </div>
+      )}
+
+      {/* Rollback Plan — shown when CAB declines the change */}
+      {s.cabDeclined && (
+        <div className="card overflow-hidden mb-4 border-l-4 border-red-500">
+          <div className="bg-red-50 px-4 py-2 border-b border-red-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-red-700 text-xs uppercase tracking-wide">Rollback Plan — CAB Declined</span>
+              <span className="badge badge-red text-xs">MANDATORY</span>
+            </div>
+            <span className="text-xs text-red-600">~{8 * 2}h estimated</span>
+          </div>
+          <div className="flex gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            <div className="w-7">#</div>
+            <div className="w-28">Role</div>
+            <div className="flex-1">Rollback Step</div>
+            <div className="w-20">Est.</div>
+          </div>
+          <div className="divide-y divide-red-50">
+            {[
+              { id: 'RB01', role: 'Change Manager', task: 'Notify all stakeholders of CAB decline decision and rollback trigger', hours: 1 },
+              { id: 'RB02', role: 'Unix Admin', task: 'Snapshot current environment state before any rollback action begins', hours: 1 },
+              { id: 'RB03', role: 'AppAdmin', task: 'Revert application deployment to last known-good version', hours: 2 },
+              { id: 'RB04', role: 'DBA', task: 'Revert database schema changes; validate data integrity with row counts', hours: 3 },
+              { id: 'RB05', role: 'Unix Admin', task: 'Restore OS / kernel configuration from pre-change baseline snapshot', hours: 2 },
+              { id: 'RB06', role: 'NetAdmin', task: 'Re-validate network routing, firewall rules, and load balancer config', hours: 1 },
+              { id: 'RB07', role: 'QA Team', task: 'Confirm full service health post-rollback with smoke test suite', hours: 2 },
+              { id: 'RB08', role: 'Change Manager', task: 'File post-change incident report; document lessons learned for resubmission', hours: 1 },
+            ].map((step, i) => (
+              <div key={step.id} className="flex items-center gap-2 px-3 py-2 hover:bg-red-50/40 transition-colors">
+                <div className="text-xs text-red-400 font-mono w-7 flex-shrink-0">{step.id}</div>
+                <span className={`badge flex-shrink-0 text-xs ${TEAM_COLORS[step.role] || 'badge-slate'}`}>{step.role}</span>
+                <div className="flex-1 text-xs text-slate-700">{step.task}</div>
+                <div className="text-xs text-slate-400 w-20 text-right flex-shrink-0">{step.hours}h</div>
+              </div>
+            ))}
+          </div>
+          <div className="bg-red-50 px-4 py-2 border-t border-red-200">
+            <div className="text-xs text-red-700 font-medium">
+              After rollback completion: revise change scope, update RTM, and resubmit to CAB for re-approval.
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -178,6 +178,15 @@ export const useStore = create((set, get) => ({
   // RTM row statuses: { [id]: 'PASS' | 'FAIL' | 'PENDING' | 'NA' | 'BLOCKED' }
   rtmRows: {},
 
+  // Custom incidents added by user beyond catalog
+  customInc: [],
+
+  // CAB declined state
+  cabDeclined: false,
+
+  // Locked design fields: { 'section.field': { lockedBy: string, note: string, value: string } }
+  lockedDesignFields: {},
+
   // Closure checklist manual checks: { [id]: boolean }
   closureChecks: {},
 
@@ -196,9 +205,10 @@ export const useStore = create((set, get) => ({
 
   build: (ctx) => set({
     isBuilt: true, scanComplete: false, designApplied: false,
-    phase2Active: false, cabApproved: false, rtmSigned: false, promoted: false,
-    ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [],
+    phase2Active: false, cabApproved: false, cabDeclined: false, rtmSigned: false, promoted: false,
+    ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [],
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
+    lockedDesignFields: {},
   }),
 
   completeScan: (results) => set({ scanComplete: true, scanResults: results || [] }),
@@ -219,7 +229,20 @@ export const useStore = create((set, get) => ({
     selFix: s.selFix.includes(code) ? s.selFix.filter(c => c !== code) : [...s.selFix, code],
   })),
 
-  setCabApproved: (val) => set({ cabApproved: val }),
+  setCabApproved: (val) => set({ cabApproved: val, cabDeclined: false }),
+  setCabDeclined: (val) => set({ cabDeclined: val, cabApproved: false }),
+
+  addCustomInc: (inc) => set(s => ({ customInc: [...s.customInc, inc] })),
+  removeCustomInc: (id) => set(s => ({ customInc: s.customInc.filter(i => i.id !== id) })),
+
+  lockDesignField: (key, data) => set(s => ({
+    lockedDesignFields: { ...s.lockedDesignFields, [key]: data },
+  })),
+  unlockDesignField: (key) => set(s => {
+    const next = { ...s.lockedDesignFields };
+    delete next[key];
+    return { lockedDesignFields: next };
+  }),
 
   signRtm: () => set({ rtmSigned: true }),
 

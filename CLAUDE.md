@@ -40,9 +40,10 @@ src/
     PmTabs.jsx            — tab bar + renders active tab component
     tabs/
       ExecSummaryTab.jsx  — executive summary & incident/UUM/fix selection
-      SystemDesignTab.jsx — 8-section system design form (AI suggestions)
-      RtmTab.jsx          — Requirements Traceability Matrix with pass/fail
-      GanttTab.jsx        — Gantt chart view
+      SystemDesignTab.jsx — 8-section system design form (AI suggestions, presentation mode, tech review lock)
+      InfraDiagramTab.jsx — connected infrastructure topology diagram (SVG-style layered boxes)
+      RtmTab.jsx          — Requirements Traceability Matrix with pass/fail + All PASS/NA buttons
+      GanttTab.jsx        — Gantt chart view + rollback tasks when CAB declined
       RaidTab.jsx         — RAID log (Risks, Assumptions, Issues, Decisions)
       ClosureTab.jsx      — post-go-live closure checklist & notes
   lib/
@@ -63,9 +64,11 @@ All state is in `src/store/useStore.js`. Key slices:
 
 - `ctx` — selected hw/os/db/app
 - `requirements` — project name, env type, go-live date, SLA, etc.
-- `isBuilt / scanComplete / designApplied / phase2Active / cabApproved / rtmSigned / promoted` — linear workflow gates
+- `isBuilt / scanComplete / designApplied / phase2Active / cabApproved / cabDeclined / rtmSigned / promoted` — linear workflow gates
 - `selInc / selUUM / selFix` — selected incident/UUM/fix codes (plain arrays, not Sets)
+- `customInc` — user-added custom incidents/tickets beyond the catalog `[{ id, code, short, txt, grp, sev, owner }]`
 - `sysDesignData` — nested object keyed by section → field
+- `lockedDesignFields` — `{ 'section.field': { lockedBy, value } }` — tech-review locked fields PM cannot override
 - `rtmRows` — `{ [id]: 'PASS' | 'FAIL' | 'PENDING' | 'NA' | 'BLOCKED' }`
 - `closureChecks / closureNotes` — closure tab state
 - `emergencyChanges` — emergency change log entries
@@ -113,7 +116,11 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **Tailwind v3 vs v4**: This project uses Tailwind **v3** (`tailwindcss@^3.4`). Do not upgrade to v4 without updating the PostCSS config and removing the `@tailwind` directives.
 - **React 19**: Some third-party component libraries haven't updated peer deps for React 19 yet. Check compatibility before adding dependencies.
 - **xlsx-js-style**: Excel export uses `xlsx-js-style` npm package (API-compatible with SheetJS, adds cell `s` style property). The CDN SheetJS script in `index.html` is still loaded (legacy; safe to remove eventually). Do NOT upgrade to `xlsx` v0.19+ — it removes community cell styles.
-- **Auto-suggestions**: `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3. Use `minChars=0` to get placeholder hints without the 3-char gate.
-- **RTM sign-off**: Requires every row to be explicitly set via `s.setRtmRow(id, status)` — auto-populated defaults do not count as reviewed. The "Confirm current statuses" button bulk-marks all rows.
-- **Phase guidemark**: Current phase determined by workflow gate flags in order. `PHASE_HINTS` map in PhasePanel.jsx drives the bottom guidemark text.
+- **Auto-suggestions**: Fixed with React Portal (`createPortal` from `react-dom`) in both `SystemDesignTab.jsx` and `PhasePanel.jsx`. Dropdowns render at `document.body` level via portal with `position: fixed` — avoids `overflow:hidden` ancestor clipping. PhasePanel previously had wrong `window.scrollY` addition (removed). `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3.
+- **RTM sign-off**: Requires every row to be explicitly set via `s.setRtmRow(id, status)`. "All PASS" and "All N/A" buttons bulk-set and mark all rows reviewed.
+- **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel sidebar and rollback task list in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`. Cutover button remains blocked.
+- **Tech-review locked fields**: `lockedDesignFields` in store. `s.lockDesignField('section.field', data)` / `s.unlockDesignField(key)`. PM sees locked fields as read-only with amber "Tech Review" label. Only visible in Tech Review Mode.
+- **Custom incidents**: `customInc: []` in store. `s.addCustomInc(inc)` / `s.removeCustomInc(id)`. Appear alongside ALL_INC in Phase 2 and RTM.
+- **Phase guidemark**: `PHASE_HINTS` map in PhasePanel.jsx includes `cabdeclined` state. `currentPhaseId` checks `s.cabDeclined` before checking `s.cabApproved`.
 - **AI auto-select**: `runSmartScan(ctx)` returns `{ findings, riskLevel, suggestedInc, suggestedUUM }`. PhasePanel pre-selects them post-scan; user sees accept/clear banner.
+- **Infra Diagram**: `InfraDiagramTab.jsx` shows layered topology (HW → OS → App/DB → Storage/Backup → Network/Security). Incidents color boxes red; UUM items show amber tags. `grpToLayer` maps incident groups to stack layers.
