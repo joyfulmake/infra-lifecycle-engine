@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { canUseFeature } from '../../lib/auth.js';
@@ -58,6 +58,18 @@ function RoleRow({ roleDef, assignment, onSave, canEdit }) {
     backup: assignment?.backup || '',
     raci: assignment?.raci || roleDef.defaultRaci,
   });
+
+  // Sync form when assignment is updated externally (build load, etc.)
+  useEffect(() => {
+    if (!editing) {
+      setForm({
+        name: assignment?.name || '',
+        email: assignment?.email || '',
+        backup: assignment?.backup || '',
+        raci: assignment?.raci || roleDef.defaultRaci,
+      });
+    }
+  }, [assignment, editing, roleDef.defaultRaci]);
 
   const raci = assignment?.raci || roleDef.defaultRaci;
   const assigned = assignment?.name || assignment?.email;

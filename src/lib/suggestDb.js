@@ -262,6 +262,152 @@ export const SUGGEST_DB = {
   sec_training:['Annual KnowBe4 security awareness + OWASP Top 10 for devs + quarterly phishing sim','Security champions program (1 per dev team) + SANS training budget per engineer','CISM/CISSP study support + ASD Essential Eight awareness for all staff'],
 };
 
+// Context-aware suggestion engine — enriches base suggestions with build-specific hints
+export function buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults) {
+  const { hw = '', os = '', db = '', app = '' } = ctx || {};
+  const contextual = [];
+
+  // --- scan findings → title / desc fields ---
+  if ((fieldId === 'title' || fieldId === 'desc') && Array.isArray(scanResults) && scanResults.length) {
+    const lower = (val || '').toLowerCase();
+    const relevant = scanResults
+      .map(r => (typeof r === 'string' ? r : `[${r.sev || 'INFO'}] ${r.component || ''}: ${r.msg || ''}`))
+      .filter(r => lower.length < 2 || r.toLowerCase().includes(lower))
+      .slice(0, 3);
+    contextual.push(...relevant);
+  }
+
+  if (fieldId === 'title' || fieldId === 'desc') {
+    if (/oracle/i.test(db)) {
+      contextual.push(
+        `Oracle DB patch required (${db.split(' ')[0]} ${db.split(' ')[1] || ''}) — apply RU via OPatch in patch window`,
+        'Oracle tablespace approaching threshold — TEMP/UNDO growth detected',
+        'Oracle listener not responding — TNS-12541, review listener.log',
+        'Oracle archive log destination full — archivelog mode at risk',
+      );
+    } else if (/postgres/i.test(db)) {
+      contextual.push(
+        `PostgreSQL replication lag — standby behind primary by > 30s (${db})`,
+        'PostgreSQL bloat detected — autovacuum not keeping pace with write load',
+        'PostgreSQL connection exhaustion — max_connections limit approaching',
+      );
+    } else if (/mysql|mariadb/i.test(db)) {
+      contextual.push(
+        `${db} replication broken — slave_io_running or slave_sql_running = NO`,
+        `${db} table space full — ibdata1 growth, enable innodb_file_per_table`,
+        'MySQL slow queries causing lock contention — long-running transactions',
+      );
+    } else if (/db2/i.test(db)) {
+      contextual.push(
+        `IBM DB2 tablespace full — container resize or redirect restore required`,
+        `DB2 log space full — LOGFULL condition, increase LOGPRIMARY/LOGSECOND`,
+      );
+    }
+
+    if (/aix/i.test(os)) {
+      contextual.push(
+        'AIX errpt hardware error — disk path failure detected (AIX MPIO path down)',
+        `AIX TL/SP maintenance required — current OS: ${os.split(' ')[0]} ${os.split(' ')[1] || ''}`,
+        'AIX ODM corruption — boot device issue, run bosboot -ad /dev/hdisk0',
+      );
+    } else if (/rhel|centos|rocky|alma|oracle linux/i.test(os)) {
+      contextual.push(
+        `RHEL kernel security patch required — glibc / kernel-core CVE advisory (${os})`,
+        `RHEL subscription not registered — yum/dnf update blocked`,
+        `RHEL filesystem full — /var or /tmp threshold breached`,
+      );
+    } else if (/ubuntu|debian/i.test(os)) {
+      contextual.push(
+        `Ubuntu security patch required — apt-get dist-upgrade (${os})`,
+        'Ubuntu kernel update requires reboot — livepatch not applied',
+      );
+    } else if (/solaris/i.test(os)) {
+      contextual.push(
+        `Solaris zone / non-global zone fault — zoneadm list -cv`,
+        `Solaris patch required — pkg update (IPS) or patchadd (legacy ${os})`,
+      );
+    } else if (/windows/i.test(os)) {
+      contextual.push(
+        `Windows Server patch cycle — WSUS pending reboot (${os})`,
+        'Windows service crash — event log ID 7034 / 7031, service restart required',
+      );
+    }
+
+    if (/ibm power|power10|power9/i.test(hw)) {
+      contextual.push(
+        `IBM Power firmware update required — ${hw} HMC-managed, schedule outage`,
+        'IBM Power disk path failure — PVID path degraded, check errpt / MPIO',
+      );
+    }
+    if (/exadata/i.test(hw)) {
+      contextual.push(
+        'Oracle Exadata cell disk degraded — replace failed disk in IORM pool',
+        'Exadata smart scan disabled — check cell offload, rerun db full checks',
+      );
+    }
+
+    if (/websphere|liberty/i.test(app)) {
+      contextual.push(
+        `IBM WebSphere out-of-memory — JVM heap exhausted, review ${app} JVM Xmx`,
+        'WebSphere thread pool exhaustion — maxThreads exceeded, check datasource pool',
+      );
+    } else if (/tomcat/i.test(app)) {
+      contextual.push(
+        `Apache Tomcat OOM / GC overhead — heap tuning required (${app})`,
+        'Tomcat connector threads exhausted — maxThreads 200 reached, queue backing up',
+      );
+    } else if (/weblogic/i.test(app)) {
+      contextual.push(
+        `Oracle WebLogic managed server down — check AdminServer logs (${app})`,
+        'WebLogic datasource connection leak — connection pool depleted, restart required',
+      );
+    }
+  }
+
+  if (fieldId === 'owner') {
+    if (/oracle|db2|postgres|mysql|mariadb/i.test(db)) contextual.unshift('DB Admin / DBA');
+    if (/aix|rhel|ubuntu|solaris|suse|linux/i.test(os)) contextual.unshift('Unix Admin');
+    if (/tomcat|websphere|weblogic|jboss|spring|node/i.test(app)) contextual.unshift('App Admin');
+    if (/power|exadata|dell|hpe|cisco ucs/i.test(hw)) contextual.unshift('SysAdmin Lead / Infrastructure Lead');
+  }
+
+  if (fieldId === 'constraints') {
+    if (/(eol)/i.test(os)) {
+      contextual.unshift(`OS EOL migration required — ${os.split(' (')[0]} is end-of-life, plan upgrade`);
+    }
+    if (/(eol)/i.test(db)) {
+      contextual.unshift(`DB version EOL — ${db.split(' (')[0]} no longer supported, upgrade required`);
+    }
+    if (/oracle/i.test(db)) {
+      contextual.push('Oracle licensing review required — CPU factor applies before adding sockets');
+    }
+    if (sysDesignData?.db?.backup_window) {
+      contextual.push(`DB backup window constraint: ${sysDesignData.db.backup_window.substring(0, 60)}`);
+    }
+  }
+
+  if (fieldId === 'sla') {
+    if (/oracle/i.test(db) || /power/i.test(hw)) {
+      contextual.unshift('99.99% (four nines — 52 min/year, standard for Oracle OLTP on Power)');
+    }
+    if (/exadata/i.test(hw)) {
+      contextual.unshift('99.999% (five nines — Exadata RAC with DataGuard)');
+    }
+  }
+
+  if (fieldId === 'compliance') {
+    if (/financial|bank|payment/i.test((sysDesignData?.security?.data_class || ''))) {
+      contextual.unshift('PCI-DSS 4.0 (cardholder data — quarterly ASV scan)');
+    }
+    if (/health|phi|hipaa/i.test((sysDesignData?.security?.data_class || ''))) {
+      contextual.unshift('HIPAA (US protected health information)');
+    }
+  }
+
+  const base = matchSuggestKeys(val, fieldId);
+  return [...new Set([...contextual, ...base])].slice(0, 7);
+}
+
 export function matchSuggestKeys(val, fieldId, minChars = 3) {
   if ((val || '').trim().length < minChars) return [];
   const v = (val || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();

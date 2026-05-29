@@ -6,7 +6,7 @@ import { ALL_UUM } from '../lib/uumItems.js';
 import { getDefaultDesignValues } from '../lib/designDefaults.js';
 import { exportExcel } from '../lib/exportExcel.js';
 import { runSmartScan } from '../lib/smartScan.js';
-import { matchSuggestKeys } from '../lib/suggestDb.js';
+import { matchSuggestKeys, buildContextSuggestions } from '../lib/suggestDb.js';
 import { getEolInfo } from '../lib/eolData.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { canUseFeature, buildLimitReached, incrementBuildCount } from '../lib/auth.js';
@@ -136,15 +136,20 @@ function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', cl
   const [focused, setFocused] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
+  const { ctx, sysDesignData, scanResults } = useStore();
+
+  function getSuggestions(val) {
+    return buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults);
+  }
 
   function handleChange(val) {
     onChange(val);
-    setSuggestions(matchSuggestKeys(val, fieldId));
+    setSuggestions(getSuggestions(val));
   }
 
   function handleFocus() {
     setFocused(true);
-    setSuggestions(matchSuggestKeys(value || '', fieldId));
+    setSuggestions(getSuggestions(value || ''));
   }
 
 
@@ -538,6 +543,12 @@ export default function PhasePanel() {
 
   async function handleDeleteBuild(id) {
     await deleteBuildDb(id);
+  }
+
+  async function handleCopyBuild(build) {
+    const newId = String(Date.now());
+    const copy = { ...build, id: newId, name: `${build.name} (copy)`, savedAt: new Date().toISOString() };
+    await saveBuild(copy);
   }
 
   // Requirements field config: [label, key, type, options?, suggestId?]
@@ -987,7 +998,7 @@ export default function PhasePanel() {
                 {canUseFeature(authUser, 'save_builds') && (
                   <button
                     className="btn-primary mt-1"
-                    onClick={() => { s.resubmitCAB(); }}
+                    onClick={() => s.setCabApproved(true)}
                   >Quick Change — PM Override (skip CAB re-review)</button>
                 )}
               </div>
@@ -1166,15 +1177,22 @@ export default function PhasePanel() {
                 <div key={b.id} className="bg-white/5 border border-white/10 rounded p-2 flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-white/80 truncate">{b.name}</div>
-                    <div className="text-xs text-white/40">{b.ctx?.hw?.split(' ')[0] || '?'} / {b.ctx?.os?.split(' ')[0] || '?'} — {new Date(b.savedAt).toLocaleDateString()}</div>
-                    <div className="flex gap-1 mt-1">
+                    <div className="text-xs text-white/40">{b.ctx?.hw?.split(' ')[0] || '?'} / {b.ctx?.os?.split(' ')[0] || '?'} / {b.ctx?.db?.split(' ')[0] || '?'} — {new Date(b.savedAt).toLocaleDateString()}</div>
+                    <div className="flex gap-1 mt-1 flex-wrap">
                       {b.isBuilt && <span className="badge badge-teal" style={{ fontSize: 9 }}>Built</span>}
-                      {b.rtmSigned && <span className="badge badge-green" style={{ fontSize: 9 }}>RTM Signed</span>}
+                      {b.designApplied && <span className="badge badge-blue" style={{ fontSize: 9 }}>Design</span>}
+                      {b.cabApproved && <span className="badge badge-green" style={{ fontSize: 9 }}>CAB</span>}
+                      {b.rtmSigned && <span className="badge badge-green" style={{ fontSize: 9 }}>RTM</span>}
                       {b.promoted && <span className="badge badge-green" style={{ fontSize: 9 }}>Live</span>}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <button className="text-xs text-teal hover:text-white" onClick={() => handleLoadBuild(b)}>Load</button>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <button className="text-xs text-teal hover:text-white font-medium" onClick={() => handleLoadBuild(b)}>Load</button>
+                    <button
+                      className="text-xs text-white/45 hover:text-teal"
+                      title="Copy this build — creates a new build with the same configuration"
+                      onClick={() => handleCopyBuild(b)}
+                    >Copy</button>
                     <button className="text-xs text-white/30 hover:text-red-400" onClick={() => handleDeleteBuild(b.id)}>Del</button>
                   </div>
                 </div>
