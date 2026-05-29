@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { useStore, DESIGN_SECTIONS, FIELD_LABELS } from '../../store/useStore.js';
 import { matchSuggestKeys } from '../../lib/suggestDb.js';
 import { generateTaskPlan } from '../../lib/smartScan.js';
+import { useAuth } from '../../lib/AuthContext.jsx';
+import { canUseFeature } from '../../lib/auth.js';
 
 function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
   const [pos, setPos] = useState(null);
@@ -126,7 +128,7 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
   );
 }
 
-function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle, techMode, presentMode }) {
+function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle, techMode, presentMode, onResetSection }) {
   const filled = section.fields.filter(f => sectionData[f]?.trim()).length;
   const total = section.fields.length;
   const completePct = Math.round((filled / total) * 100);
@@ -164,18 +166,28 @@ function DesignSection({ section, sectionData, readOnly, onFieldChange, open, on
 
   return (
     <div className="card mb-3 overflow-hidden">
-      <button onClick={onToggle} className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+      <div className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer" onClick={onToggle}>
         <div className="flex items-center gap-2">
           <span className="font-semibold text-slate-700 text-sm">{section.label}</span>
           <span className="text-xs text-slate-400">— {section.owner}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className={`badge ${badgeColor}`}>{filled}/{total} filled</span>
+          {!readOnly && !presentMode && onResetSection && filled > 0 && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onResetSection(section.key); }}
+              title="Clear all fields in this section"
+              className="text-xs text-slate-400 hover:text-red-500 border border-slate-200 hover:border-red-300 rounded px-1.5 py-0.5 transition-colors"
+            >
+              Reset
+            </button>
+          )}
           <svg className={['w-4 h-4 text-slate-400 transition-transform', open ? 'rotate-180' : ''].join(' ')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="px-4 pb-4 border-t border-slate-100 fade-in">
@@ -203,6 +215,8 @@ function DesignSection({ section, sectionData, readOnly, onFieldChange, open, on
 
 export default function SystemDesignTab() {
   const s = useStore();
+  const { authUser } = useAuth();
+  const canTechReview = canUseFeature(authUser, 'tech_review');
   const [taskStatus, setTaskStatus] = useState('idle'); // idle | running | done
   const [taskMsg, setTaskMsg] = useState('');
   const [presentMode, setPresentMode] = useState(false);
@@ -215,6 +229,13 @@ export default function SystemDesignTab() {
   const filledFields = DESIGN_SECTIONS.reduce((n, sec) =>
     n + sec.fields.filter(f => f !== 'notes' && s.sysDesignData[sec.key]?.[f]?.trim()).length, 0);
   const overallPct = Math.round((filledFields / totalFields) * 100);
+
+  function handleResetSection(sectionKey) {
+    const section = DESIGN_SECTIONS.find(sec => sec.key === sectionKey);
+    if (!section) return;
+    if (!window.confirm(`Reset all ${section.label} fields? This will clear entered values for this section only.`)) return;
+    section.fields.forEach(field => s.setDesignField(sectionKey, field, ''));
+  }
 
   function generateTasks() {
     setTaskStatus('running');
@@ -278,11 +299,17 @@ export default function SystemDesignTab() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setTechMode(t => !t); setPresentMode(false); }}
-            className={['text-xs px-3 py-1 rounded border transition-colors', techMode ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold' : 'border-slate-200 text-slate-500 hover:border-amber-300'].join(' ')}
-            title="Tech Review Mode — lock fields that PM cannot override"
+            onClick={() => {
+              if (!canTechReview) { alert('Tech Review Mode requires Professional plan or above. Sign in via the top-right button to upgrade.'); return; }
+              setTechMode(t => !t); setPresentMode(false);
+            }}
+            className={['text-xs px-3 py-1 rounded border transition-colors',
+              !canTechReview ? 'border-slate-200 text-slate-300 cursor-not-allowed' :
+              techMode ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold' :
+              'border-slate-200 text-slate-500 hover:border-amber-300'].join(' ')}
+            title={canTechReview ? 'Tech Review Mode — lock fields that PM cannot override' : 'Requires Professional plan'}
           >
-            {techMode ? 'Exit Tech Review' : 'Tech Review Mode'}
+            {techMode ? 'Exit Tech Review' : 'Tech Review Mode'}{!canTechReview && ' 🔒'}
           </button>
           <button
             onClick={() => { setPresentMode(p => !p); setTechMode(false); }}
@@ -335,6 +362,7 @@ export default function SystemDesignTab() {
           onToggle={() => !presentMode && s.toggleDesignSection(section.key)}
           techMode={techMode}
           presentMode={presentMode}
+          onResetSection={!isReadOnly ? handleResetSection : null}
         />
       ))}
 

@@ -5,6 +5,7 @@ import { getRealTasks } from './realTasks.js';
 import { getIncidentFixTasks } from './incidentFixTasks.js';
 import { buildDesignTasks } from './designTasks.js';
 import { DESIGN_SECTIONS, FIELD_LABELS } from '../store/useStore.js';
+import { getEolInfo } from './eolData.js';
 
 // ── Colour palette ─────────────────────────────────────────────────────────
 const C = {
@@ -32,10 +33,10 @@ const C = {
 };
 
 // ── Style builders ─────────────────────────────────────────────────────────
-function s(fill, fontColor = C.WHITE, bold = false, sz = 10, border = true) {
+function s(fill, fontColor = C.WHITE, bold = false, sz = 10, border = true, hcenter = false) {
   const base = {
     font: { name: 'Calibri', sz, bold, color: { rgb: fontColor } },
-    alignment: { wrapText: true, vertical: 'center' },
+    alignment: { wrapText: true, vertical: 'center', ...(hcenter ? { horizontal: 'center' } : {}) },
   };
   if (fill) base.fill = { patternType: 'solid', fgColor: { rgb: fill } };
   if (border) base.border = {
@@ -71,6 +72,11 @@ function c(value, style) {
   return { v: value ?? '', t, s: style || ST.BODY };
 }
 
+// Return a copy of style with horizontal center alignment (for short values, codes, numbers)
+function ctd(style) {
+  return { ...style, alignment: { ...(style.alignment || {}), horizontal: 'center', vertical: 'center', wrapText: true } };
+}
+
 // Write a row of cells into a sheet at row `r`
 function writeRow(ws, cells, r, defaultStyle) {
   cells.forEach((cell, col) => {
@@ -81,6 +87,28 @@ function writeRow(ws, cells, r, defaultStyle) {
       ws[addr] = c(cell, defaultStyle || ST.BODY);
     }
   });
+}
+
+// Sheet builder that tracks row index for dynamic merges
+function sheetBuilder(cols) {
+  const rows = [];
+  const merges = [];
+
+  function row(cells) { rows.push(cells); }
+
+  function headerRow(text, style, spanCols) {
+    rows.push([c(text, style), ...Array(spanCols - 1).fill('')]);
+    merges.push({ s: { r: rows.length - 1, c: 0 }, e: { r: rows.length - 1, c: spanCols - 1 } });
+  }
+
+  function build() {
+    const ws = buildSheet(rows);
+    ws['!cols'] = cols;
+    if (merges.length) ws['!merges'] = [...(ws['!merges'] || []), ...merges];
+    return ws;
+  }
+
+  return { row, headerRow, build, rows, merges };
 }
 
 function buildSheet(rows) {
@@ -103,16 +131,44 @@ function buildSheet(rows) {
 }
 
 function statusStyle(status) {
-  if (status === 'PASS' || status === 'VERIFIED' || status === 'RESOLVED' || status === 'COMPLETED' || status === 'APPROVED') return ST.PASS;
-  if (status === 'FAIL' || status === 'FAILED' || status === 'ACTIVE' || status === 'CRITICAL' || status === 'BLOCKED') return ST.FAIL;
-  if (status === 'PENDING' || status === 'PENDING APPROVAL' || status === 'SCHEDULED') return ST.AMBER_V;
-  return ST.BODY;
+  if (status === 'PASS' || status === 'VERIFIED' || status === 'RESOLVED' || status === 'COMPLETED' || status === 'APPROVED') return ctd(ST.PASS);
+  if (status === 'FAIL' || status === 'FAILED' || status === 'ACTIVE' || status === 'CRITICAL' || status === 'BLOCKED') return ctd(ST.FAIL);
+  if (status === 'PENDING' || status === 'PENDING APPROVAL' || status === 'SCHEDULED') return ctd(ST.AMBER_V);
+  return ctd(ST.BODY);
+}
+
+const BUFFER = 1.3;
+
+function addWorkingHours(startDate, hours, hpd = 8) {
+  const d = new Date(startDate);
+  let remaining = Math.ceil(hours);
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) remaining -= hpd;
+  }
+  return d;
+}
+
+function excelCalcDates(tasks, startDateStr, hpd = 8, durKey = 'duration_hours') {
+  if (!startDateStr) return tasks.map(() => ({ start: '—', end: '—', buffered: '—' }));
+  let cursor = new Date(startDateStr);
+  return tasks.map(t => {
+    const raw = t[durKey] || t.est_hours || t.hours || 2;
+    const buffered = Math.ceil(raw * BUFFER);
+    const start = cursor.toISOString().slice(0, 10);
+    cursor = addWorkingHours(cursor, buffered, hpd);
+    const end = cursor.toISOString().slice(0, 10);
+    return { start, end, buffered };
+  });
 }
 
 export function exportExcel(state) {
   const {
     ctx, selInc, selUUM, selFix, promoted, cabApproved, rtmSigned,
-    sysDesignData, sdAiTasks, requirements, emergencyChanges,
+    sysDesignData, sdAiTasks, requirements, emergencyChanges, customInc,
+    selRegions,
+    fullExport = false,  // Pro+ gets CMDB, Gantt, System Design, Closure Summary
   } = state;
 
   const wb = XLSX.utils.book_new();
@@ -263,7 +319,125 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 4: Incidents Register
+  // SHEET 4: CMDB Register
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    // Layer key → which inc.layers / uum.layers values map to it
+    const layerKeys = {
+      'Hardware':       ['unix', 'hw'],
+      'Operating System': ['unix', 'os'],
+      'Web / HTTP':     ['web'],
+      'Application':    ['app'],
+      'Database':       ['db'],
+      'Storage':        ['storage', 'stor'],
+      'Backup / DR':    ['backup', 'bk'],
+      'Network':        ['network', 'net'],
+      'Security':       ['security', 'sec'],
+    };
+
+    const allCustom = customInc || [];
+
+    function ciIncs(layerName) {
+      const keys = layerKeys[layerName] || [];
+      return selInc.filter(code => {
+        const inc = ALL_INC.find(i => i.code === code) || allCustom.find(i => i.code === code);
+        return inc && inc.layers && keys.some(k => inc.layers.includes(k));
+      }).map(code => {
+        const inc = ALL_INC.find(i => i.code === code) || allCustom.find(i => i.code === code);
+        return inc ? inc.short : code;
+      }).join(', ') || '—';
+    }
+
+    function ciUums(layerName) {
+      const keys = layerKeys[layerName] || [];
+      return selUUM.filter(code => {
+        const uum = ALL_UUM.find(u => u.code === code);
+        return uum && uum.layers && keys.some(k => uum.layers.includes(k));
+      }).map(code => {
+        const uum = ALL_UUM.find(u => u.code === code);
+        return uum ? uum.short : code;
+      }).join(', ') || '—';
+    }
+
+    function eolBadge(comp) {
+      const info = getEolInfo(comp);
+      if (!info || info.status === 'unknown') return '—';
+      if (info.status === 'active') return 'Active until ' + info.date;
+      if (info.status === 'eos_soon') return 'EOS Soon: ' + info.date;
+      return 'EOL: ' + info.date;
+    }
+
+    function eolStyle(comp) {
+      const info = getEolInfo(comp);
+      if (!info || info.status === 'unknown' || info.status === 'active') return ST.PASS;
+      if (info.status === 'eos_soon') return ST.AMBER_V;
+      return ST.FAIL;
+    }
+
+    const ciRows = [
+      { layer: 'Hardware',         comp: ctx.hw,   config: [sysDesignData?.unix?.cpu, sysDesignData?.unix?.ram, sysDesignData?.unix?.hostname_scheme].filter(Boolean).join(' | ') || '—', owner: 'Unix Admin' },
+      { layer: 'Operating System', comp: ctx.os,   config: ['Kernel: ' + (sysDesignData?.unix?.kernel_params || '—'), 'Patch: ' + (sysDesignData?.unix?.patch_window || '—'), sysDesignData?.unix?.monitoring_agent].filter(Boolean).join(' | '), owner: 'Unix Admin' },
+      { layer: 'Web / HTTP',       comp: sysDesignData?.web?.notes || ctx.app || '—', config: ['SSL: ' + (sysDesignData?.web?.ssl_protocols || '—'), 'MaxConn: ' + (sysDesignData?.web?.max_conn || '—'), 'WAF: ' + (sysDesignData?.web?.waf || '—')].join(' | '), owner: 'Web Admin' },
+      { layer: 'Application',      comp: ctx.app,  config: ['Port: ' + (sysDesignData?.app?.app_port || '—'), 'Deploy: ' + (sysDesignData?.app?.deploy_method || '—'), 'APM: ' + (sysDesignData?.app?.apm_agent || '—')].join(' | '), owner: 'App Admin' },
+      { layer: 'Database',         comp: ctx.db,   config: ['Port: ' + (sysDesignData?.db?.listener_port || '—'), 'Pool: ' + (sysDesignData?.db?.max_conn || '—'), 'Repl: ' + (sysDesignData?.db?.replication || '—')].join(' | '), owner: 'DB Admin' },
+      { layer: 'Storage',          comp: sysDesignData?.storage?.san_fabric || 'SAN / NFS', config: ['LUN: ' + (sysDesignData?.storage?.lun_size || '—'), 'IOPS: ' + (sysDesignData?.storage?.iops_req || '—'), 'RAID: ' + (sysDesignData?.storage?.raid_level || '—')].join(' | '), owner: 'Storage Admin' },
+      { layer: 'Backup / DR',      comp: sysDesignData?.backup?.backup_tool || 'RMAN / Veeam', config: ['RPO: ' + (sysDesignData?.backup?.rpo_hours || '—') + 'h', 'RTO: ' + (sysDesignData?.backup?.rto_hours || '—') + 'h', 'Offsite: ' + (sysDesignData?.backup?.offsite_target || '—')].join(' | '), owner: 'Backup Admin' },
+      { layer: 'Network',          comp: sysDesignData?.network?.bandwidth || 'Ethernet', config: ['VLAN: ' + (sysDesignData?.network?.vlan_ids || '—'), 'Bond: ' + (sysDesignData?.network?.bond_mode || '—'), 'FW: ' + (sysDesignData?.network?.fw_rules || '—')].join(' | '), owner: 'Net Admin' },
+      { layer: 'Security',         comp: sysDesignData?.security?.compliance_framework || 'ISO 27001:2022', config: ['PatchSLA: ' + (sysDesignData?.security?.patch_sla || '—'), 'MFA: ' + (sysDesignData?.security?.mfa_required || '—'), 'SIEM: ' + (sysDesignData?.security?.siem_endpoint || '—')].join(' | '), owner: 'SecOps' },
+    ];
+
+    const sb = sheetBuilder([{ width: 5 }, { width: 20 }, { width: 35 }, { width: 22 }, { width: 60 }, { width: 28 }, { width: 28 }, { width: 18 }]);
+    sb.headerRow(projName + ' — CMDB Configuration Item Register', ST.H1, 8);
+    sb.row([c('#', ST.H2), c('Layer', ST.H2), c('Component', ST.H2), c('EOL Status', ST.H2), c('Key Configuration', ST.H2), c('Active Incidents', ST.H2), c('UUM Items', ST.H2), c('Owner', ST.H2)]);
+
+    ciRows.forEach(({ layer, comp, config, owner }, i) => {
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      sb.row([
+        c(i + 1, ctd(ST.BOLD_L)),
+        c(layer, ST.BOLD_L),
+        c(comp || '—', bg),
+        c(eolBadge(comp), ctd(eolStyle(comp))),
+        c(config, bg),
+        c(ciIncs(layer), ciIncs(layer) !== '—' ? ctd(ST.FAIL) : ctd(bg)),
+        c(ciUums(layer), ciUums(layer) !== '—' ? ctd(ST.AMBER_V) : ctd(bg)),
+        c(owner, ctd(bg)),
+      ]);
+    });
+
+    // EOL risk summary section
+    const eolRisks = ciRows.filter(({ comp }) => {
+      const info = getEolInfo(comp);
+      return info && (info.status === 'eol' || info.status === 'eos_soon');
+    });
+
+    sb.row(['', '', '', '', '', '', '', '']);
+    sb.headerRow('EOL / EOS RISK SUMMARY (' + eolRisks.length + ' component(s) at risk)', eolRisks.length > 0 ? ST.RED_H : ST.GREEN_H, 8);
+    if (eolRisks.length === 0) {
+      sb.row([c('All components within active support lifecycle', ST.PASS), '', '', '', '', '', '', '']);
+    } else {
+      sb.row([c('Layer', ST.LABEL), c('Component', ST.LABEL), c('Status', ST.LABEL), c('Date', ST.LABEL), c('Recommended Action', ST.LABEL), '', '', '']);
+      eolRisks.forEach(({ layer, comp }, i) => {
+        const info = getEolInfo(comp);
+        const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+        const action = info.status === 'eol'
+          ? 'Immediate upgrade or migration required — component is out of support'
+          : 'Plan upgrade within 6 months — EOS approaching';
+        sb.row([
+          c(layer, ST.BOLD_L),
+          c(comp, bg),
+          c(info.status === 'eol' ? 'EOL' : 'EOS Soon', info.status === 'eol' ? ST.FAIL : ST.AMBER_V),
+          c(info.date || '—', bg),
+          c(action, bg),
+          '', '', '',
+        ]);
+      });
+    }
+
+    if (fullExport) XLSX.utils.book_append_sheet(wb, sb.build(), 'CMDB Register');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 5: Incidents Register
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
@@ -280,11 +454,11 @@ export function exportExcel(state) {
         const tasks = getIncidentFixTasks(inc, ctx);
         const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
         rows.push([
-          c(inc.short, ST.BOLD_L),
+          c(inc.short, ctd(ST.BOLD_L)),
           c(inc.txt.substring(inc.short.length + 2, 90), bg),
-          c(inc.grp, bg),
+          c(inc.grp, ctd(bg)),
           c(inc.layers.join(', '), bg),
-          c(fixed ? 'RESOLVED' : 'ACTIVE', fixed ? ST.PASS : ST.FAIL),
+          c(fixed ? 'RESOLVED' : 'ACTIVE', fixed ? ctd(ST.PASS) : ctd(ST.FAIL)),
           c(FIXES[code] || 'Patch applied', bg),
           c(tasks[0] ? tasks[0].name : '—', bg),
           c(tasks[1] ? tasks[1].name : '—', bg),
@@ -315,11 +489,11 @@ export function exportExcel(state) {
         const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
         const typeStyle = uum.type === 'migration' ? ST.BLUE_H : uum.type === 'upgrade' ? ST.AMBER_V : ST.BODY;
         rows.push([
-          c(uum.short, ST.BOLD_L),
+          c(uum.short, ctd(ST.BOLD_L)),
           c(uum.txt.substring(uum.short.length + 2, 90), bg),
-          c(uum.type.toUpperCase(), typeStyle),
+          c(uum.type.toUpperCase(), ctd(typeStyle)),
           c(uum.layers.join(', '), bg),
-          c(promoted ? 'COMPLETED' : 'SCHEDULED', promoted ? ST.PASS : ST.AMBER_V),
+          c(promoted ? 'COMPLETED' : 'SCHEDULED', ctd(promoted ? ST.PASS : ST.AMBER_V)),
           c(tasks[0] ? '[' + tasks[0].role + '] ' + tasks[0].name : '—', bg),
           c(tasks[1] ? '[' + tasks[1].role + '] ' + tasks[1].name : '—', bg),
         ]);
@@ -335,12 +509,12 @@ export function exportExcel(state) {
   // SHEET 6: RTM Checklist
   // ══════════════════════════════════════════════════════════════════════════
   {
-    const rows = [
-      [c('Requirements Traceability Matrix (RTM)', ST.H1), '', '', ''],
-      [c('RTM Status: ' + (rtmSigned ? 'SIGNED — Production cutover authorised' : 'PENDING — Review in progress'), rtmSigned ? ST.GREEN_H : ST.AMBER_V), '', '', ''],
-      ['', '', '', ''],
-      [c('RTM ID', ST.H2), c('Requirement / Verification Check', ST.H2), c('Test Method', ST.H2), c('Status', ST.H2)],
-    ];
+    const sb = sheetBuilder([{ width: 22 }, { width: 75 }, { width: 40 }, { width: 16 }]);
+    sb.headerRow('Requirements Traceability Matrix (RTM)', ST.H1, 4);
+    sb.headerRow('RTM Status: ' + (rtmSigned ? 'SIGNED — Production cutover authorised' : 'PENDING — Review in progress'), rtmSigned ? ST.GREEN_H : ST.AMBER_V, 4);
+    sb.row(['', '', '', '']);
+    sb.row([c('RTM ID', ST.H2), c('Requirement / Verification Check', ST.H2), c('Test Method', ST.H2), c('Status', ST.H2)]);
+
     const baseChecks = [
       ['RTM-REQ-001', 'Infrastructure hardware topology and firmware alignment verified', 'Physical/VM inventory matches CMDB', rtmSigned ? 'VERIFIED' : 'PENDING'],
       ['RTM-REQ-002', 'OS kernel, middleware, and runtime compatibility confirmed', 'rpm -qa / dpkg -l / oslevel', rtmSigned ? 'VERIFIED' : 'PENDING'],
@@ -352,110 +526,125 @@ export function exportExcel(state) {
       ['RTM-REQ-008', 'Rollback plan documented, rehearsed, and approved', 'Rollback drill log + approval', rtmSigned ? 'VERIFIED' : 'PENDING'],
     ];
     baseChecks.forEach(([id, req, method, status], i) => {
-      rows.push([
-        c(id, ST.BOLD_L),
-        c(req, i % 2 === 0 ? ST.BODY : ST.BODY_A),
-        c(method, i % 2 === 0 ? ST.BODY : ST.BODY_A),
-        c(status, statusStyle(status)),
-      ]);
+      sb.row([c(id, ST.BOLD_L), c(req, i % 2 === 0 ? ST.BODY : ST.BODY_A), c(method, i % 2 === 0 ? ST.BODY : ST.BODY_A), c(status, statusStyle(status))]);
     });
-    rows.push(['', '', '', '']);
-    rows.push([c('INCIDENT FIXES', ST.RED_H), '', '', '']);
-    selInc.forEach((code, i) => {
-      const inc = ALL_INC.find(ix => ix.code === code);
-      if (!inc) return;
-      const fixed = promoted || selFix.includes(code);
-      const status = fixed ? 'VERIFIED' : 'PENDING';
-      rows.push([
-        c('RTM-FIX-' + inc.short, ST.BOLD_L),
-        c('Fix for "' + inc.short + '" tested and approved in staging', i % 2 === 0 ? ST.BODY : ST.BODY_A),
-        c('Post-fix smoke test + QA sign-off', i % 2 === 0 ? ST.BODY : ST.BODY_A),
-        c(status, statusStyle(status)),
-      ]);
-    });
-    if (selInc.length === 0) rows.push([c('No incidents in scope', ST.BODY), '', '', '']);
-    rows.push(['', '', '', '']);
-    rows.push([c('UUM CHANGE ITEMS', ST.AMBER_H), '', '', '']);
-    selUUM.forEach((code, i) => {
-      const uum = ALL_UUM.find(u => u.code === code);
-      if (!uum) return;
-      const status = promoted ? 'COMPLETED' : 'SCHEDULED';
-      rows.push([
-        c('RTM-UUM-' + uum.short, ST.BOLD_L),
-        c(uum.short + ' [' + uum.type.toUpperCase() + ']: Change reviewed and scheduled', i % 2 === 0 ? ST.BODY : ST.BODY_A),
-        c('Version query + regression test suite', i % 2 === 0 ? ST.BODY : ST.BODY_A),
-        c(status, statusStyle(status)),
-      ]);
-    });
-    if (selUUM.length === 0) rows.push([c('No UUM items in scope', ST.BODY), '', '', '']);
 
-    const ws = buildSheet(rows);
-    ws['!cols'] = [{ width: 22 }, { width: 75 }, { width: 40 }, { width: 16 }];
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, 'RTM Checklist');
+    sb.row(['', '', '', '']);
+    sb.headerRow('INCIDENT FIXES (' + selInc.length + ' in scope)', ST.RED_H, 4);
+    if (selInc.length === 0) {
+      sb.row([c('No incidents in scope', ST.BODY), '', '', '']);
+    } else {
+      selInc.forEach((code, i) => {
+        const inc = ALL_INC.find(ix => ix.code === code);
+        if (!inc) return;
+        const fixed = promoted || selFix.includes(code);
+        const status = fixed ? 'VERIFIED' : 'PENDING';
+        sb.row([c('RTM-FIX-' + inc.short, ST.BOLD_L), c('Fix for "' + inc.short + '" tested and approved in staging', i % 2 === 0 ? ST.BODY : ST.BODY_A), c('Post-fix smoke test + QA sign-off', i % 2 === 0 ? ST.BODY : ST.BODY_A), c(status, statusStyle(status))]);
+      });
+    }
+
+    sb.row(['', '', '', '']);
+    sb.headerRow('UUM CHANGE ITEMS (' + selUUM.length + ' in scope)', ST.AMBER_H, 4);
+    if (selUUM.length === 0) {
+      sb.row([c('No UUM items in scope', ST.BODY), '', '', '']);
+    } else {
+      selUUM.forEach((code, i) => {
+        const uum = ALL_UUM.find(u => u.code === code);
+        if (!uum) return;
+        const status = promoted ? 'COMPLETED' : 'SCHEDULED';
+        sb.row([c('RTM-UUM-' + uum.short, ST.BOLD_L), c(uum.short + ' [' + uum.type.toUpperCase() + ']: Change reviewed and scheduled', i % 2 === 0 ? ST.BODY : ST.BODY_A), c('Version query + regression test suite', i % 2 === 0 ? ST.BODY : ST.BODY_A), c(status, statusStyle(status))]);
+      });
+    }
+
+    XLSX.utils.book_append_sheet(wb, sb.build(), 'RTM Checklist');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 7: Gantt Timeline
+  // SHEET 8: Gantt Timeline
   // ══════════════════════════════════════════════════════════════════════════
   {
     const ganttTasks = sdAiTasks.length > 0 ? sdAiTasks : buildDesignTasks(sysDesignData);
-    const rows = [
-      [c('Execution Gantt — Task Plan & Timeline', ST.H1), '', '', '', '', '', '', ''],
-      [c('Phase / UUM', ST.H2), c('Role / Team', ST.H2), c('Task Name', ST.H2), c('Duration (h)', ST.H2), c('Pre-req / Dependency', ST.H2), c('Handoff / Validate', ST.H2), c('Change Window', ST.H2), c('Phase', ST.H2)],
-    ];
+    const hpd = parseInt(requirements.hoursPerDay || '8', 10);
+    const regions = selRegions || ['Production'];
+    const regionsStr = regions.join(' · ');
+    const designDates = excelCalcDates(ganttTasks, requirements.projectStartDate, hpd, 'duration_hours');
+
+    const sb = sheetBuilder([{ width: 16 }, { width: 20 }, { width: 55 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 35 }, { width: 20 }, { width: 18 }]);
+    sb.headerRow('Execution Gantt — Task Plan & Timeline', ST.H1, 9);
+
+    // Project timeline summary row
+    const tl = [];
+    if (requirements.projectStartDate) tl.push('Start: ' + requirements.projectStartDate);
+    if (requirements.goLiveDate) tl.push('Go-Live: ' + requirements.goLiveDate);
+    if (requirements.changeFreezeStart) tl.push('Freeze: ' + requirements.changeFreezeStart + '→' + (requirements.changeFreezeEnd || '?'));
+    if (requirements.holidays) tl.push('Holidays: ' + requirements.holidays);
+    tl.push('Regions: ' + regionsStr);
+    if (tl.length > 0) {
+      sb.headerRow(tl.join('  |  '), ST.SUB_H, 9);
+    }
+    sb.row(['', '', '', '', '', '', '', '', '']);
+    sb.headerRow('SYSTEM DESIGN TASKS', ST.H2, 9);
+    sb.row([c('Phase', ST.H2), c('Role / Team', ST.H2), c('Task Name', ST.H2), c('Raw (h)', ST.H2), c('Buf (h)', ST.H2), c('Start Date', ST.H2), c('End Date', ST.H2), c('Change Window', ST.H2), c('Environment', ST.H2)]);
 
     if (ganttTasks.length === 0) {
-      rows.push([c('No tasks generated — apply System Design or run AI task plan', ST.BODY), '', '', '', '', '', '', '']);
+      sb.row([c('No tasks generated — apply System Design or run AI task plan', ST.BODY), '', '', '', '', '', '', '', '']);
     } else {
       ganttTasks.forEach((t, i) => {
         const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
         const isMilestone = t.milestone;
-        rows.push([
-          c(isMilestone ? '◆ MILESTONE' : (t.phase || 'Design'), isMilestone ? ST.AMBER_V : bg),
+        const raw = t.duration_hours || 2;
+        const buf = Math.ceil(raw * BUFFER);
+        const d = designDates[i] || { start: '—', end: '—' };
+        sb.row([
+          c(isMilestone ? '◆ MILESTONE' : (t.phase || 'Design'), isMilestone ? ctd(ST.AMBER_V) : ctd(bg)),
           c(t.team || t.role || '—', bg),
           c(t.title || t.name || '—', isMilestone ? ST.AMBER_V : bg),
-          c(t.duration_hours || '—', bg),
-          c((t.depends_on || []).join(', ') || t.dep || '—', bg),
-          c(t.note || t.validate || '—', bg),
-          c(t.window || '—', t.window ? ST.AMBER_V : bg),
-          c(t.phase || '—', bg),
+          c(raw, ctd(bg)),
+          c(buf, ctd(ST.AMBER_V)),
+          c(d.start, ctd(bg)),
+          c(d.end, ctd(bg)),
+          c(t.window || '—', t.window ? ctd(ST.AMBER_V) : ctd(bg)),
+          c(regionsStr, ctd(bg)),
         ]);
       });
     }
 
     // UUM tasks
     if (selUUM.length > 0) {
-      rows.push(['', '', '', '', '', '', '', '']);
-      rows.push([c('UUM CHANGE SEQUENCES', ST.AMBER_H), '', '', '', '', '', '', '']);
+      sb.row(['', '', '', '', '', '', '', '', '']);
+      sb.headerRow('UUM CHANGE SEQUENCES (' + selUUM.length + ' items)', ST.AMBER_H, 9);
+      sb.row([c('UUM ID', ST.H2), c('Role / Team', ST.H2), c('Task Name', ST.H2), c('Raw (h)', ST.H2), c('Buf (h)', ST.H2), c('Start Date', ST.H2), c('End Date', ST.H2), c('Change Window', ST.H2), c('Environment', ST.H2)]);
+      let uumCursor = designDates[designDates.length - 1]?.end || requirements.projectStartDate;
       selUUM.forEach(code => {
         const uum = ALL_UUM.find(u => u.code === code);
         if (!uum) return;
-        rows.push([c(uum.short + ' [' + uum.type.toUpperCase() + ']', ST.BOLD_L), c(uum.txt.substring(uum.short.length + 2, 60), ST.BODY), '', '', '', '', '', '']);
         const tasks = getRealTasks(uum, ctx);
+        const uumDates = excelCalcDates(tasks, uumCursor, hpd, 'est_hours');
+        if (uumDates.length > 0) uumCursor = uumDates[uumDates.length - 1].end;
+
+        sb.headerRow(uum.short + ' [' + uum.type.toUpperCase() + '] — ' + uum.txt.substring(uum.short.length + 2, 80), ST.SUB_H, 9);
         tasks.forEach((t, i) => {
           const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
-          rows.push([
+          const raw = t.est_hours || t.hours || 2;
+          const buf = Math.ceil(raw * BUFFER);
+          const d = uumDates[i] || { start: '—', end: '—' };
+          const env = t.window ? 'Prod' : /staging|qa|test|sandbox|dr/i.test(t.name || '') ? 'Non-Prod' : regionsStr;
+          sb.row([
             c('', bg),
             c(t.role || '—', bg),
             c(t.name || '—', bg),
-            c(t.est_hours || t.hours || '—', bg),
-            c(t.dep?.substring(0, 50) || '—', bg),
-            c(t.validate?.substring(0, 50) || '—', bg),
-            c(t.window || '—', t.window ? ST.RED_H : bg),
-            c('', bg),
+            c(raw, ctd(bg)),
+            c(buf, ctd(ST.AMBER_V)),
+            c(d.start, ctd(bg)),
+            c(d.end, ctd(bg)),
+            c(t.window || '—', t.window ? ctd(ST.RED_H) : ctd(bg)),
+            c(env, t.window ? ctd(ST.FAIL) : ctd(bg)),
           ]);
         });
       });
     }
 
-    const ws = buildSheet(rows);
-    ws['!cols'] = [{ width: 18 }, { width: 20 }, { width: 55 }, { width: 14 }, { width: 40 }, { width: 40 }, { width: 20 }, { width: 18 }];
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Gantt Timeline');
+    if (fullExport) XLSX.utils.book_append_sheet(wb, sb.build(), 'Gantt Timeline');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -524,60 +713,68 @@ export function exportExcel(state) {
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sectionColors = [ST.H2, ST.AMBER_H, ST.RED_H, ST.GREEN_H, ST.BLUE_H, ST.H2, ST.AMBER_H, ST.RED_H];
-    const rows = [
-      [c(projName + ' — Full System Design (8 Sections × 30 Fields)', ST.H1), '', ''],
-    ];
+    const sb = sheetBuilder([{ width: 22 }, { width: 30 }, { width: 90 }]);
+    sb.headerRow(projName + ' — Full System Design (8 Sections × 30 Fields)', ST.H1, 3);
 
     DESIGN_SECTIONS.forEach((section, sIdx) => {
       const sData = sysDesignData?.[section.key] || {};
       const hStyle = sectionColors[sIdx % sectionColors.length];
-      rows.push(['', '', '']);
-      rows.push([c(section.label.toUpperCase() + ' — ' + section.owner, hStyle), '', '']);
-      rows.push([c('Field', ST.LABEL), c('Label', ST.LABEL), c('Value / Configuration', ST.LABEL)]);
+      sb.row(['', '', '']);
+      sb.headerRow(section.label.toUpperCase() + ' — ' + section.owner, hStyle, 3);
+      sb.row([c('Field Key', ST.LABEL), c('Label', ST.LABEL), c('Value / Configuration', ST.LABEL)]);
       section.fields.forEach((field, fIdx) => {
         const val = sData[field] || '';
         const bg = fIdx % 2 === 0 ? ST.BODY : ST.BODY_A;
         const isEmpty = !val.trim();
-        rows.push([
-          c(field, ST.BOLD_L),
-          c(FIELD_LABELS[field] || field, bg),
-          c(val || '(not configured)', isEmpty ? ST.AMBER_V : bg),
-        ]);
+        sb.row([c(field, ST.BOLD_L), c(FIELD_LABELS[field] || field, bg), c(val || '(not configured)', isEmpty ? ST.AMBER_V : bg)]);
       });
     });
 
-    const ws = buildSheet(rows);
-    ws['!cols'] = [{ width: 22 }, { width: 30 }, { width: 90 }];
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
-    XLSX.utils.book_append_sheet(wb, ws, 'System Design');
+    if (fullExport) XLSX.utils.book_append_sheet(wb, sb.build(), 'System Design');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 10: RACI Matrix
+  // SHEET 10: RACI Matrix (20 roles)
   // ══════════════════════════════════════════════════════════════════════════
   {
-    const roles = ['Change Manager', 'Unix Admin', 'DB Admin', 'App Admin', 'Net Admin', 'Storage Admin', 'Backup Admin', 'Web Admin', 'SecOps', 'QA Team'];
+    // PM, Change Manager, Tech Manager, then each function admin + lead pair
+    const roles = [
+      'PM', 'Change Manager', 'Tech Manager',
+      'Unix Admin', 'Unix Lead',
+      'DB Admin', 'DB Lead',
+      'App Admin', 'App Lead',
+      'Net Admin', 'Net Lead',
+      'Storage Admin', 'Storage Lead',
+      'Backup Admin', 'Backup Lead',
+      'Web Admin', 'Web Lead',
+      'SecOps', 'SecOps Lead',
+      'QA Team',
+    ];
+    // Values order: PM CM TM UnixA UnixL DBA DBL AppA AppL NetA NetL StorA StorL BkpA BkpL WebA WebL SecO SecOL QA
     const activities = [
-      ['Phase 1 — Platform Topology Build', 'A', 'R', 'C', 'C', 'C', 'C', 'I', 'I', 'C', 'I'],
-      ['AI Smart Scan Execution', 'A', 'R', 'C', 'C', 'I', 'I', 'I', 'I', 'C', 'I'],
-      ['System Design Entry', 'C', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'I'],
-      ['Phase 2 — Incident Selection', 'A', 'C', 'C', 'C', 'I', 'I', 'I', 'I', 'C', 'I'],
-      ['Incident Fix Runbooks', 'A', 'R', 'R', 'R', 'C', 'C', 'R', 'C', 'C', 'C'],
-      ['UUM Change Scheduling', 'A', 'C', 'C', 'C', 'I', 'I', 'C', 'I', 'I', 'I'],
-      ['CAB Submission and Approval', 'R', 'C', 'C', 'C', 'C', 'C', 'C', 'C', 'C', 'I'],
-      ['RTM Sign-Off', 'A', 'C', 'C', 'C', 'C', 'C', 'C', 'C', 'C', 'R'],
-      ['Production Cutover', 'A', 'R', 'R', 'R', 'R', 'R', 'I', 'R', 'C', 'C'],
-      ['Post-Production Monitoring', 'A', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'C', 'I'],
+      ['Phase 1 — Platform Topology Build',   'A','R','C', 'R','C', 'C','I', 'C','I', 'C','I', 'C','I', 'I','I', 'I','I', 'C','C', 'I'],
+      ['AI Smart Scan Execution',             'I','A','C', 'R','C', 'C','I', 'C','I', 'I','I', 'I','I', 'I','I', 'I','I', 'R','C', 'I'],
+      ['System Design Entry',                 'C','I','A', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'I'],
+      ['Tech Review — Design Lock',           'C','I','A', 'C','R', 'C','R', 'C','R', 'C','R', 'C','R', 'C','R', 'C','R', 'C','R', 'I'],
+      ['Phase 2 — Incident Selection',        'A','R','C', 'C','I', 'C','I', 'C','I', 'I','I', 'I','I', 'I','I', 'I','I', 'C','C', 'I'],
+      ['Incident Fix Runbooks',               'I','A','C', 'R','C', 'R','C', 'R','C', 'C','I', 'C','I', 'R','C', 'C','I', 'C','C', 'R'],
+      ['UUM Change Scheduling',               'A','R','C', 'C','I', 'C','I', 'C','I', 'I','I', 'C','I', 'I','I', 'I','I', 'I','I', 'I'],
+      ['CAB Submission and Approval',         'A','R','C', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'I'],
+      ['RTM Sign-Off',                        'I','A','C', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'C','I', 'R'],
+      ['Production Cutover',                  'A','R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'I','I', 'R','C', 'C','I', 'C'],
+      ['Post-Production Monitoring',          'A','C','I', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'C','I', 'I'],
+      ['CMDB Update (24h post-promotion)',    'C','A','I', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'R','C', 'C','I', 'C'],
     ];
     const raciStyle = (v) => {
-      if (v === 'R') return s(C.H_TEAL, C.TEAL, true, 10);
-      if (v === 'A') return s('FFFEF3C7', C.AMBER, true, 10);
-      if (v === 'C') return s(C.H_BLUE, C.BLUE, false, 9);
-      return s(C.H_GRAY, C.SLATE, false, 9);
+      if (v === 'R') return s(C.H_TEAL, C.TEAL, true, 10, true, true);
+      if (v === 'A') return s('FFFEF3C7', C.AMBER, true, 10, true, true);
+      if (v === 'C') return s(C.H_BLUE, C.BLUE, false, 9, true, true);
+      return s(C.H_GRAY, C.SLATE, false, 9, true, true);
     };
+    const roleHeaderStyle = s(C.H_TEAL, C.WHITE, true, 9, true, true);
     const rows = [
       [c('RACI Matrix — Responsibility Assignment', ST.H1), ...roles.map(() => '')],
-      [c('Activity / Phase', ST.H2), ...roles.map(r => c(r, ST.H2))],
+      [c('Activity / Phase', ST.H2), ...roles.map(r => c(r, roleHeaderStyle))],
     ];
     activities.forEach(([act, ...vals], i) => {
       rows.push([
@@ -585,11 +782,11 @@ export function exportExcel(state) {
         ...vals.map(v => c(v, raciStyle(v))),
       ]);
     });
-    rows.push(['', '', '', '', '', '', '', '', '', '', '']);
+    rows.push(Array(roles.length + 1).fill(''));
     rows.push([c('R = Responsible   A = Accountable   C = Consulted   I = Informed', ST.SUB_H), ...roles.map(() => '')]);
 
     const ws = buildSheet(rows);
-    ws['!cols'] = [{ width: 38 }, ...roles.map(() => ({ width: 16 }))];
+    ws['!cols'] = [{ width: 38 }, ...roles.map(() => ({ width: 13 }))];
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: roles.length } }];
     XLSX.utils.book_append_sheet(wb, ws, 'RACI Matrix');
   }
@@ -621,66 +818,67 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 12: Closure Summary
+  // SHEET 13: Closure Summary
   // ══════════════════════════════════════════════════════════════════════════
   {
-    const rows = [
-      [c('Project Closure Summary', ST.H1), '', ''],
-      [c('Project: ' + projName + '  |  Closure Date: ' + today + '  |  Status: ' + (promoted ? 'PROMOTED AND STABLE' : 'IN PROGRESS'), promoted ? ST.GREEN_H : ST.AMBER_V), '', ''],
-      ['', '', ''],
-      [c('INCIDENT RESOLUTION LOG', ST.RED_H), '', ''],
-      [c('Incident', ST.LABEL), c('Description', ST.LABEL), c('Status', ST.LABEL)],
-    ];
+    const sb = sheetBuilder([{ width: 6 }, { width: 95 }, { width: 22 }]);
+    sb.headerRow('Project Closure Summary', ST.H1, 3);
+    sb.headerRow('Project: ' + projName + '  |  Closure Date: ' + today + '  |  Status: ' + (promoted ? 'PROMOTED AND STABLE' : 'IN PROGRESS'), promoted ? ST.GREEN_H : ST.AMBER_V, 3);
+
+    sb.row(['', '', '']);
+    sb.headerRow('INCIDENT RESOLUTION LOG (' + selInc.length + ' in scope)', ST.RED_H, 3);
+    sb.row([c('Incident', ST.LABEL), c('Description', ST.LABEL), c('Status', ST.LABEL)]);
     if (selInc.length === 0) {
-      rows.push([c('No incidents in scope', ST.BODY), '', '']);
+      sb.row([c('No incidents in scope', ST.BODY), '', '']);
     } else {
       selInc.forEach((code, i) => {
-        const inc = ALL_INC.find(ix => ix.code === code);
+        const inc = ALL_INC.find(ix => ix.code === code) || (customInc || []).find(ix => ix.code === code);
         const fixed = promoted || selFix.includes(code);
         const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
-        rows.push([
+        sb.row([
           c(inc ? inc.short : code, ST.BOLD_L),
           c(inc ? inc.txt.substring(inc.short.length + 2, 75) : '—', bg),
           c(fixed ? 'RESOLVED' : 'PENDING', fixed ? ST.PASS : ST.AMBER_V),
         ]);
       });
     }
-    rows.push(['', '', '']);
-    rows.push([c('UUM MIGRATION LOG', ST.AMBER_H), '', '']);
-    rows.push([c('UUM ID', ST.LABEL), c('Description', ST.LABEL), c('Status', ST.LABEL)]);
+
+    sb.row(['', '', '']);
+    sb.headerRow('UUM MIGRATION LOG (' + selUUM.length + ' in scope)', ST.AMBER_H, 3);
+    sb.row([c('UUM ID', ST.LABEL), c('Description', ST.LABEL), c('Status', ST.LABEL)]);
     if (selUUM.length === 0) {
-      rows.push([c('No UUM items in scope', ST.BODY), '', '']);
+      sb.row([c('No UUM items in scope', ST.BODY), '', '']);
     } else {
       selUUM.forEach((code, i) => {
         const uum = ALL_UUM.find(u => u.code === code);
         const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
-        rows.push([
+        sb.row([
           c(uum ? uum.short : code, ST.BOLD_L),
           c(uum ? uum.txt.substring(uum.short.length + 2, 75) : '—', bg),
           c(promoted ? 'COMPLETED' : 'SCHEDULED', promoted ? ST.PASS : ST.AMBER_V),
         ]);
       });
     }
-    rows.push(['', '', '']);
-    rows.push([c('LESSONS LEARNED', ST.H2), '', '']);
-    [
-      'Confirm CAB window booked 5+ business days in advance — never compress the window.',
-      'All function team admins must fill System Design before Phase 2 begins.',
-      'Run full rehearsal migration in staging before production cutover.',
-      'Monitor AWR / alert log for 48h post-cutover before closing CAB ticket.',
-      'Validate backup & restore SLA was met before declaring project closure.',
-      'Update CMDB within 24h of production promotion.',
-    ].forEach((lesson, i) => {
-      rows.push([c((i + 1) + '. ' + lesson, i % 2 === 0 ? ST.BODY : ST.BODY_A), '', '']);
+
+    sb.row(['', '', '']);
+    sb.headerRow('LESSONS LEARNED', ST.H2, 3);
+    sb.row([c('#', ST.LABEL), c('Lesson / Recommendation', ST.LABEL), c('Category', ST.LABEL)]);
+    const lessons = [
+      ['Confirm CAB window booked 5+ business days in advance — never compress the change window under any circumstances.', 'Change Management'],
+      ['All function team admins (Unix, DB, App, Net, Storage, Backup, Web, SecOps) must complete System Design before Phase 2 begins.', 'Process'],
+      ['Run a full rehearsal migration in the staging environment before any production cutover is attempted.', 'Testing'],
+      ['Monitor AWR reports, alert logs, and application health dashboards for a minimum of 48 hours post-cutover before closing the CAB ticket.', 'Monitoring'],
+      ['Validate that backup and restore SLA targets (RPO/RTO) were met before declaring project closure and submitting CMDB updates.', 'Backup / DR'],
+      ['Update all CMDB configuration items within 24 hours of production promotion — CI drift causes downstream incidents.', 'CMDB'],
+      ['Communicate all change freeze dates and holiday windows to the team before generating the Gantt timeline to avoid schedule conflicts.', 'Planning'],
+      ['Ensure all RTM items are explicitly set to PASS or N/A — auto-defaults do not satisfy sign-off requirements.', 'Quality'],
+    ];
+    lessons.forEach(([lesson, category], i) => {
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      sb.row([c(i + 1, ST.BOLD_L), c(lesson, bg), c(category, bg)]);
     });
 
-    const ws = buildSheet(rows);
-    ws['!cols'] = [{ width: 22 }, { width: 75 }, { width: 16 }];
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, 'Closure Summary');
+    if (fullExport) XLSX.utils.book_append_sheet(wb, sb.build(), 'Closure Summary');
   }
 
   // Download

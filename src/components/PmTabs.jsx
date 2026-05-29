@@ -1,4 +1,5 @@
 import { useStore } from '../store/useStore.js';
+import { useAuth } from '../lib/AuthContext.jsx';
 import ExecSummaryTab from './tabs/ExecSummaryTab.jsx';
 import SystemDesignTab from './tabs/SystemDesignTab.jsx';
 import GanttTab from './tabs/GanttTab.jsx';
@@ -6,6 +7,8 @@ import RaidTab from './tabs/RaidTab.jsx';
 import RtmTab from './tabs/RtmTab.jsx';
 import ClosureTab from './tabs/ClosureTab.jsx';
 import InfraDiagramTab from './tabs/InfraDiagramTab.jsx';
+import CmdbTab from './tabs/CmdbTab.jsx';
+import RolesTab from './tabs/RolesTab.jsx';
 
 const TABS = [
   {
@@ -18,6 +21,13 @@ const TABS = [
     label: 'Infra Diagram',
     unlocked: s => s.isBuilt,
     lockMsg: 'Build environment first',
+  },
+  {
+    id: 'cmdb',
+    label: 'CMDB',
+    unlocked: s => s.isBuilt,
+    lockMsg: 'Build environment first',
+    proBadge: true,
   },
   {
     id: 'design',
@@ -49,37 +59,59 @@ const TABS = [
     unlocked: s => s.rtmSigned,
     lockMsg: 'Complete RTM sign-off first',
   },
+  {
+    id: 'roles',
+    label: 'Roles',
+    unlocked: s => s.isBuilt,
+    lockMsg: 'Build environment first',
+  },
 ];
 
 function TabContent({ activeTab }) {
   switch (activeTab) {
     case 'exec': return <ExecSummaryTab />;
     case 'diagram': return <InfraDiagramTab />;
+    case 'cmdb': return <CmdbTab />;
     case 'design': return <SystemDesignTab />;
     case 'gantt': return <GanttTab />;
     case 'raid': return <RaidTab />;
     case 'rtm': return <RtmTab />;
     case 'closure': return <ClosureTab />;
+    case 'roles': return <RolesTab />;
     default: return <ExecSummaryTab />;
   }
 }
 
 export default function PmTabs() {
   const s = useStore();
+  const { authUser } = useAuth();
   const activeTab = s.activeTab || 'exec';
 
+  function isTabUnlocked(tab) {
+    if (s.unlockedForRevision) return true;
+    return tab.unlocked(s);
+  }
+
   function handleTabClick(tab) {
-    const tabDef = TABS.find(t => t.id === tab.id);
-    if (!tabDef || !tabDef.unlocked(s)) return;
+    if (!isTabUnlocked(tab)) return;
     s.setActiveTab(tab.id);
   }
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      {/* Revision mode banner */}
+      {s.unlockedForRevision && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 animate-pulse" />
+          <span className="text-xs text-amber-700 font-semibold">Revision Mode</span>
+          <span className="text-xs text-amber-600">— All tabs unlocked. Update scope, design, or tasks then resubmit to CAB from the sidebar.</span>
+        </div>
+      )}
+
       {/* Tab bar */}
-      <div className="flex items-end gap-0.5 px-4 pt-2 bg-white border-b border-slate-200 flex-shrink-0">
+      <div className="flex items-end gap-0.5 px-4 pt-2 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
         {TABS.map(tab => {
-          const unlocked = tab.unlocked(s);
+          const unlocked = isTabUnlocked(tab);
           const isActive = activeTab === tab.id;
           return (
             <button
@@ -94,6 +126,11 @@ export default function PmTabs() {
               disabled={!unlocked}
             >
               {tab.label}
+              {tab.proBadge && (
+                <span className="inline-block ml-1 text-xs bg-teal-100 text-teal-700 font-bold rounded px-1 py-0 leading-tight">
+                  Pro
+                </span>
+              )}
               {!unlocked && (
                 <svg className="inline-block ml-1 w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />

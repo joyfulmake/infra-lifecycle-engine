@@ -141,6 +141,20 @@ const initDesignData = () => {
 
 export { DESIGN_SECTIONS, FIELD_LABELS, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS };
 
+// Migrate old single-freeze fields to changePeriods array format
+function migrateLegacyFreeze(b) {
+  const periods = [];
+  if (b.requirements?.changeFreezeStart) {
+    periods.push({ id: '1', type: 'freeze', label: 'Change Freeze', start: b.requirements.changeFreezeStart, end: b.requirements.changeFreezeEnd || '' });
+  }
+  if (b.requirements?.holidays) {
+    b.requirements.holidays.split(',').map(h => h.trim()).filter(Boolean).forEach((h, i) => {
+      periods.push({ id: 'h' + i, type: 'holiday', label: 'Holiday', start: h, end: h });
+    });
+  }
+  return periods;
+}
+
 export const useStore = create((set, get) => ({
   // Core state flags
   isBuilt: false,
@@ -151,6 +165,10 @@ export const useStore = create((set, get) => ({
   rtmSigned: false,
   promoted: false,
 
+  // Dirty tracking — true whenever state has changed since last save/load
+  isDirty: false,
+  currentBuildId: null,
+
   // Context
   ctx: { hw: '', os: '', db: '', app: '' },
 
@@ -158,7 +176,18 @@ export const useStore = create((set, get) => ({
   requirements: {
     projectName: '', envType: 'Production', goLiveDate: '', sla: '99.9',
     loadProfile: '', dataVolume: '', compliance: '', drTier: 'Tier 1', constraints: '',
+    projectStartDate: '', changeFreezeStart: '', changeFreezeEnd: '', holidays: '',
+    hoursPerDay: '8', pmEmail: '', pmBackupEmail: '',
   },
+
+  // Regions in scope
+  selRegions: ['Production'],
+
+  // Change periods: [{ id, type: 'freeze'|'holiday'|'break', label, start, end }]
+  changePeriods: [],
+
+  // Gantt task overrides: { [taskKey]: { durationHours, dep, parallel } }
+  ganttOverrides: {},
 
   // Selections (as arrays, not Sets, for Zustand serialization)
   selInc: [],
@@ -184,6 +213,15 @@ export const useStore = create((set, get) => ({
   // CAB declined state
   cabDeclined: false,
 
+  // Revision mode — unlocked after CAB decline so PM can update any tab
+  unlockedForRevision: false,
+
+  // Tasks stale reason — set when design/incidents/periods change after tasks generated
+  tasksStaleReason: null,
+
+  // Role assignments: { [roleName]: { name, email, backup, raci } }
+  roleAssignments: {},
+
   // Locked design fields: { 'section.field': { lockedBy: string, note: string, value: string } }
   lockedDesignFields: {},
 
@@ -200,64 +238,104 @@ export const useStore = create((set, get) => ({
   designSectionOpen: {},
 
   // Actions
+  markDirty: () => set({ isDirty: true }),
+  markClean: () => set({ isDirty: false }),
+  setCurrentBuildId: (id) => set({ currentBuildId: id }),
+
   setCtx: (ctx) => set({ ctx }),
-  setRequirements: (req) => set({ requirements: req }),
+  setRequirements: (req) => set(s => {
+    const scheduleChanged = s.designApplied && (
+      req.hoursPerDay !== s.requirements.hoursPerDay ||
+      req.projectStartDate !== s.requirements.projectStartDate
+    );
+    return { requirements: req, isDirty: true, ...(scheduleChanged ? { tasksStaleReason: 'Project schedule changed — tasks may not reflect new dates' } : {}) };
+  }),
+
+  setSelRegions: (regions) => set({ selRegions: regions, isDirty: true }),
+  setChangePeriods: (periods) => set(s => ({
+    changePeriods: periods, isDirty: true,
+    ...(s.designApplied ? { tasksStaleReason: 'Change periods updated — task schedule may have shifted' } : {}),
+  })),
+  setGanttOverride: (key, patch) => set(s => ({
+    ganttOverrides: { ...s.ganttOverrides, [key]: { ...(s.ganttOverrides[key] || {}), ...patch } },
+    isDirty: true,
+  })),
+  clearGanttOverride: (key) => set(s => {
+    const next = { ...s.ganttOverrides };
+    delete next[key];
+    return { ganttOverrides: next, isDirty: true };
+  }),
 
   build: (ctx) => set({
     isBuilt: true, scanComplete: false, designApplied: false,
     phase2Active: false, cabApproved: false, cabDeclined: false, rtmSigned: false, promoted: false,
     ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [],
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
-    lockedDesignFields: {},
+    lockedDesignFields: {}, isDirty: true, currentBuildId: null,
+    unlockedForRevision: false, tasksStaleReason: null, roleAssignments: {},
   }),
 
-  completeScan: (results) => set({ scanComplete: true, scanResults: results || [] }),
+  completeScan: (results) => set({ scanComplete: true, scanResults: results || [], isDirty: true }),
 
-  applyDesign: () => set({ designApplied: true }),
+  applyDesign: () => set({ designApplied: true, isDirty: true }),
 
-  startPhase2: () => set({ phase2Active: true }),
+  startPhase2: () => set({ phase2Active: true, isDirty: true }),
 
   toggleInc: (code) => set(s => ({
     selInc: s.selInc.includes(code) ? s.selInc.filter(c => c !== code) : [...s.selInc, code],
+    isDirty: true,
+    ...(s.phase2Active ? { tasksStaleReason: 'Incidents changed — tasks may not reflect current scope' } : {}),
   })),
 
   toggleUUM: (code) => set(s => ({
     selUUM: s.selUUM.includes(code) ? s.selUUM.filter(c => c !== code) : [...s.selUUM, code],
+    isDirty: true,
+    ...(s.phase2Active ? { tasksStaleReason: 'UUM items changed — task sequences may have changed' } : {}),
   })),
 
   toggleFix: (code) => set(s => ({
     selFix: s.selFix.includes(code) ? s.selFix.filter(c => c !== code) : [...s.selFix, code],
+    isDirty: true,
   })),
 
-  setCabApproved: (val) => set({ cabApproved: val, cabDeclined: false }),
-  setCabDeclined: (val) => set({ cabDeclined: val, cabApproved: false }),
+  setCabApproved: (val) => set({ cabApproved: val, cabDeclined: false, isDirty: true }),
+  setCabDeclined: (val) => set({ cabDeclined: val, cabApproved: false, isDirty: true }),
 
-  addCustomInc: (inc) => set(s => ({ customInc: [...s.customInc, inc] })),
-  removeCustomInc: (id) => set(s => ({ customInc: s.customInc.filter(i => i.id !== id) })),
+  addCustomInc: (inc) => set(s => ({ customInc: [...s.customInc, inc], isDirty: true })),
+  removeCustomInc: (id) => set(s => ({ customInc: s.customInc.filter(i => i.id !== id), isDirty: true })),
 
   lockDesignField: (key, data) => set(s => ({
-    lockedDesignFields: { ...s.lockedDesignFields, [key]: data },
+    lockedDesignFields: { ...s.lockedDesignFields, [key]: data }, isDirty: true,
   })),
   unlockDesignField: (key) => set(s => {
     const next = { ...s.lockedDesignFields };
     delete next[key];
-    return { lockedDesignFields: next };
+    return { lockedDesignFields: next, isDirty: true };
   }),
 
-  signRtm: () => set({ rtmSigned: true }),
+  signRtm: () => set({ rtmSigned: true, isDirty: true }),
 
-  promote: () => set({ promoted: true }),
+  promote: () => set({ promoted: true, isDirty: true }),
 
   setDesignField: (section, field, value) => set(s => ({
     sysDesignData: {
       ...s.sysDesignData,
       [section]: { ...s.sysDesignData[section], [field]: value },
     },
+    isDirty: true,
+    ...(s.designApplied ? { tasksStaleReason: 'System design changed — tasks may not reflect current configuration' } : {}),
   })),
 
-  setAllDesignFields: (data) => set({ sysDesignData: data }),
+  setAllDesignFields: (data) => set(s => ({
+    sysDesignData: data, isDirty: true,
+    ...(s.designApplied ? { tasksStaleReason: 'System design changed — tasks may not reflect current configuration' } : {}),
+  })),
 
-  setAiTasks: (tasks) => set({ sdAiTasks: tasks }),
+  setAiTasks: (tasks) => set({ sdAiTasks: tasks, isDirty: true }),
+  setTasksStaleReason: (reason) => set({ tasksStaleReason: reason }),
+  setUnlockedForRevision: (val) => set({ unlockedForRevision: val }),
+  setRoleAssignment: (role, data) => set(s => ({ roleAssignments: { ...s.roleAssignments, [role]: data }, isDirty: true })),
+  resubmitCAB: () => set({ cabDeclined: false, unlockedForRevision: false, isDirty: true }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -266,18 +344,18 @@ export const useStore = create((set, get) => ({
   })),
 
   addEmergencyChange: (change) => set(s => ({
-    emergencyChanges: [...s.emergencyChanges, change],
+    emergencyChanges: [...s.emergencyChanges, change], isDirty: true,
   })),
 
   setRtmRow: (id, status) => set(s => ({
-    rtmRows: { ...s.rtmRows, [id]: status },
+    rtmRows: { ...s.rtmRows, [id]: status }, isDirty: true,
   })),
 
   setClosureCheck: (id, value) => set(s => ({
-    closureChecks: { ...s.closureChecks, [id]: value },
+    closureChecks: { ...s.closureChecks, [id]: value }, isDirty: true,
   })),
 
-  setClosureNotes: (notes) => set({ closureNotes: notes }),
+  setClosureNotes: (notes) => set({ closureNotes: notes, isDirty: true }),
 
   loadBuild: (b) => set({
     isBuilt: b.isBuilt ?? false,
@@ -302,6 +380,13 @@ export const useStore = create((set, get) => ({
     closureNotes: b.closureNotes ?? '',
     emergencyChanges: b.emergencyChanges ?? [],
     lockedDesignFields: b.lockedDesignFields ?? {},
+    selRegions: b.selRegions ?? ['Production'],
+    changePeriods: b.changePeriods ?? migrateLegacyFreeze(b),
+    ganttOverrides: b.ganttOverrides ?? {},
+    unlockedForRevision: b.unlockedForRevision ?? false,
+    tasksStaleReason: b.tasksStaleReason ?? null,
+    roleAssignments: b.roleAssignments ?? {},
     activeTab: 'exec',
+    isDirty: false,
   }),
 }));

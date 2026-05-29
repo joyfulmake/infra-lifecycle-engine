@@ -1,6 +1,9 @@
 import { useStore } from '../store/useStore.js';
 import { ALL_INC } from '../lib/incidents.js';
 import { ALL_UUM } from '../lib/uumItems.js';
+import { useAuth } from '../lib/AuthContext.jsx';
+import { PLANS } from '../lib/auth.js';
+import { PLAN_BADGE } from './AuthModal.jsx';
 
 function KpiTile({ label, value, sub, color }) {
   const colors = {
@@ -33,8 +36,10 @@ function MilestoneDot({ label, done }) {
   );
 }
 
+
 export default function ExecOverview() {
   const s = useStore();
+  const { authUser, setShowAuthModal } = useAuth();
 
   const activeInc = s.selInc.length;
   const uumCount = s.selUUM.length;
@@ -61,15 +66,44 @@ export default function ExecOverview() {
 
   if (!s.isBuilt) {
     return (
-      <div className="h-full flex items-center justify-center bg-white border-b border-slate-200 px-6">
-        <div className="text-center">
+      <div className="h-full flex items-center justify-between bg-white border-b border-slate-200 px-6">
+        <div className="text-center flex-1">
           <div className="text-2xl font-bold text-slate-800 mb-1">Enterprise Infrastructure Lifecycle Engine</div>
           <div className="text-slate-500 text-sm">Build your platform topology in the left panel to begin</div>
           <div className="flex gap-2 justify-center mt-3 flex-wrap">
-            {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(s => (
-              <span key={s} className="badge badge-slate text-xs">{s}</span>
+            {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(label => (
+              <span key={label} className="badge badge-slate text-xs">{label}</span>
             ))}
           </div>
+        </div>
+        {/* User badge */}
+        <div className="flex-shrink-0 ml-6">
+          {authUser ? (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50 transition-colors"
+            >
+              <div className="w-6 h-6 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                {authUser.displayName?.[0]?.toUpperCase() || authUser.email?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-medium text-slate-700 leading-tight">{authUser.displayName || authUser.email}</div>
+                <span className={`text-xs font-bold rounded px-1 ${PLAN_BADGE[authUser.plan] || PLAN_BADGE.free}`}>
+                  {PLANS[authUser.plan]?.name || authUser.plan}
+                </span>
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="flex items-center gap-1.5 text-xs text-teal-600 border border-teal-200 rounded-lg px-3 py-1.5 hover:bg-teal-50 transition-colors font-semibold"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Sign In / Plans
+            </button>
+          )}
         </div>
       </div>
     );
@@ -78,7 +112,7 @@ export default function ExecOverview() {
   return (
     <div className="h-full bg-white border-b border-slate-200 px-4 py-3 flex gap-4 items-start">
       {/* KPI Tiles */}
-      <div className="grid grid-cols-4 gap-2 flex-1 min-w-0">
+      <div className="grid grid-cols-4 gap-2 flex-1 min-w-0 relative">
         <KpiTile
           label="Active Incidents"
           value={activeInc}
@@ -105,7 +139,7 @@ export default function ExecOverview() {
         />
       </div>
 
-      {/* Risk + Milestones */}
+      {/* Risk + Milestones + User */}
       <div className="flex flex-col gap-2 flex-shrink-0 min-w-48">
         {/* Risk bar */}
         <div>
@@ -133,6 +167,37 @@ export default function ExecOverview() {
             </div>
           ))}
         </div>
+
+        {/* Unsaved indicator */}
+        {s.isDirty && (
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+            <span className="text-xs text-amber-500 font-medium">Unsaved</span>
+          </div>
+        )}
+
+        {/* User chip */}
+        {authUser ? (
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 transition-colors"
+          >
+            <div className="w-4 h-4 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+              {authUser.displayName?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <span className="text-xs text-slate-600 font-medium leading-tight">{authUser.displayName}</span>
+            <span className={`text-xs font-bold rounded px-1 ${PLAN_BADGE[authUser.plan] || PLAN_BADGE.free}`}>
+              {PLANS[authUser.plan]?.name}
+            </span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="text-xs text-teal-600 border border-teal-200 rounded px-2 py-1 hover:bg-teal-50 transition-colors font-semibold"
+          >
+            Sign In / Plans
+          </button>
+        )}
       </div>
     </div>
   );

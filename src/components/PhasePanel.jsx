@@ -7,6 +7,12 @@ import { getDefaultDesignValues } from '../lib/designDefaults.js';
 import { exportExcel } from '../lib/exportExcel.js';
 import { runSmartScan } from '../lib/smartScan.js';
 import { matchSuggestKeys } from '../lib/suggestDb.js';
+import { getEolInfo } from '../lib/eolData.js';
+import { useAuth } from '../lib/AuthContext.jsx';
+import { canUseFeature, buildLimitReached, incrementBuildCount } from '../lib/auth.js';
+import { useBuildsDb } from '../lib/useBuildsDb.js';
+import { FIREBASE_CONFIGURED } from '../lib/firebase.js';
+import OrgPanel from './OrgPanel.jsx';
 
 const LOCK_ICON = (
   <svg className="w-3 h-3 opacity-60" fill="currentColor" viewBox="0 0 20 20">
@@ -14,7 +20,8 @@ const LOCK_ICON = (
   </svg>
 );
 
-const SEV_COLOR = { CRITICAL: 'text-red-400 bg-red-900/30 border-red-700', HIGH: 'text-orange-300 bg-orange-900/30 border-orange-700', MEDIUM: 'text-amber-300 bg-amber-900/30 border-amber-700', LOW: 'text-green-400 bg-green-900/30 border-green-700', INFO: 'text-sky-300 bg-sky-900/30 border-sky-700' };
+const SEV_COLOR = { CRITICAL: 'text-red-800 bg-red-50 border-red-300', HIGH: 'text-orange-800 bg-orange-50 border-orange-300', MEDIUM: 'text-amber-800 bg-amber-50 border-amber-300', LOW: 'text-green-800 bg-green-50 border-green-300', INFO: 'text-sky-800 bg-sky-50 border-sky-300' };
+const SEV_BADGE = { CRITICAL: 'bg-red-600 text-white', HIGH: 'bg-orange-500 text-white', MEDIUM: 'bg-amber-500 text-white', LOW: 'bg-green-600 text-white', INFO: 'bg-sky-500 text-white' };
 
 // Floating suggestion dropdown rendered via Portal — works outside overflow:hidden ancestors
 function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
@@ -47,6 +54,14 @@ function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
     </div>,
     document.body
   );
+}
+
+// Append EOL/EOS suffix to option label
+function eolLabel(val) {
+  const info = getEolInfo(val);
+  if (!info || info.status === 'active' || info.status === 'unknown') return val;
+  const tag = info.status === 'eol' ? ' ⚠ EOL' : ' ⚠ EOS Soon';
+  return val + tag;
 }
 
 // HW → compatible OS matrix
@@ -85,7 +100,7 @@ function FilteredSuggestInput({ options, value, onChange, placeholder, className
       <input
         ref={inputRef}
         type="text"
-        className={className || 'w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none focus:bg-white/15'}
+        className={className || 'w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 placeholder:text-white/45 focus:outline-none focus:bg-white/15'}
         placeholder={placeholder}
         value={value || ''}
         onChange={e => handleChange(e.target.value)}
@@ -93,11 +108,24 @@ function FilteredSuggestInput({ options, value, onChange, placeholder, className
         onBlur={() => { setFocused(false); setTimeout(() => setSuggestions([]), 200); }}
       />
       {focused && suggestions.length > 0 && (
-        <SuggestDropdown
-          suggestions={suggestions}
-          onSelect={s => { onChange(s); setSuggestions([]); }}
-          anchorEl={inputRef.current}
-        />
+        createPortal(
+          <div className="suggest-dropdown" style={{ position: 'fixed', top: (inputRef.current?.getBoundingClientRect().bottom ?? 0) + 4, left: inputRef.current?.getBoundingClientRect().left ?? 0, width: Math.max(inputRef.current?.getBoundingClientRect().width ?? 200, 300), zIndex: 9999 }}>
+            {suggestions.map((s, i) => {
+              const info = getEolInfo(s);
+              return (
+                <div key={i} className="suggest-item flex items-center justify-between gap-2" onMouseDown={e => { e.preventDefault(); onChange(s); setSuggestions([]); }}>
+                  <span>{s}</span>
+                  {info && info.status !== 'active' && info.status !== 'unknown' && (
+                    <span className={`text-xs font-bold flex-shrink-0 ${info.status === 'eol' ? 'text-red-400' : 'text-amber-400'}`}>
+                      {info.status === 'eol' ? 'EOL' : 'EOS Soon'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>,
+          document.body
+        )
       )}
     </div>
   );
@@ -125,7 +153,7 @@ function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', cl
       <input
         ref={inputRef}
         type={type}
-        className={className || 'w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none focus:bg-white/15'}
+        className={className || 'w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 placeholder:text-white/45 focus:outline-none focus:bg-white/15'}
         placeholder={placeholder}
         value={value || ''}
         onChange={e => handleChange(e.target.value)}
@@ -148,25 +176,32 @@ function PhasePill({ label, role, locked, active, isCurrent, onClick }) {
     <button
       onClick={locked ? undefined : onClick}
       className={[
-        'w-full text-left px-3 py-2 rounded-md text-xs font-semibold flex items-center gap-2 mb-1 transition-all duration-150',
-        isCurrent ? 'bg-teal/20 text-teal border border-teal/40 shadow-sm' : active ? 'text-white/60' : 'text-white/60 hover:bg-white/10',
+        'w-full text-left px-3 py-2 rounded-md flex items-center gap-2 mb-0.5 transition-all duration-150',
+        isCurrent
+          ? 'bg-teal/20 border border-teal/40 shadow-sm'
+          : active
+            ? 'hover:bg-white/8'
+            : 'hover:bg-white/8',
         locked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
       ].join(' ')}
     >
       {locked && LOCK_ICON}
       {!locked && active && !isCurrent && (
-        <svg className="w-3 h-3 text-teal flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <svg className="w-3 h-3 text-teal/80 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
         </svg>
       )}
       {isCurrent && (
-        <span className="flex-shrink-0 w-2 h-2 rounded-full bg-teal pulse-ring" />
+        <span className="flex-shrink-0 w-2 h-2 rounded-full bg-teal pulse-ring mt-0.5" />
       )}
-      <div className="min-w-0">
-        <div className="text-xs/3 font-normal opacity-70 mb-0.5">{role}</div>
-        <div className={isCurrent ? 'text-teal' : ''}>{label}</div>
+      {!locked && !active && !isCurrent && (
+        <span className="flex-shrink-0 w-2 h-2 rounded-full border border-white/20 mt-0.5" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="text-white/55 mb-0.5 leading-tight" style={{ fontSize: '10px' }}>{role}</div>
+        <div className={['text-xs font-medium leading-snug', isCurrent ? 'text-teal' : active ? 'text-white/85' : 'text-white/70'].join(' ')}>{label}</div>
       </div>
-      {isCurrent && <span className="ml-auto text-teal text-xs">←</span>}
+      {isCurrent && <span className="ml-auto text-teal/80 text-xs flex-shrink-0">▸</span>}
     </button>
   );
 }
@@ -299,10 +334,10 @@ function ScanModal({ onClose, onComplete }) {
                 {result.findings.map((f, i) => (
                   <div key={i} className={['rounded border px-2 py-1.5 text-xs', SEV_COLOR[f.sev] || SEV_COLOR.INFO].join(' ')}>
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="font-bold uppercase text-xs">{f.sev}</span>
-                      <span className="font-semibold">{f.component}</span>
+                      <span className={['font-bold uppercase text-xs rounded px-1 py-0.5', SEV_BADGE[f.sev] || SEV_BADGE.INFO].join(' ')}>{f.sev}</span>
+                      <span className="font-semibold text-slate-800">{f.component}</span>
                     </div>
-                    <div className="opacity-90 leading-snug">{f.msg}</div>
+                    <div className="text-slate-700 leading-snug">{f.msg}</div>
                   </div>
                 ))}
               </div>
@@ -329,24 +364,23 @@ function ScanModal({ onClose, onComplete }) {
 
 export default function PhasePanel() {
   const s = useStore();
+  const { authUser, setAuthUser, setShowAuthModal } = useAuth();
   const [showScan, setShowScan] = useState(false);
   const [activePhase, setActivePhase] = useState(null);
   const [hwCustom, setHwCustom] = useState('');
   const [osCustom, setOsCustom] = useState('');
   const [dbCustom, setDbCustom] = useState('');
   const [appCustom, setAppCustom] = useState('');
-  const [hwSel, setHwSel] = useState(HW_OPTIONS[0]);
-  const [osSel, setOsSel] = useState(OS_OPTIONS[0]);
-  const [dbSel, setDbSel] = useState(DB_OPTIONS[0]);
-  const [appSel, setAppSel] = useState(APP_OPTIONS[0]);
+  const [hwSel, setHwSel] = useState('');
+  const [osSel, setOsSel] = useState('');
+  const [dbSel, setDbSel] = useState('');
+  const [appSel, setAppSel] = useState('');
   const [reqOpen, setReqOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [customIncOpen, setCustomIncOpen] = useState(false);
   const [buildsOpen, setBuildsOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
-  const [savedBuilds, setSavedBuilds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('opsmanifest_builds') || '[]'); } catch { return []; }
-  });
+  const { builds: savedBuilds, saveBuild, deleteBuild: deleteBuildDb, shareToTeam, org, setOrg, syncing, syncError, cloudEnabled, teamEnabled } = useBuildsDb(authUser);
   const [newCustomInc, setNewCustomInc] = useState({ title: '', desc: '', sev: 'HIGH', owner: '' });
   const [newChange, setNewChange] = useState({ type: 'Emergency', title: '', datetime: '', desc: '', impact: 'High', owner: '' });
   const [aiSuggestBanner, setAiSuggestBanner] = useState(null); // { inc: [], uum: [] }
@@ -388,13 +422,20 @@ export default function PhasePanel() {
   ];
 
   function handleBuild() {
-    const hw = hwCustom || hwSel;
-    const os = osCustom || osSel;
-    const db = dbCustom || dbSel;
-    const app = appCustom || appSel;
+    const hw = hwCustom || (hwSel !== '' && hwSel !== '__custom' ? hwSel : hwCustom);
+    const os = osCustom || (osSel !== '' && osSel !== '__custom' ? osSel : osCustom);
+    const db = dbCustom || (dbSel !== '' && dbSel !== '__custom' ? dbSel : dbCustom);
+    const app = appCustom || (appSel !== '' && appSel !== '__custom' ? appSel : appCustom);
+    if (!hw || !os || !db || !app) return;
+    if (buildLimitReached(authUser)) {
+      setShowAuthModal(true);
+      return;
+    }
     s.build({ hw, os, db, app });
     const defaults = getDefaultDesignValues({ hw, os, db, app });
     s.setAllDesignFields(defaults);
+    const updated = incrementBuildCount(authUser);
+    if (updated) setAuthUser(updated);
     setActivePhase('phase1');
     s.setActiveTab('exec');
   }
@@ -430,50 +471,73 @@ export default function PhasePanel() {
   }
 
   function handleExport() {
+    if (!canUseFeature(authUser, 'excel_export')) {
+      setShowAuthModal(true);
+      return;
+    }
     try {
       exportExcel({
         ctx: s.ctx, selInc: s.selInc, selUUM: s.selUUM, selFix: s.selFix,
         promoted: s.promoted, cabApproved: s.cabApproved, rtmSigned: s.rtmSigned,
         sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,
         requirements: s.requirements, emergencyChanges: s.emergencyChanges,
+        customInc: s.customInc, rtmRows: s.rtmRows,
+        selRegions: s.selRegions,
+        fullExport: canUseFeature(authUser, 'excel_full'),
       });
     } catch (e) {
       alert('Export failed: ' + e.message);
     }
   }
 
-  function handleSaveBuild() {
-    if (!saveName.trim()) return;
-    const build = {
-      id: Date.now(),
-      name: saveName.trim(),
+  function buildSnapshot(id, name) {
+    return {
+      id,
+      name: name || id,
+      email: authUser?.email || 'guest',
       savedAt: new Date().toISOString(),
       isBuilt: s.isBuilt, scanComplete: s.scanComplete, designApplied: s.designApplied,
       phase2Active: s.phase2Active, cabApproved: s.cabApproved, cabDeclined: s.cabDeclined,
       rtmSigned: s.rtmSigned, promoted: s.promoted,
-      ctx: s.ctx, requirements: s.requirements,
+      ctx: s.ctx, requirements: s.requirements, selRegions: s.selRegions,
       selInc: s.selInc, selUUM: s.selUUM, selFix: s.selFix,
       customInc: s.customInc, sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,
       scanResults: s.scanResults, rtmRows: s.rtmRows,
       closureChecks: s.closureChecks, closureNotes: s.closureNotes,
       emergencyChanges: s.emergencyChanges, lockedDesignFields: s.lockedDesignFields,
+      changePeriods: s.changePeriods, ganttOverrides: s.ganttOverrides,
+      unlockedForRevision: s.unlockedForRevision, tasksStaleReason: s.tasksStaleReason,
+      roleAssignments: s.roleAssignments,
     };
-    const updated = [build, ...savedBuilds].slice(0, 20);
-    localStorage.setItem('opsmanifest_builds', JSON.stringify(updated));
-    setSavedBuilds(updated);
+  }
+
+  async function handleSaveBuild() {
+    if (!saveName.trim()) return;
+    const id = String(Date.now());
+    await saveBuild(buildSnapshot(id, saveName.trim()));
+    s.setCurrentBuildId(id);
+    s.markClean();
     setSaveName('');
   }
 
+  async function handleUpdateBuild() {
+    if (!s.currentBuildId) return;
+    const existing = savedBuilds.find(b => b.id === s.currentBuildId);
+    if (!existing) return;
+    await saveBuild(buildSnapshot(s.currentBuildId, existing.name));
+    s.markClean();
+  }
+
   function handleLoadBuild(build) {
-    if (!window.confirm(`Load build "${build.name}"? Current unsaved state will be replaced.`)) return;
+    if (s.isDirty && !window.confirm(`Load build "${build.name}"? Unsaved changes to current build will be lost.`)) return;
+    if (!s.isDirty && !window.confirm(`Load build "${build.name}"?`)) return;
     s.loadBuild(build);
+    s.setCurrentBuildId(build.id);
     setBuildsOpen(false);
   }
 
-  function handleDeleteBuild(id) {
-    const updated = savedBuilds.filter(b => b.id !== id);
-    localStorage.setItem('opsmanifest_builds', JSON.stringify(updated));
-    setSavedBuilds(updated);
+  async function handleDeleteBuild(id) {
+    await deleteBuildDb(id);
   }
 
   // Requirements field config: [label, key, type, options?, suggestId?]
@@ -487,18 +551,23 @@ export default function PhasePanel() {
     ['Compliance', 'compliance', 'text', null, 'compliance'],
     ['DR Tier', 'drTier', 'select', ['Tier 1 (Hot)', 'Tier 2 (Warm)', 'Tier 3 (Cold)']],
     ['Constraints', 'constraints', 'text', null, 'constraints'],
+    ['PM Email', 'pmEmail', 'text', null, null],
+    ['PM Backup Email', 'pmBackupEmail', 'text', null, null],
   ];
 
   return (
-    <div className="w-60 min-w-60 bg-navy text-white flex flex-col overflow-hidden" style={{ height: '100vh' }}>
+    <div className="w-full bg-navy text-white flex flex-col overflow-hidden" style={{ height: '100vh' }}>
       {/* Header */}
-      <div className="px-3 py-3 border-b border-white/10 flex-shrink-0">
-        <div className="text-xs font-bold text-teal uppercase tracking-widest mb-0.5">Infra Lifecycle</div>
-        <div className="text-white/60 text-xs">Engine v2.0</div>
+      <div className="px-4 py-4 border-b border-white/10 flex-shrink-0">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
+          <div className="text-sm font-bold text-white tracking-tight">OpsManifest</div>
+        </div>
+        <div className="text-xs text-white/60 pl-4 leading-snug">Infrastructure Lifecycle Engine</div>
       </div>
 
       {/* Phase nav */}
-      <div className="px-2 py-2 flex-shrink-0 border-b border-white/10">
+      <div className="px-3 py-2 flex-shrink-0 border-b border-white/10">
         {phases.map(p => (
           <PhasePill key={p.id} label={p.label} role={p.role} locked={p.locked} active={p.active}
             isCurrent={p.id === currentPhaseId}
@@ -507,30 +576,30 @@ export default function PhasePanel() {
       </div>
 
       {/* Guidemark — current stage hint */}
-      <div className="px-3 py-2 flex-shrink-0 border-b border-white/10 bg-white/5">
-        <div className="text-xs text-teal font-semibold mb-0.5">Current stage</div>
-        <div className="text-xs text-white/70 leading-snug">{PHASE_HINTS[currentPhaseId]}</div>
+      <div className="px-4 py-3 flex-shrink-0 border-b border-white/10 bg-teal/5">
+        <div className="text-xs text-teal font-bold uppercase tracking-wide mb-1">Current stage</div>
+        <div className="text-xs text-white/80 leading-relaxed">{PHASE_HINTS[currentPhaseId]}</div>
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
 
         {/* Phase 1 */}
         <div>
           <div className="section-hdr">Phase 1 — Platform Topology</div>
 
           {/* Requirements */}
-          <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs text-white/60 hover:text-white/90 mb-1 flex items-center gap-1">
-            <span>{reqOpen ? '▾' : '▸'}</span> Requirements
+          <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white mb-1.5 flex items-center gap-1.5">
+            <span className="text-white/50 text-xs">{reqOpen ? '▾' : '▸'}</span> Requirements
           </button>
           {reqOpen && (
-            <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
+            <div className="bg-white/5 rounded-lg p-3 mb-2 space-y-2 fade-in">
               {reqFields.map(([label, key, type, opts, suggestId]) => (
                 <div key={key}>
-                  <label className="text-xs text-white/50 block mb-0.5">{label}</label>
+                  <label className="text-xs font-medium text-white/70 block mb-1">{label}</label>
                   {type === 'select' ? (
                     <select
-                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
+                      className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 focus:outline-none focus:bg-white/15"
                       value={s.requirements[key] || ''}
                       onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
                     >
@@ -559,16 +628,17 @@ export default function PhasePanel() {
           )}
 
           {/* Stack selects — HW drives OS compatibility filter */}
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             {/* Hardware */}
             <div>
-              <label className="text-xs text-white/50 block mb-0.5">Hardware</label>
+              <label className="text-xs font-medium text-white/70 block mb-1">Hardware</label>
               <select
-                className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={hwSel}
-                onChange={e => { setHwSel(e.target.value); setHwCustom(''); setOsSel(OS_OPTIONS[0]); setOsCustom(''); }}
+                onChange={e => { setHwSel(e.target.value); setHwCustom(''); setOsSel(''); setOsCustom(''); }}
               >
-                {HW_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="">— Select Hardware —</option>
+                {HW_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                 <option value="__custom">+ Custom...</option>
               </select>
               {hwSel === '__custom' && (
@@ -589,16 +659,17 @@ export default function PhasePanel() {
                 const isFiltered = !!HW_OS_COMPAT[effectiveHW];
                 return (
                   <>
-                    <label className="text-xs text-white/50 block mb-0.5">
+                    <label className="text-xs font-medium text-white/70 block mb-1">
                       OS
-                      {isFiltered && <span className="ml-1 text-teal/70 text-xs">(filtered for {effectiveHW.split(' ')[0]} {effectiveHW.split(' ')[1] || ''})</span>}
+                      {isFiltered && <span className="ml-1 text-teal/80 font-normal text-xs">(filtered for {effectiveHW.split(' ')[0]} {effectiveHW.split(' ')[1] || ''})</span>}
                     </label>
                     <select
-                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                      className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                       value={osSel}
                       onChange={e => { setOsSel(e.target.value); setOsCustom(''); }}
                     >
-                      {compatOS.map(o => <option key={o} value={o}>{o}</option>)}
+                      <option value="">— Select OS —</option>
+                      {compatOS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                       {!isFiltered && <option value="__custom">+ Custom...</option>}
                       {isFiltered && <option value="__custom">+ Other (custom)...</option>}
                     </select>
@@ -617,13 +688,14 @@ export default function PhasePanel() {
 
             {/* Database */}
             <div>
-              <label className="text-xs text-white/50 block mb-0.5">Database</label>
+              <label className="text-xs font-medium text-white/70 block mb-1">Database</label>
               <select
-                className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={dbSel}
                 onChange={e => { setDbSel(e.target.value); setDbCustom(''); }}
               >
-                {DB_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="">— Select Database —</option>
+                {DB_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                 <option value="__custom">+ Custom...</option>
               </select>
               {dbSel === '__custom' && (
@@ -638,13 +710,14 @@ export default function PhasePanel() {
 
             {/* Application */}
             <div>
-              <label className="text-xs text-white/50 block mb-0.5">Application</label>
+              <label className="text-xs font-medium text-white/70 block mb-1">Application</label>
               <select
-                className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 mb-1 focus:outline-none"
+                className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={appSel}
                 onChange={e => { setAppSel(e.target.value); setAppCustom(''); }}
               >
-                {APP_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="">— Select Application —</option>
+                {APP_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                 <option value="__custom">+ Custom...</option>
               </select>
               {appSel === '__custom' && (
@@ -657,6 +730,50 @@ export default function PhasePanel() {
               )}
             </div>
           </div>
+          {/* Regions in scope */}
+          <div className="mt-2">
+            <label className="text-xs font-medium text-white/70 block mb-1.5">Regions in Scope</label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: 'Production', label: 'Production', color: 'border-red-500/50 text-red-300' },
+                { id: 'Model', label: 'Model', color: 'border-amber-500/50 text-amber-300' },
+                { id: 'QA/Dev', label: 'QA / Dev', color: 'border-blue-500/50 text-blue-300' },
+                { id: 'Integration', label: 'Integration', color: 'border-green-500/50 text-green-300' },
+              ].map(({ id, label, color }) => {
+                const active = s.selRegions.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      const next = active
+                        ? s.selRegions.filter(r => r !== id)
+                        : [...s.selRegions, id];
+                      s.setSelRegions(next.length ? next : [id]);
+                    }}
+                    className={['text-xs rounded border px-2 py-0.5 transition-colors', active ? `${color} bg-white/10 font-semibold` : 'border-white/10 text-white/30'].join(' ')}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {s.selRegions.length > 0 && (
+              <div className="text-xs text-white/30 mt-0.5">{s.selRegions.join(' · ')}</div>
+            )}
+          </div>
+
+          {/* Project start date */}
+          <div className="mt-2">
+            <label className="text-xs font-medium text-white/70 block mb-1">Project Start Date</label>
+            <input
+              type="date"
+              className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 focus:outline-none focus:bg-white/15"
+              value={s.requirements.projectStartDate || ''}
+              onChange={e => s.setRequirements({ ...s.requirements, projectStartDate: e.target.value })}
+            />
+          </div>
+
           <button className="btn-teal mt-2" onClick={handleBuild}>Build Environment</button>
         </div>
 
@@ -666,7 +783,7 @@ export default function PhasePanel() {
             <div className="section-hdr">AI Smart Scan</div>
             {!s.scanComplete ? (
               <div>
-                <div className="text-xs text-white/50 mb-1.5 leading-snug">
+                <div className="text-xs text-white/70 mb-2 leading-relaxed">
                   Standalone scan — no API key required. Checks EOL status, known CVEs, and security posture for your stack.
                 </div>
                 <button className="btn-primary" onClick={() => setShowScan(true)}>Run AI Smart Scan</button>
@@ -712,13 +829,13 @@ export default function PhasePanel() {
               </div>
             )}
 
-            <div className="text-xs text-white/60 mb-1 font-semibold">Select Incidents</div>
-            <div className="text-xs text-white/40 mb-1">{s.selInc.length} selected</div>
+            <div className="text-xs font-semibold text-white/85 mb-1">Select Incidents</div>
+            <div className="text-xs text-white/55 mb-1.5">{s.selInc.length} selected</div>
             <ItemList items={ALL_INC} selected={s.selInc} onToggle={s.toggleInc} colorClass="bg-red-900/30 border-l-2 border-red-500" />
 
             {s.selInc.length > 0 && (
               <>
-                <div className="text-xs text-white/60 mb-1 font-semibold mt-2">Fix Runbooks</div>
+                <div className="text-xs font-semibold text-white/85 mt-3 mb-1.5">Fix Runbooks</div>
                 {s.selInc.map(code => {
                   const inc = ALL_INC.find(i => i.code === code);
                   if (!inc) return null;
@@ -737,9 +854,9 @@ export default function PhasePanel() {
             {/* Custom incident form */}
             <button
               onClick={() => setCustomIncOpen(o => !o)}
-              className="w-full text-left text-xs text-white/50 hover:text-white/80 flex items-center gap-1 mt-1 mb-1"
+              className="w-full text-left text-xs font-medium text-white/70 hover:text-white flex items-center gap-1.5 mt-2 mb-1.5"
             >
-              <span>{customIncOpen ? '▾' : '▸'}</span> Add Custom Incident / Ticket
+              <span className="text-white/45">{customIncOpen ? '▾' : '▸'}</span> Add Custom Incident / Ticket
             </button>
             {customIncOpen && (
               <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
@@ -804,8 +921,8 @@ export default function PhasePanel() {
               </div>
             )}
 
-            <div className="text-xs text-white/60 mb-1 font-semibold mt-3">Schedule UUM Items</div>
-            <div className="text-xs text-white/40 mb-1">{s.selUUM.length} selected</div>
+            <div className="text-xs font-semibold text-white/85 mt-4 mb-1">Schedule UUM Items</div>
+            <div className="text-xs text-white/55 mb-1.5">{s.selUUM.length} selected</div>
             <ItemList items={ALL_UUM} selected={s.selUUM} onToggle={s.toggleUUM} colorClass="bg-amber-900/30 border-l-2 border-amber-500" />
 
             {/* Injection summary + confirm */}
@@ -860,6 +977,34 @@ export default function PhasePanel() {
                 <div className="mt-2 text-xs text-red-300 font-medium">Rollback steps visible in Gantt tab.</div>
               </div>
             )}
+            {s.cabDeclined && !s.unlockedForRevision && (
+              <div className="mt-2 space-y-1.5">
+                <div className="text-xs text-amber-300/80 mb-1 leading-snug">After rollback is complete, unlock tabs to revise scope, design, or requirements before resubmitting.</div>
+                <button
+                  className="btn-amber"
+                  onClick={() => s.setUnlockedForRevision(true)}
+                >Unlock Tabs for Revision</button>
+                {canUseFeature(authUser, 'save_builds') && (
+                  <button
+                    className="btn-primary mt-1"
+                    onClick={() => { s.resubmitCAB(); }}
+                  >Quick Change — PM Override (skip CAB re-review)</button>
+                )}
+              </div>
+            )}
+            {s.cabDeclined && s.unlockedForRevision && (
+              <div className="mt-2 space-y-1.5 fade-in">
+                <div className="flex items-center gap-1.5 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 animate-pulse" />
+                  <span className="text-xs text-amber-300 font-semibold">Revision Mode — all tabs unlocked</span>
+                </div>
+                <div className="text-xs text-amber-200/70 leading-snug">Update any tab — requirements, system design, incidents, tasks — then resubmit to CAB.</div>
+                <button
+                  className="btn-teal"
+                  onClick={() => s.resubmitCAB()}
+                >Resubmit to CAB</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -887,8 +1032,8 @@ export default function PhasePanel() {
         {/* Emergency Changes */}
         {s.isBuilt && (
           <div>
-            <button onClick={() => setEmergencyOpen(!emergencyOpen)} className="w-full text-left text-xs text-white/60 hover:text-white/90 flex items-center gap-1 mb-1">
-              <span>{emergencyOpen ? '▾' : '▸'}</span> Emergency / Manual Changes
+            <button onClick={() => setEmergencyOpen(!emergencyOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white flex items-center gap-1.5 mb-1.5">
+              <span className="text-white/45">{emergencyOpen ? '▾' : '▸'}</span> Emergency / Manual Changes
             </button>
             {emergencyOpen && (
               <div className="bg-white/5 rounded-lg p-2 space-y-1.5 fade-in">
@@ -952,19 +1097,61 @@ export default function PhasePanel() {
           </div>
         )}
 
+        {/* Team org panel — Team+ users */}
+        {teamEnabled && authUser && (
+          <OrgPanel
+            authUser={authUser}
+            org={org}
+            setOrg={setOrg}
+            builds={savedBuilds}
+            shareToTeam={shareToTeam}
+            currentBuildId={s.currentBuildId}
+          />
+        )}
+
         {/* Save / Load Builds */}
         <div className="pb-2">
-          <button onClick={() => setBuildsOpen(o => !o)} className="w-full text-left text-xs text-white/60 hover:text-white/90 flex items-center gap-1 mb-1">
-            <span>{buildsOpen ? '▾' : '▸'}</span> Saved Builds ({savedBuilds.length})
+          <button onClick={() => setBuildsOpen(o => !o)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white flex items-center gap-1.5 mb-1.5">
+            <span className="text-white/45">{buildsOpen ? '▾' : '▸'}</span> Saved Builds ({savedBuilds.length})
           </button>
           {buildsOpen && (
             <div className="bg-white/5 rounded-lg p-2 space-y-2 fade-in">
-              <div className="text-xs text-white/40 leading-snug">Builds are saved locally in your browser. Export to Excel to share with your team.</div>
+              <div className="text-xs text-white/65 leading-relaxed">
+                {cloudEnabled
+                  ? 'Builds sync to cloud and IndexedDB.'
+                  : 'Builds saved in browser IndexedDB.'}
+                {' '}Export to Excel to share with your team.
+              </div>
+              {syncing && <div className="text-xs text-teal/80 animate-pulse">Syncing with cloud...</div>}
+              {syncError && <div className="text-xs text-red-400">Sync error: {syncError}</div>}
+              {cloudEnabled && !syncing && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                  <span className="text-xs text-green-400">Cloud sync active</span>
+                </div>
+              )}
+              {!cloudEnabled && FIREBASE_CONFIGURED && authUser && (
+                <div className="text-xs text-amber-400">Cloud sync requires Professional+ plan.</div>
+              )}
+
+              {/* Unsaved changes banner */}
+              {s.isDirty && s.currentBuildId && s.isBuilt && (
+                <div className="flex items-center justify-between rounded bg-amber-500/10 border border-amber-500/25 px-2 py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                    <span className="text-xs text-amber-300">Unsaved changes</span>
+                  </div>
+                  <button className="text-xs text-amber-300 hover:text-white font-semibold" onClick={handleUpdateBuild}>
+                    Update Build
+                  </button>
+                </div>
+              )}
+
               {s.isBuilt && (
                 <div className="flex gap-1">
                   <input
                     className="flex-1 text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none"
-                    placeholder="Build name to save..."
+                    placeholder="Save as new build..."
                     value={saveName}
                     onChange={e => setSaveName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSaveBuild()}
@@ -1003,6 +1190,14 @@ export default function PhasePanel() {
             <button className="btn-green" onClick={handleExport}>Export to Excel (12 Sheets)</button>
           </div>
         )}
+      </div>
+
+      {/* Disclaimer */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.10)', padding: '12px 16px 14px', marginTop: 'auto' }}>
+        <p style={{ fontSize: '10.5px', lineHeight: '1.6', color: 'rgba(255,255,255,0.50)', margin: 0 }}>
+          OpsManifest guides infra teams through structured provisioning workflows — not a replacement for ITSM, CMDB, or platforms such as ServiceNow, Jira, or Confluence.
+        </p>
+        <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none', marginTop: '5px', display: 'inline-block' }}>About this tool ↗</a>
       </div>
 
       {showScan && <ScanModal onClose={() => setShowScan(false)} onComplete={handleScanComplete} />}

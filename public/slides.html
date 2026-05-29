@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpsManifest — Overview</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #0F1F35;
+    --navy2: #1A2E4A;
+    --navy3: #243D5F;
+    --accent: #3B82F6;
+    --accent2: #60A5FA;
+    --teal: #14B8A6;
+    --amber: #F59E0B;
+    --green: #22C55E;
+    --red: #EF4444;
+    --text: #F1F5F9;
+    --muted: #94A3B8;
+    --border: rgba(255,255,255,0.08);
+  }
+
+  html, body { height: 100%; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--navy); color: var(--text); overflow: hidden; }
+
+  /* ── Deck ─────────────────────────────────────────────── */
+  .deck { position: relative; width: 100vw; height: 100vh; }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: 48px 72px;
+    opacity: 0; pointer-events: none;
+    transform: translateX(40px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+  .slide.active { opacity: 1; pointer-events: all; transform: translateX(0); }
+  .slide.exit   { opacity: 0; transform: translateX(-40px); }
+
+  /* ── Nav ──────────────────────────────────────────────── */
+  .nav {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 16px; z-index: 10;
+  }
+  .nav button {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text); padding: 8px 22px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 500; letter-spacing: 0.02em;
+    transition: background 0.2s;
+  }
+  .nav button:hover { background: rgba(255,255,255,0.16); }
+  .nav button:disabled { opacity: 0.25; cursor: default; }
+  .dots { display: flex; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; transition: background 0.2s; }
+  .dot.on { background: var(--accent2); }
+
+  /* ── Slide counter ────────────────────────────────────── */
+  .counter {
+    position: fixed; top: 20px; right: 28px; font-size: 12px; color: var(--muted);
+    letter-spacing: 0.06em; z-index: 10;
+  }
+
+  /* ── Logo strip ───────────────────────────────────────── */
+  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--teal));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 800; color: #fff;
+  }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: var(--accent2); }
+
+  /* ── Typography ───────────────────────────────────────── */
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); margin-bottom: 14px; }
+  h1 { font-size: clamp(32px, 4.5vw, 52px); font-weight: 800; line-height: 1.12; letter-spacing: -0.02em; color: #fff; text-align: center; }
+  h1 span { color: var(--accent2); }
+  h2 { font-size: clamp(22px, 3vw, 34px); font-weight: 700; line-height: 1.2; color: #fff; text-align: center; margin-bottom: 8px; }
+  .sub { font-size: clamp(14px, 1.6vw, 17px); color: var(--muted); text-align: center; max-width: 640px; line-height: 1.65; margin-top: 18px; }
+  .tagline { font-size: clamp(14px, 1.5vw, 18px); color: var(--muted); text-align: center; max-width: 560px; line-height: 1.6; margin-top: 12px; font-style: italic; }
+
+  /* ── Cards ────────────────────────────────────────────── */
+  .cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 32px; width: 100%; max-width: 900px; }
+  .card {
+    flex: 1 1 220px; max-width: 280px;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px 20px;
+  }
+  .card-icon { font-size: 26px; margin-bottom: 12px; }
+  .card h3 { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .card p  { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+  /* ── Feature list ─────────────────────────────────────── */
+  .feat-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 32px; margin-top: 28px; max-width: 760px; }
+  .feat { display: flex; align-items: flex-start; gap: 10px; }
+  .feat-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); margin-top: 7px; }
+  .feat span { font-size: 14px; color: #CBD5E1; line-height: 1.5; }
+
+  /* ── Timeline pill row ────────────────────────────────── */
+  .phase-row { display: flex; align-items: center; gap: 0; margin-top: 28px; flex-wrap: nowrap; overflow-x: auto; max-width: 820px; }
+  .phase-pill {
+    flex: 1; min-width: 80px; text-align: center; padding: 10px 12px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .phase-pill:first-child { border-left: 1px solid var(--border); border-radius: 8px 0 0 8px; }
+  .phase-pill:last-child  { border-radius: 0 8px 8px 0; }
+  .phase-pill.hi { background: rgba(59,130,246,0.15); color: var(--accent2); border-color: rgba(59,130,246,0.3); }
+
+  /* ── Audience cards ───────────────────────────────────── */
+  .aud-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-top: 28px; max-width: 840px; }
+  .aud {
+    flex: 1 1 180px; max-width: 210px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 16px; text-align: center;
+  }
+  .aud-icon { font-size: 28px; margin-bottom: 10px; }
+  .aud h4 { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 5px; }
+  .aud p  { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* ── CTA ──────────────────────────────────────────────── */
+  .cta-box {
+    margin-top: 32px; padding: 28px 36px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(20,184,166,0.12));
+    border: 1px solid rgba(59,130,246,0.3); text-align: center; max-width: 540px;
+  }
+  .cta-box h3 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .cta-box p  { font-size: 14px; color: var(--muted); margin-bottom: 18px; line-height: 1.55; }
+  .cta-url {
+    display: inline-block; background: var(--accent); color: #fff; font-weight: 700;
+    font-size: 14px; padding: 10px 24px; border-radius: 7px; text-decoration: none;
+    letter-spacing: 0.02em; transition: background 0.2s;
+  }
+  .cta-url:hover { background: #2563EB; }
+
+  /* ── Disclaimer ───────────────────────────────────────── */
+  .disclaim {
+    margin-top: 20px; max-width: 580px; text-align: center;
+    border: 1px solid rgba(255,255,255,0.10); border-radius: 8px;
+    padding: 10px 18px; background: rgba(255,255,255,0.04);
+    font-size: 12px; color: rgba(255,255,255,0.45); line-height: 1.65;
+  }
+  .disclaim strong { color: rgba(255,255,255,0.65); font-weight: 600; }
+
+  /* ── Accent bar ───────────────────────────────────────── */
+  .accent-bar { width: 48px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--teal)); margin: 0 auto 20px; }
+
+  /* ── Keyboard hint ────────────────────────────────────── */
+  .kbd-hint { position: fixed; top: 20px; left: 28px; font-size: 11px; color: rgba(255,255,255,0.22); }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- ── Slide 1: Title ──────────────────────────────────── -->
+  <div class="slide active" id="s0">
+    <div class="logo">
+      <div class="logo-mark">O</div>
+      <div class="logo-text">OpsManifest</div>
+    </div>
+    <div class="eyebrow">Infrastructure Lifecycle Engine</div>
+    <h1>Turn provisioning chaos into<br /><span>structured, auditable workflow</span></h1>
+    <p class="tagline">
+      A practitioner-grade guide for infra teams — from hardware selection through CAB approval,
+      go-live, and closure — in one focused, offline-capable tool.
+    </p>
+    <div style="margin-top:36px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:var(--accent2);">Free to use</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">No server required</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">Works offline</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:var(--green);">Cloud sync for teams</span>
+    </div>
+    <p class="disclaim" style="margin-top:24px;">
+      OpsManifest <strong>guides</strong> infra teams through structured provisioning workflows.<br />
+      It is <strong>not a replacement</strong> for ITSM, CMDB, or platforms like ServiceNow, Jira, or Confluence —<br />
+      think of it as the structured pre-work that makes those systems more accurate.
+    </p>
+  </div>
+
+  <!-- ── Slide 2: The Problem ────────────────────────────── -->
+  <div class="slide" id="s1">
+    <div class="accent-bar"></div>
+    <div class="eyebrow">Why OpsManifest</div>
+    <h2>Infra provisioning is tribal knowledge.<br />That's expensive.</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">📋</div>
+        <h3>No standard checklist</h3>
+        <p>Every engineer runs a different mental checklist. Steps get missed under pressure — especially EOL checks, SLA gates, and CAB pre-reqs.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔍</div>
+        <h3>Scattered documentation</h3>
+        <p>System design, RAID log, RTM, Gantt, and closure notes live in five different tools — never in sync at audit time.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">⏱️</div>
+        <h3>Re-work from gaps</h3>
+        <p>CAB rejects cost 2–4 weeks. Missed dependencies surface at go-live. OpsManifest surfaces them in planning, not production.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Slide 3: What it does ───────────────────────────── -->
+  <div class="slide" id="s2">
+    <div class="accent-bar"></div>
+    <div class="eyebrow">Capabilities</div>
+    <h2>Everything from build spec to closure — one guided flow</h2>
+    <div class="phase-row">
+      <div class="phase-pill hi">Build &amp; Scan</div>
+      <div class="phase-pill hi">System Design</div>
+      <div class="phase-pill hi">RAID Log</div>
+      <div class="phase-pill hi">RTM</div>
+      <div class="phase-pill hi">Gantt</div>
+      <div class="phase-pill hi">CAB</div>
+      <div class="phase-pill hi">Go-Live</div>
+      <div class="phase-pill hi">Closure</div>
+    </div>
+    <div class="feat-list">
+      <div class="feat"><div class="feat-dot"></div><span>Smart Scan — CVE/EOL auto-detection per HW/OS/App stack</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>AI-assisted system design with tech-review locking</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Gantt with buffered hours, change freeze, parallel tasks</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Multi-region scope (Prod / Model / QA-Dev / Integration)</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>RTM with pass/fail sign-off, RAID log, closure checklist</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>12-sheet styled Excel export for internal reviews</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>CMDB-ready CI register — not a CMDB, feeds into one</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Offline-first with optional cloud sync for Pro+ teams</span></div>
+    </div>
+  </div>
+
+  <!-- ── Slide 4: Who it's for ───────────────────────────── -->
+  <div class="slide" id="s3">
+    <div class="accent-bar"></div>
+    <div class="eyebrow">Audience</div>
+    <h2>Built for practitioners, usable by teams</h2>
+    <div class="aud-grid">
+      <div class="aud">
+        <div class="aud-icon">🛠️</div>
+        <h4>Infra / Systems Engineers</h4>
+        <p>Run the full provisioning checklist without missing a gate.</p>
+      </div>
+      <div class="aud">
+        <div class="aud-icon">📊</div>
+        <h4>Infrastructure PMs</h4>
+        <p>Track scope, timelines, CAB status, and closure in one place.</p>
+      </div>
+      <div class="aud">
+        <div class="aud-icon">🔒</div>
+        <h4>Change Advisory Boards</h4>
+        <p>Receive consistent, structured change packages every time.</p>
+      </div>
+      <div class="aud">
+        <div class="aud-icon">🏢</div>
+        <h4>Small &amp; Mid-size Teams</h4>
+        <p>Enterprise-grade discipline without the enterprise tooling cost.</p>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:22px;font-size:13px;">
+      Complements — not replaces — ServiceNow, Jira, Confluence, or any CMDB.<br />
+      Think of it as the structured pre-work that makes those systems more accurate.
+    </p>
+  </div>
+
+  <!-- ── Slide 5: CTA ────────────────────────────────────── -->
+  <div class="slide" id="s4">
+    <div class="accent-bar"></div>
+    <div class="eyebrow">Get started</div>
+    <h2>See it in action — no sign-up needed</h2>
+    <div class="cta-box">
+      <h3>Live at opsmanifest.netlify.app</h3>
+      <p>Open the app, pick a hardware/OS/DB/App stack, run a Smart Scan, and walk the full provisioning flow — free, in your browser, right now.</p>
+      <a class="cta-url" href="https://opsmanifest.netlify.app" target="_blank" rel="noopener">Open OpsManifest ↗</a>
+    </div>
+    <div style="display:flex;gap:24px;margin-top:22px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:13px;color:var(--muted);">Free — browser only, no account needed</span>
+      <span style="font-size:13px;color:var(--muted);">Pro — cloud sync &amp; full Excel export</span>
+      <span style="font-size:13px;color:var(--muted);">Team — shared workspace &amp; org builds</span>
+      <span style="font-size:13px;color:var(--green);font-weight:600;">7-day free trial on paid plans</span>
+    </div>
+    <p class="disclaim">
+      OpsManifest <strong>guides</strong> infra teams through structured provisioning workflows.<br />
+      It is <strong>not a replacement</strong> for ITSM, CMDB, or platforms like ServiceNow, Jira, or Confluence —<br />
+      think of it as the structured pre-work that makes those systems more accurate.
+    </p>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- ── Controls ──────────────────────────────────────────── -->
+<div class="counter"><span id="cur">1</span> / 5</div>
+<div class="kbd-hint">← → or click to navigate</div>
+<div class="nav">
+  <button id="prev" onclick="go(-1)" disabled>← Prev</button>
+  <div class="dots" id="dots"></div>
+  <button id="next" onclick="go(1)">Next →</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let cur = 0;
+
+  const dots = document.getElementById('dots');
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' on' : '');
+    d.onclick = () => jump(i);
+    dots.appendChild(d);
+  });
+
+  function update() {
+    slides.forEach((s, i) => { s.className = 'slide' + (i === cur ? ' active' : ''); });
+    document.querySelectorAll('.dot').forEach((d, i) => d.className = 'dot' + (i === cur ? ' on' : ''));
+    document.getElementById('cur').textContent = cur + 1;
+    document.getElementById('prev').disabled = cur === 0;
+    document.getElementById('next').disabled = cur === slides.length - 1;
+  }
+
+  function go(d) { jump(cur + d); }
+  function jump(i) { if (i >= 0 && i < slides.length) { cur = i; update(); } }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(-1);
+  });
+</script>
+</body>
+</html>
