@@ -91,7 +91,7 @@ src/
     designDefaults.js     — default values per HW/OS/DB/APP combo
     incidentFixTasks.js   — fix task definitions per incident
     smartScan.js          — standalone CVE/EOL scan + auto-suggest incidents/UUM codes
-    suggestDb.js          — suggestion engine (matchSuggestKeys — min 3 chars)
+    suggestDb.js          — suggestion engine: `matchSuggestKeys(val, fieldId, minChars=3)` (static DB) + `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` (context-aware, used by SuggestInput in PhasePanel)
     exportExcel.js        — 12-sheet styled Excel export using xlsx-js-style
     db.js                 — Dexie IndexedDB wrapper (localGetBuilds, localSaveBuild, localDeleteBuild)
     firebase.js           — lazy Firebase singleton (fbSignIn, fbSignOut, cloudSaveBuild, cloudLoadBuilds)
@@ -188,6 +188,8 @@ netlify deploy --prod --dir=dist --no-build
 
 The `--no-build` flag bypasses Netlify's remote build step (which fails in WSL due to extension fetch issues) and deploys the locally-built `dist/` directly.
 
+**If Netlify CLI returns 403 "Account credit usage exceeded"**: skip the CLI deploy and just `git push origin main` — GitHub → Netlify auto-deploy is always active and doesn't consume CLI credits.
+
 GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 
 ## Common pitfalls
@@ -196,11 +198,11 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **Tailwind v3 vs v4**: This project uses Tailwind **v3** (`tailwindcss@^3.4`). Do not upgrade to v4 without updating the PostCSS config and removing the `@tailwind` directives.
 - **React 19**: Some third-party component libraries haven't updated peer deps for React 19 yet. Check compatibility before adding dependencies.
 - **xlsx-js-style**: Excel export uses `xlsx-js-style` npm package (API-compatible with SheetJS, adds cell `s` style property). Do NOT upgrade to `xlsx` v0.19+ — it removes community cell styles.
-- **Auto-suggestions**: Fixed with React Portal (`createPortal`) in both `SystemDesignTab.jsx` and `PhasePanel.jsx`. Dropdowns render at `document.body` level with `position: fixed`. `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3.
+- **Auto-suggestions**: Fixed with React Portal (`createPortal`) in both `SystemDesignTab.jsx` and `PhasePanel.jsx`. Dropdowns render at `document.body` level with `position: fixed`. `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3. `SuggestInput` in PhasePanel calls `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` which reads the store and prepends stack-specific hints (scan findings, Oracle/AIX/RHEL/WebSphere error patterns, EOL flags, role owner suggestions) before the static DB results. `SystemDesignTab` still uses plain `matchSuggestKeys` (design fields are already field-specific enough).
 - **RTM sign-off**: Requires every row explicitly set via `s.setRtmRow(id, status)`. "All PASS" and "All N/A" buttons bulk-set.
-- **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel and rollback tasks in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`. After decline, PM can click "Unlock Tabs for Revision" → `unlockedForRevision = true` → all tabs unlocked in PmTabs regardless of phase gates. "Resubmit to CAB" calls `resubmitCAB()` which clears `cabDeclined` and `unlockedForRevision`.
+- **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel and rollback tasks in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`. After decline, PM can click "Unlock Tabs for Revision" → `unlockedForRevision = true` → all tabs unlocked in PmTabs regardless of phase gates. "Resubmit to CAB" calls `resubmitCAB()` which clears `cabDeclined` and `unlockedForRevision`. "Quick Change — PM Override" (Pro+) calls `setCabApproved(true)` — bypasses re-review and immediately allows cutover. Do NOT call `resubmitCAB()` here; that resets to pending and blocks the PM.
 - **Tasks stale detection**: `tasksStaleReason` is set (as a string) by `toggleInc`/`toggleUUM` (when `phase2Active`), `setDesignField`/`setAllDesignFields` (when `designApplied`), `setChangePeriods` (when `designApplied`), and `setRequirements` (when `projectStartDate` or `hoursPerDay` changes and `designApplied`). GanttTab shows an amber banner with a Regenerate button that calls `setAiTasks([])` + `setTasksStaleReason(null)` — returning to rule-based auto-computed tasks.
-- **Roles tab edit gating**: editing requires `canUseFeature(authUser, 'save_builds')` (Pro+) AND `!pmEmail || authUser?.email === pmEmail || authUser?.email === pmBackupEmail`. If no `pmEmail` is set, any Pro+ user can edit.
+- **Roles tab edit gating**: editing requires `canUseFeature(authUser, 'save_builds')` (Pro+) AND `!pmEmail || authUser?.email === pmEmail || authUser?.email === pmBackupEmail`. If no `pmEmail` is set, any Pro+ user can edit. `RoleRow` uses `useEffect` to sync local `form` state when `assignment` prop changes externally (e.g. build load) — only syncs while not actively editing to avoid clobbering in-progress edits.
 - **Tech-review locked fields**: `s.lockDesignField('section.field', data)` / `s.unlockDesignField(key)`. PM sees locked fields read-only with amber label. Only visible in Tech Review Mode.
 - **Custom incidents**: `s.addCustomInc(inc)` / `s.removeCustomInc(id)`. Appear alongside ALL_INC in Phase 2 and RTM.
 - **Phase guidemark**: `PHASE_HINTS` map in PhasePanel.jsx includes `cabdeclined` state. `currentPhaseId` checks `s.cabDeclined` before `s.cabApproved`.
@@ -209,6 +211,8 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **migrateLegacyFreeze(b)**: Called inside `loadBuild` to convert old single `changeFreezeStart`/`changeFreezeEnd`/`holidays` fields to the new `changePeriods` array format.
 - **isDirty not reset on tab switch**: `setActiveTab` and `toggleDesignSection` deliberately do NOT set `isDirty` — they are UI-only, not data changes.
 - **Infra Diagram**: `InfraDiagramTab.jsx` shows layered topology (HW → OS → App/DB → Storage/Backup → Network/Security). Incidents color boxes red; UUM items show amber tags. `grpToLayer` maps incident groups to stack layers.
+- **Copy Build**: `handleCopyBuild(build)` in PhasePanel spreads the full build snapshot with a new `id = String(Date.now())` and `name = "${original.name} (copy)"`, then calls `saveBuild()` immediately — no confirmation needed. The copy is completely independent from the original.
+- **Netlify CLI credits**: `netlify deploy --prod --dir=dist --no-build` may fail with 403 if account credits are exhausted. Fallback: `git push origin main` triggers auto-deploy via the GitHub → Netlify integration. Both paths are valid; push-to-deploy is always available.
 
 ## Stripe / billing setup
 
