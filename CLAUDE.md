@@ -70,7 +70,7 @@ src/
   store/
     useStore.js           — single Zustand store; all app state lives here
   components/
-    PhasePanel.jsx        — left sidebar (276px): phase workflow, save/load builds, export
+    PhasePanel.jsx        — left sidebar (320px, w-full): phase workflow, save/load builds, export
     ExecOverview.jsx      — top strip (96px): KPI tiles, milestones, unsaved indicator
     PmTabs.jsx            — tab bar + renders active tab component
     AuthModal.jsx         — sign-in / plan selection modal
@@ -79,9 +79,10 @@ src/
       SystemDesignTab.jsx — 8-section system design form (AI suggestions, presentation mode, tech review lock)
       InfraDiagramTab.jsx — connected infrastructure topology diagram (SVG-style layered boxes)
       RtmTab.jsx          — Requirements Traceability Matrix with pass/fail + All PASS/NA buttons
-      GanttTab.jsx        — Gantt chart: task dates, buffered hours, change periods, inline editing
+      GanttTab.jsx        — Gantt chart: task dates, buffered hours, change periods, inline editing; stale banner + Regenerate button
       RaidTab.jsx         — RAID log (Risks, Assumptions, Issues, Decisions)
       ClosureTab.jsx      — post-go-live closure checklist & notes
+      RolesTab.jsx        — 20-role RACI table; editable by PM/backup (Pro+); view-only for all plans
   lib/
     incidents.js          — incident catalog
     uumItems.js           — UUM (Unix/User/Middleware) catalog
@@ -119,8 +120,13 @@ All state is in `src/store/useStore.js`. Key slices:
 - `ganttOverrides` — `{ [taskKey]: { durationHours, dep, parallel } }` — Pro+ inline task edits
 - `isDirty` — true whenever state has changed since last save or load; drives "Unsaved" indicator
 - `currentBuildId` — ID of the currently loaded/saved build; enables "Update Build" in-place save
+- `unlockedForRevision` — set true after CAB decline when PM clicks "Unlock Tabs for Revision"; bypasses all tab locks in PmTabs; cleared by `resubmitCAB()`
+- `tasksStaleReason` — string message set when design/incidents/periods/schedule change after tasks generated; shown as amber banner in GanttTab with Regenerate button; cleared by `setTasksStaleReason(null)` + `setAiTasks([])`
+- `roleAssignments` — `{ [roleName]: { name, email, backup, raci } }` — RACI assignments for 20 standard roles
+- `requirements.pmEmail` / `requirements.pmBackupEmail` — restrict Roles tab editing to these accounts (Pro+)
 
 Key actions: `markDirty()`, `markClean()`, `setCurrentBuildId(id)` — called by PhasePanel on save/load. Every significant state action automatically sets `isDirty: true`.
+New actions: `setUnlockedForRevision(val)`, `setTasksStaleReason(reason)`, `setRoleAssignment(role, data)`, `resubmitCAB()` — resets cabDeclined + unlockedForRevision.
 
 Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS`, `DB_OPTIONS`, `APP_OPTIONS`.
 
@@ -192,7 +198,9 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **xlsx-js-style**: Excel export uses `xlsx-js-style` npm package (API-compatible with SheetJS, adds cell `s` style property). Do NOT upgrade to `xlsx` v0.19+ — it removes community cell styles.
 - **Auto-suggestions**: Fixed with React Portal (`createPortal`) in both `SystemDesignTab.jsx` and `PhasePanel.jsx`. Dropdowns render at `document.body` level with `position: fixed`. `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3.
 - **RTM sign-off**: Requires every row explicitly set via `s.setRtmRow(id, status)`. "All PASS" and "All N/A" buttons bulk-set.
-- **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel and rollback tasks in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`.
+- **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel and rollback tasks in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`. After decline, PM can click "Unlock Tabs for Revision" → `unlockedForRevision = true` → all tabs unlocked in PmTabs regardless of phase gates. "Resubmit to CAB" calls `resubmitCAB()` which clears `cabDeclined` and `unlockedForRevision`.
+- **Tasks stale detection**: `tasksStaleReason` is set (as a string) by `toggleInc`/`toggleUUM` (when `phase2Active`), `setDesignField`/`setAllDesignFields` (when `designApplied`), `setChangePeriods` (when `designApplied`), and `setRequirements` (when `projectStartDate` or `hoursPerDay` changes and `designApplied`). GanttTab shows an amber banner with a Regenerate button that calls `setAiTasks([])` + `setTasksStaleReason(null)` — returning to rule-based auto-computed tasks.
+- **Roles tab edit gating**: editing requires `canUseFeature(authUser, 'save_builds')` (Pro+) AND `!pmEmail || authUser?.email === pmEmail || authUser?.email === pmBackupEmail`. If no `pmEmail` is set, any Pro+ user can edit.
 - **Tech-review locked fields**: `s.lockDesignField('section.field', data)` / `s.unlockDesignField(key)`. PM sees locked fields read-only with amber label. Only visible in Tech Review Mode.
 - **Custom incidents**: `s.addCustomInc(inc)` / `s.removeCustomInc(id)`. Appear alongside ALL_INC in Phase 2 and RTM.
 - **Phase guidemark**: `PHASE_HINTS` map in PhasePanel.jsx includes `cabdeclined` state. `currentPhaseId` checks `s.cabDeclined` before `s.cabApproved`.
