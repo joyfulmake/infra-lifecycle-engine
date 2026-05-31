@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publisher_id:
-        description: 'Publisher ID from Partner Center (e.g. CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX). Leave blank to use placeholder — update before submitting to store.'
+        description: 'Publisher ID from Partner Center (e.g. CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX). Leave blank to use placeholder - update before submitting to store.'
         required: false
         default: 'CN=00000000-0000-0000-0000-000000000000'
       publisher_display_name:
@@ -99,7 +99,7 @@ jobs:
             <Properties>
               <DisplayName>OpsManifest</DisplayName>
               <PublisherDisplayName>$env:PUBLISHER_DISPLAY_NAME</PublisherDisplayName>
-              <Description>Guided provisioning workflow for infra teams — from hardware selection through CAB approval, RTM sign-off and closure.</Description>
+              <Description>Guided provisioning workflow for infra teams - from hardware selection through CAB approval, RTM sign-off and closure.</Description>
               <Logo>images\StoreLogo.png</Logo>
             </Properties>
 
@@ -186,7 +186,7 @@ jobs:
             & $makepri.FullName createconfig /cf msix\priconfig.xml /dq en-US /pv 10.0.0 /o
             & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
           } else {
-            Write-Host "makepri not found — skipping resources.pri (store will generate it)"
+            Write-Host "makepri not found - skipping resources.pri (store will generate it)"
           }
 
       - name: Package MSIX with MakeAppx
