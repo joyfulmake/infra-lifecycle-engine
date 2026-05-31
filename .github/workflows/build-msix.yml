@@ -82,80 +82,130 @@ jobs:
           PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name }}
           APP_VERSION:            ${{ github.event.inputs.app_version }}
         run: |
-          $manifest = @"
-          <?xml version="1.0" encoding="utf-8"?>
-          <Package
-            xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-            xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-            xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
-            IgnorableNamespaces="uap3">
+          # Use XmlWriter so no encoding surprises — no BOM, no invisible chars
+          $publisherId          = $env:PUBLISHER_ID.Trim()
+          $publisherDisplayName = $env:PUBLISHER_DISPLAY_NAME.Trim()
+          $appVersion           = $env:APP_VERSION.Trim()
 
-            <Identity
-              Name="com.opsmanifest.app"
-              Publisher="$env:PUBLISHER_ID"
-              Version="$env:APP_VERSION"
-              ProcessorArchitecture="neutral" />
+          $outPath = (Resolve-Path "msix").Path + "\AppxManifest.xml"
+          $settings = New-Object System.Xml.XmlWriterSettings
+          $settings.Indent = $true
+          $settings.IndentChars = "  "
+          $settings.Encoding = New-Object System.Text.UTF8Encoding($false) # no BOM
+          $settings.OmitXmlDeclaration = $false
 
-            <Properties>
-              <DisplayName>OpsManifest</DisplayName>
-              <PublisherDisplayName>$env:PUBLISHER_DISPLAY_NAME</PublisherDisplayName>
-              <Description>Guided provisioning workflow for infra teams - from hardware selection through CAB approval, RTM sign-off and closure.</Description>
-              <Logo>images\StoreLogo.png</Logo>
-            </Properties>
+          $w = [System.Xml.XmlWriter]::Create($outPath, $settings)
 
-            <Dependencies>
-              <TargetDeviceFamily
-                Name="Windows.Universal"
-                MinVersion="10.0.17763.0"
-                MaxVersionTested="10.0.19041.0" />
-            </Dependencies>
+          $ns    = "http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+          $nsUap  = "http://schemas.microsoft.com/appx/manifest/uap/windows10"
+          $nsUap3 = "http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
 
-            <Resources>
-              <Resource Language="en-us" />
-            </Resources>
+          $w.WriteStartDocument()
+          $w.WriteStartElement("Package", $ns)
+          $w.WriteAttributeString("xmlns", "uap",  $null, $nsUap)
+          $w.WriteAttributeString("xmlns", "uap3", $null, $nsUap3)
+          $w.WriteAttributeString("IgnorableNamespaces", "uap3")
 
-            <Applications>
-              <Application
-                Id="App"
-                StartPage="https://opsmanifest.netlify.app">
-                <uap:VisualElements
-                  DisplayName="OpsManifest"
-                  Description="Guided provisioning workflow for infra teams"
-                  BackgroundColor="#0F1F35"
-                  Square150x150Logo="images\Square150x150Logo.png"
-                  Square44x44Logo="images\Square44x44Logo.png">
-                  <uap:DefaultTile
-                    Wide310x150Logo="images\Wide310x150Logo.png"
-                    Square310x310Logo="images\Square310x310Logo.png"
-                    Square71x71Logo="images\Square71x71Logo.png"
-                    ShortName="OpsManifest">
-                    <uap:ShowNameOnTiles>
-                      <uap:ShowOn Tile="square150x150Logo" />
-                      <uap:ShowOn Tile="wide310x150Logo" />
-                    </uap:ShowNameOnTiles>
-                  </uap:DefaultTile>
-                  <uap:SplashScreen
-                    Image="images\SplashScreen.png"
-                    BackgroundColor="#0F1F35" />
-                </uap:VisualElements>
-                <Extensions>
-                  <uap3:Extension Category="windows.appUriHandler">
-                    <uap3:AppUriHandler>
-                      <uap3:Host Name="opsmanifest.netlify.app" />
-                    </uap3:AppUriHandler>
-                  </uap3:Extension>
-                </Extensions>
-              </Application>
-            </Applications>
+            # Identity
+            $w.WriteStartElement("Identity", $ns)
+            $w.WriteAttributeString("Name",                 "com.opsmanifest.app")
+            $w.WriteAttributeString("Publisher",            $publisherId)
+            $w.WriteAttributeString("Version",              $appVersion)
+            $w.WriteAttributeString("ProcessorArchitecture","neutral")
+            $w.WriteEndElement()
 
-            <Capabilities>
-              <Capability Name="internetClient" />
-            </Capabilities>
+            # Properties
+            $w.WriteStartElement("Properties", $ns)
+              $w.WriteElementString("DisplayName",          $ns, "OpsManifest")
+              $w.WriteElementString("PublisherDisplayName", $ns, $publisherDisplayName)
+              $w.WriteElementString("Description",          $ns, "Guided provisioning workflow for infra teams")
+              $w.WriteElementString("Logo",                 $ns, "images\StoreLogo.png")
+            $w.WriteEndElement()
 
-          </Package>
-          "@
-          $manifest.Trim() | Out-File -FilePath "msix\AppxManifest.xml" -Encoding utf8
-          Write-Host "AppxManifest.xml written"
+            # Dependencies
+            $w.WriteStartElement("Dependencies", $ns)
+              $w.WriteStartElement("TargetDeviceFamily", $ns)
+              $w.WriteAttributeString("Name",               "Windows.Universal")
+              $w.WriteAttributeString("MinVersion",         "10.0.17763.0")
+              $w.WriteAttributeString("MaxVersionTested",   "10.0.19041.0")
+              $w.WriteEndElement()
+            $w.WriteEndElement()
+
+            # Resources
+            $w.WriteStartElement("Resources", $ns)
+              $w.WriteStartElement("Resource", $ns)
+              $w.WriteAttributeString("Language", "en-us")
+              $w.WriteEndElement()
+            $w.WriteEndElement()
+
+            # Applications
+            $w.WriteStartElement("Applications", $ns)
+              $w.WriteStartElement("Application", $ns)
+              $w.WriteAttributeString("Id",        "App")
+              $w.WriteAttributeString("StartPage", "https://opsmanifest.netlify.app")
+
+                $w.WriteStartElement("VisualElements", $nsUap)
+                $w.WriteAttributeString("DisplayName",         "OpsManifest")
+                $w.WriteAttributeString("Description",         "Guided provisioning workflow for infra teams")
+                $w.WriteAttributeString("BackgroundColor",     "#0F1F35")
+                $w.WriteAttributeString("Square150x150Logo",   "images\Square150x150Logo.png")
+                $w.WriteAttributeString("Square44x44Logo",     "images\Square44x44Logo.png")
+
+                  $w.WriteStartElement("DefaultTile", $nsUap)
+                  $w.WriteAttributeString("Wide310x150Logo",   "images\Wide310x150Logo.png")
+                  $w.WriteAttributeString("Square310x310Logo", "images\Square310x310Logo.png")
+                  $w.WriteAttributeString("Square71x71Logo",   "images\Square71x71Logo.png")
+                  $w.WriteAttributeString("ShortName",         "OpsManifest")
+                    $w.WriteStartElement("ShowNameOnTiles", $nsUap)
+                      $w.WriteStartElement("ShowOn", $nsUap)
+                      $w.WriteAttributeString("Tile", "square150x150Logo")
+                      $w.WriteEndElement()
+                      $w.WriteStartElement("ShowOn", $nsUap)
+                      $w.WriteAttributeString("Tile", "wide310x150Logo")
+                      $w.WriteEndElement()
+                    $w.WriteEndElement()
+                  $w.WriteEndElement() # DefaultTile
+
+                  $w.WriteStartElement("SplashScreen", $nsUap)
+                  $w.WriteAttributeString("Image",           "images\SplashScreen.png")
+                  $w.WriteAttributeString("BackgroundColor", "#0F1F35")
+                  $w.WriteEndElement()
+
+                $w.WriteEndElement() # VisualElements
+
+                $w.WriteStartElement("Extensions", $ns)
+                  $w.WriteStartElement("Extension", $nsUap3)
+                  $w.WriteAttributeString("Category", "windows.appUriHandler")
+                    $w.WriteStartElement("AppUriHandler", $nsUap3)
+                      $w.WriteStartElement("Host", $nsUap3)
+                      $w.WriteAttributeString("Name", "opsmanifest.netlify.app")
+                      $w.WriteEndElement()
+                    $w.WriteEndElement()
+                  $w.WriteEndElement()
+                $w.WriteEndElement() # Extensions
+
+              $w.WriteEndElement() # Application
+            $w.WriteEndElement() # Applications
+
+            # Capabilities
+            $w.WriteStartElement("Capabilities", $ns)
+              $w.WriteStartElement("Capability", $ns)
+              $w.WriteAttributeString("Name", "internetClient")
+              $w.WriteEndElement()
+            $w.WriteEndElement()
+
+          $w.WriteEndElement() # Package
+          $w.WriteEndDocument()
+          $w.Flush()
+          $w.Close()
+
+          # Show the exact bytes of PublisherDisplayName for verification
+          $xml = [xml](Get-Content $outPath -Raw)
+          $stored = $xml.Package.Properties.PublisherDisplayName
+          $bytes  = [System.Text.Encoding]::UTF8.GetBytes($stored) | ForEach-Object { $_.ToString("X2") }
+          Write-Host "PublisherDisplayName value : '$stored'"
+          Write-Host "PublisherDisplayName bytes : $($bytes -join ' ')"
+          Write-Host "AppxManifest.xml written to $outPath"
 
       - name: Generate resources.pri
         shell: powershell
