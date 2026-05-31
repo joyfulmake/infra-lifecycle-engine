@@ -4,14 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'Package/Identity/Name from Partner Center App identity page (e.g. 12345Flourishing.OpsManifest)'
-        required: true
+        description: 'Package/Identity/Name from Partner Center App identity page'
+        required: false
+        default: 'Flourishing.opsmanifest'
       publisher_id:
-        description: 'Package/Identity/Publisher from Partner Center App identity page (CN=XXXXXXXX-...)'
-        required: true
+        description: 'Package/Identity/Publisher from Partner Center App identity page'
+        required: false
+        default: 'CN=CF05ACFD-1A2C-4D3B-85CE-80828C73812E'
       publisher_display_name:
-        description: 'Publisher display name from Partner Center App identity page - copy-paste exactly'
-        required: true
+        description: 'Publisher display name from Partner Center App identity page'
+        required: false
+        default: 'Flourishing'
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
