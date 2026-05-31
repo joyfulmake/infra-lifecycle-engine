@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       publisher_id:
-        description: 'Publisher ID from Partner Center (e.g. CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX). Leave blank to use placeholder - update before submitting to store.'
+        description: 'Publisher ID from Partner Center (CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)'
         required: false
         default: 'CN=00000000-0000-0000-0000-000000000000'
       publisher_display_name:
-        description: 'Publisher display name (your name or company)'
+        description: 'Publisher display name - must match Partner Center exactly'
         required: false
-        default: 'Sriram C'
+        default: 'Flourishing.'
       app_version:
-        description: 'App version (must be x.x.x.x format)'
+        description: 'App version (x.x.x.x format)'
         required: false
         default: '1.0.0.0'
 
@@ -25,6 +25,7 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path msix\images -Force | Out-Null
+          New-Item -ItemType Directory -Path store-listing-images -Force | Out-Null
 
       - name: Download app icon
         shell: powershell
@@ -32,7 +33,7 @@ jobs:
           Invoke-WebRequest -Uri "https://opsmanifest.netlify.app/icon-512.png" `
             -OutFile "msix\images\source.png"
 
-      - name: Generate all required icon sizes
+      - name: Generate MSIX icon sizes + store listing images
         shell: powershell
         run: |
           Add-Type -AssemblyName System.Drawing
@@ -41,38 +42,37 @@ jobs:
             (Resolve-Path "msix\images\source.png").Path
           )
 
-          # name, width, height
-          $icons = @(
-            @("Square44x44Logo.png",   44,  44),
-            @("Square71x71Logo.png",   71,  71),
-            @("Square150x150Logo.png", 150, 150),
-            @("Square310x310Logo.png", 310, 310),
-            @("Wide310x150Logo.png",   310, 150),
-            @("StoreLogo.png",         50,  50),
-            @("SplashScreen.png",      620, 300)
-          )
-
-          foreach ($ic in $icons) {
-            $name = $ic[0]; $w = $ic[1]; $h = $ic[2]
+          function Resize-Image($src, $w, $h, $outPath) {
             $bmp = New-Object System.Drawing.Bitmap($w, $h)
             $g   = [System.Drawing.Graphics]::FromImage($bmp)
             $g.Clear([System.Drawing.Color]::FromArgb(255, 15, 31, 53))
             $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
             $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-
-            # Centre the source image, preserving aspect ratio
             $ratio = [Math]::Min($w / $src.Width, $h / $src.Height)
-            $dw    = [int]($src.Width  * $ratio)
-            $dh    = [int]($src.Height * $ratio)
-            $dx    = [int](($w - $dw) / 2)
-            $dy    = [int](($h - $dh) / 2)
+            $dw = [int]($src.Width  * $ratio)
+            $dh = [int]($src.Height * $ratio)
+            $dx = [int](($w - $dw) / 2)
+            $dy = [int](($h - $dh) / 2)
             $g.DrawImage($src, $dx, $dy, $dw, $dh)
             $g.Dispose()
-
-            $bmp.Save("msix\images\$name", [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Png)
             $bmp.Dispose()
-            Write-Host "  created msix\images\$name ($w x $h)"
+            Write-Host "  $outPath ($w x $h)"
           }
+
+          # MSIX tile icons (required by AppxManifest)
+          Resize-Image $src  44  44 "msix\images\Square44x44Logo.png"
+          Resize-Image $src  71  71 "msix\images\Square71x71Logo.png"
+          Resize-Image $src 150 150 "msix\images\Square150x150Logo.png"
+          Resize-Image $src 310 310 "msix\images\Square310x310Logo.png"
+          Resize-Image $src 310 150 "msix\images\Wide310x150Logo.png"
+          Resize-Image $src  50  50 "msix\images\StoreLogo.png"
+          Resize-Image $src 620 300 "msix\images\SplashScreen.png"
+
+          # Store listing images (uploaded separately in Partner Center listing page)
+          Resize-Image $src 300 300 "store-listing-images\StoreLogo-300x300.png"
+          Resize-Image $src 512 512 "store-listing-images\AppIcon-512x512.png"
+
           $src.Dispose()
 
       - name: Write AppxManifest.xml
@@ -157,10 +157,9 @@ jobs:
           $manifest.Trim() | Out-File -FilePath "msix\AppxManifest.xml" -Encoding utf8
           Write-Host "AppxManifest.xml written"
 
-      - name: Validate manifest with MakePri
+      - name: Generate resources.pri
         shell: powershell
         run: |
-          # Create a minimal resources.pri so makeappx doesn't complain
           $priConfig = @"
           <?xml version="1.0" encoding="utf-8"?>
           <resources targetOsVersion="10.0.0" majorVersion="1">
@@ -176,17 +175,16 @@ jobs:
           "@
           $priConfig | Out-File -FilePath "msix\priconfig.xml" -Encoding utf8
 
-          # makepri may or may not be on PATH; locate it
           $makepri = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
             -Recurse -Filter makepri.exe -ErrorAction SilentlyContinue |
             Sort-Object FullName -Descending | Select-Object -First 1
 
           if ($makepri) {
-            Write-Host "makepri found at $($makepri.FullName)"
+            Write-Host "makepri: $($makepri.FullName)"
             & $makepri.FullName createconfig /cf msix\priconfig.xml /dq en-US /pv 10.0.0 /o
             & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
           } else {
-            Write-Host "makepri not found - skipping resources.pri (store will generate it)"
+            Write-Host "makepri not found - store will handle resources"
           }
 
       - name: Package MSIX with MakeAppx
@@ -204,17 +202,24 @@ jobs:
           }
 
           if (-not $makeappx) {
-            Write-Error "makeappx.exe not found. Check Windows SDK installation."
+            Write-Error "makeappx.exe not found"
             exit 1
           }
 
-          Write-Host "makeappx found at $($makeappx.FullName)"
+          Write-Host "makeappx: $($makeappx.FullName)"
           & $makeappx.FullName pack /d msix /p opsmanifest.msix /o
-          Write-Host "MSIX created: opsmanifest.msix"
+          Write-Host "MSIX created"
 
-      - name: Upload MSIX artifact
+      - name: Upload MSIX
         uses: actions/upload-artifact@v4
         with:
           name: opsmanifest-msix
           path: opsmanifest.msix
+          retention-days: 30
+
+      - name: Upload store listing images
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-listing-images
+          path: store-listing-images\
           retention-days: 30
