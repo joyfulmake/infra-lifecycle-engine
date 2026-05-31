@@ -221,9 +221,9 @@
     <div class="feat-list">
       <div class="feat"><div class="feat-dot"></div><span>Smart Scan — CVE/EOL auto-detection per HW/OS/App stack</span></div>
       <div class="feat"><div class="feat-dot"></div><span>AI-assisted system design with tech-review locking</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>Gantt with stale-task detection and one-click Regenerate</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>CAB decline → Revision Mode → unlock all tabs → resubmit</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>Roles &amp; RACI tab — 20 roles with name, email, backup, RACI</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Gantt with stale-task detection, amber badges, one-click Regenerate</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>CAB decline → Revision Mode → unlock all tabs → resubmit or Quick Change</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Roles &amp; RACI tab — 20 roles, PM-gated editing, RTM stale advisory</span></div>
       <div class="feat"><div class="feat-dot"></div><span>Multi-region scope (Prod / Model / QA-Dev / Integration)</span></div>
       <div class="feat"><div class="feat-dot"></div><span>RTM with pass/fail sign-off, RAID log, closure checklist</span></div>
       <div class="feat"><div class="feat-dot"></div><span>12-sheet styled Excel export · Offline-first · Cloud sync Pro+</span></div>
@@ -263,8 +263,32 @@
     </p>
   </div>
 
-  <!-- ── Slide 5: CTA ────────────────────────────────────── -->
+  <!-- ── Slide 5: Agent Intelligence ───────────────────────── -->
   <div class="slide" id="s4">
+    <div class="accent-bar"></div>
+    <div class="eyebrow">Browser-Native Intelligence</div>
+    <h2>Tabs that watch each other — no server needed</h2>
+    <p class="sub" style="margin-top:12px;font-size:14px;">
+      A lightweight Coherence Engine runs continuously in-browser, cross-checking all tab data
+      and surfacing inconsistencies as contextual agent advisories — locally, with zero latency.
+    </p>
+    <div class="feat-list" style="margin-top:24px;max-width:820px;">
+      <div class="feat"><div class="feat-dot"></div><span>Compliance gap: requirement set in scope but missing from Security design section</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>DR coherence: Tier 1 DR selected without RPO/RTO targets in Backup section</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Incident→Design: security incidents selected but Security section sparsely filled</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>RTM pre-closure: FAIL/BLOCKED rows flagged before closure sign-off attempt</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>SLA→Monitoring: 99.99% target without monitoring agent configured</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Roles coverage: critical technical roles unassigned when Phase 2 goes live</span></div>
+    </div>
+    <div style="margin-top:24px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:var(--accent2);">Blue dot = insight available</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">Amber dot = stale / needs review</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">Runs fully offline — no API calls</span>
+    </div>
+  </div>
+
+  <!-- ── Slide 6: CTA ────────────────────────────────────── -->
+  <div class="slide" id="s5">
     <div class="accent-bar"></div>
     <div class="eyebrow">Get started</div>
     <h2>See it in action — no sign-up needed</h2>
@@ -282,14 +306,15 @@
     <p class="disclaim">
       OpsManifest <strong>guides</strong> infra teams through structured provisioning workflows.<br />
       It is <strong>not a replacement</strong> for ITSM, CMDB, or platforms like ServiceNow, Jira, or Confluence —<br />
-      think of it as the structured pre-work that makes those systems more accurate.
+      think of it as the structured pre-work that makes those systems more accurate.<br />
+      <a href="/privacy.html" style="color:rgba(255,255,255,0.45);text-decoration:underline;" target="_blank" rel="noopener">Privacy Policy</a>
     </p>
   </div>
 
 </div><!-- /deck -->
 
 <!-- ── Controls ──────────────────────────────────────────── -->
-<div class="counter"><span id="cur">1</span> / 5</div>
+<div class="counter"><span id="cur">1</span> / <span id="total">6</span></div>
 <div class="kbd-hint">← → or click to navigate</div>
 <div class="nav">
   <button id="prev" onclick="go(-1)" disabled>← Prev</button>
@@ -313,6 +338,7 @@
     slides.forEach((s, i) => { s.className = 'slide' + (i === cur ? ' active' : ''); });
     document.querySelectorAll('.dot').forEach((d, i) => d.className = 'dot' + (i === cur ? ' on' : ''));
     document.getElementById('cur').textContent = cur + 1;
+    document.getElementById('total').textContent = slides.length;
     document.getElementById('prev').disabled = cur === 0;
     document.getElementById('next').disabled = cur === slides.length - 1;
   }

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { canUseFeature } from '../../lib/auth.js';
+import { getUserRolesForBuild } from '../../lib/roleAccess.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 const ROLES = [
   { role: 'PM',             fn: 'Project Management',    defaultRaci: 'A',   desc: 'Overall delivery accountability and stakeholder management' },
@@ -184,9 +186,17 @@ export default function RolesTab() {
   });
 
   const totalAssigned = ROLES.filter(r => s.roleAssignments[r.role]?.name || s.roleAssignments[r.role]?.email).length;
+  const myRoles = getUserRolesForBuild(authUser, s.roleAssignments);
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+      <AgentInsights tab="roles" />
+      {myRoles.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 mb-3 text-xs text-teal-700">
+          <span className="font-semibold flex-shrink-0">Your role{myRoles.length > 1 ? 's' : ''} in this build:</span>
+          <span>{myRoles.join(' · ')}</span>
+        </div>
+      )}
       <div className="flex items-start justify-between mb-1">
         <div>
           <div className="text-sm font-bold text-slate-700">Project RACI — Roles &amp; Assignments</div>

@@ -100,7 +100,7 @@ function FilteredSuggestInput({ options, value, onChange, placeholder, className
       <input
         ref={inputRef}
         type="text"
-        className={className || 'w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 placeholder:text-white/45 focus:outline-none focus:bg-white/15'}
+        className={className || 'w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 placeholder:text-white/62 focus:outline-none focus:bg-white/15'}
         placeholder={placeholder}
         value={value || ''}
         onChange={e => handleChange(e.target.value)}
@@ -158,7 +158,7 @@ function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', cl
       <input
         ref={inputRef}
         type={type}
-        className={className || 'w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 placeholder:text-white/45 focus:outline-none focus:bg-white/15'}
+        className={className || 'w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 placeholder:text-white/62 focus:outline-none focus:bg-white/15'}
         placeholder={placeholder}
         value={value || ''}
         onChange={e => handleChange(e.target.value)}
@@ -203,8 +203,8 @@ function PhasePill({ label, role, locked, active, isCurrent, onClick }) {
         <span className="flex-shrink-0 w-2 h-2 rounded-full border border-white/20 mt-0.5" />
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-white/55 mb-0.5 leading-tight" style={{ fontSize: '10px' }}>{role}</div>
-        <div className={['text-xs font-medium leading-snug', isCurrent ? 'text-teal' : active ? 'text-white/85' : 'text-white/70'].join(' ')}>{label}</div>
+        <div className="text-white/75 mb-0.5 leading-tight" style={{ fontSize: '10px' }}>{role}</div>
+        <div className={['text-xs font-medium leading-snug', isCurrent ? 'text-teal' : active ? 'text-white/85' : 'text-white/82'].join(' ')}>{label}</div>
       </div>
       {isCurrent && <span className="ml-auto text-teal/80 text-xs flex-shrink-0">▸</span>}
     </button>
@@ -512,7 +512,7 @@ export default function PhasePanel() {
       emergencyChanges: s.emergencyChanges, lockedDesignFields: s.lockedDesignFields,
       changePeriods: s.changePeriods, ganttOverrides: s.ganttOverrides,
       unlockedForRevision: s.unlockedForRevision, tasksStaleReason: s.tasksStaleReason,
-      roleAssignments: s.roleAssignments,
+      rtmStale: s.rtmStale, roleAssignments: s.roleAssignments,
     };
   }
 
@@ -574,7 +574,7 @@ export default function PhasePanel() {
           <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
           <div className="text-sm font-bold text-white tracking-tight">OpsManifest</div>
         </div>
-        <div className="text-xs text-white/60 pl-4 leading-snug">Infrastructure Lifecycle Engine</div>
+        <div className="text-xs text-white/78 pl-4 leading-snug">Infrastructure Lifecycle Engine</div>
       </div>
 
       {/* Phase nav */}
@@ -601,13 +601,13 @@ export default function PhasePanel() {
 
           {/* Requirements */}
           <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white mb-1.5 flex items-center gap-1.5">
-            <span className="text-white/50 text-xs">{reqOpen ? '▾' : '▸'}</span> Requirements
+            <span className="text-white/82 text-xs">{reqOpen ? '▾' : '▸'}</span> Requirements
           </button>
           {reqOpen && (
             <div className="bg-white/5 rounded-lg p-3 mb-2 space-y-2 fade-in">
               {reqFields.map(([label, key, type, opts, suggestId]) => (
                 <div key={key}>
-                  <label className="text-xs font-medium text-white/70 block mb-1">{label}</label>
+                  <label className="text-xs font-medium text-white/82 block mb-1">{label}</label>
                   {type === 'select' ? (
                     <select
                       className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 focus:outline-none focus:bg-white/15"
@@ -627,7 +627,7 @@ export default function PhasePanel() {
                   ) : (
                     <input
                       type={type}
-                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none"
+                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/52 focus:outline-none"
                       placeholder={label}
                       value={s.requirements[key] || ''}
                       onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
@@ -642,7 +642,7 @@ export default function PhasePanel() {
           <div className="space-y-2.5">
             {/* Hardware */}
             <div>
-              <label className="text-xs font-medium text-white/70 block mb-1">Hardware</label>
+              <label className="text-xs font-medium text-white/82 block mb-1">Hardware</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={hwSel}
@@ -670,7 +670,7 @@ export default function PhasePanel() {
                 const isFiltered = !!HW_OS_COMPAT[effectiveHW];
                 return (
                   <>
-                    <label className="text-xs font-medium text-white/70 block mb-1">
+                    <label className="text-xs font-medium text-white/82 block mb-1">
                       OS
                       {isFiltered && <span className="ml-1 text-teal/80 font-normal text-xs">(filtered for {effectiveHW.split(' ')[0]} {effectiveHW.split(' ')[1] || ''})</span>}
                     </label>
@@ -699,7 +699,7 @@ export default function PhasePanel() {
 
             {/* Database */}
             <div>
-              <label className="text-xs font-medium text-white/70 block mb-1">Database</label>
+              <label className="text-xs font-medium text-white/82 block mb-1">Database</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={dbSel}
@@ -721,7 +721,7 @@ export default function PhasePanel() {
 
             {/* Application */}
             <div>
-              <label className="text-xs font-medium text-white/70 block mb-1">Application</label>
+              <label className="text-xs font-medium text-white/82 block mb-1">Application</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={appSel}
@@ -743,7 +743,7 @@ export default function PhasePanel() {
           </div>
           {/* Regions in scope */}
           <div className="mt-2">
-            <label className="text-xs font-medium text-white/70 block mb-1.5">Regions in Scope</label>
+            <label className="text-xs font-medium text-white/82 block mb-1.5">Regions in Scope</label>
             <div className="flex flex-wrap gap-1.5">
               {[
                 { id: 'Production', label: 'Production', color: 'border-red-500/50 text-red-300' },
@@ -762,7 +762,7 @@ export default function PhasePanel() {
                         : [...s.selRegions, id];
                       s.setSelRegions(next.length ? next : [id]);
                     }}
-                    className={['text-xs rounded border px-2 py-0.5 transition-colors', active ? `${color} bg-white/10 font-semibold` : 'border-white/10 text-white/30'].join(' ')}
+                    className={['text-xs rounded border px-2 py-0.5 transition-colors', active ? `${color} bg-white/10 font-semibold` : 'border-white/10 text-white/52'].join(' ')}
                   >
                     {label}
                   </button>
@@ -770,13 +770,13 @@ export default function PhasePanel() {
               })}
             </div>
             {s.selRegions.length > 0 && (
-              <div className="text-xs text-white/30 mt-0.5">{s.selRegions.join(' · ')}</div>
+              <div className="text-xs text-white/52 mt-0.5">{s.selRegions.join(' · ')}</div>
             )}
           </div>
 
           {/* Project start date */}
           <div className="mt-2">
-            <label className="text-xs font-medium text-white/70 block mb-1">Project Start Date</label>
+            <label className="text-xs font-medium text-white/82 block mb-1">Project Start Date</label>
             <input
               type="date"
               className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 focus:outline-none focus:bg-white/15"
@@ -794,7 +794,7 @@ export default function PhasePanel() {
             <div className="section-hdr">AI Smart Scan</div>
             {!s.scanComplete ? (
               <div>
-                <div className="text-xs text-white/70 mb-2 leading-relaxed">
+                <div className="text-xs text-white/82 mb-2 leading-relaxed">
                   Standalone scan — no API key required. Checks EOL status, known CVEs, and security posture for your stack.
                 </div>
                 <button className="btn-primary" onClick={() => setShowScan(true)}>Run AI Smart Scan</button>
@@ -841,7 +841,7 @@ export default function PhasePanel() {
             )}
 
             <div className="text-xs font-semibold text-white/85 mb-1">Select Incidents</div>
-            <div className="text-xs text-white/55 mb-1.5">{s.selInc.length} selected</div>
+            <div className="text-xs text-white/75 mb-1.5">{s.selInc.length} selected</div>
             <ItemList items={ALL_INC} selected={s.selInc} onToggle={s.toggleInc} colorClass="bg-red-900/30 border-l-2 border-red-500" />
 
             {s.selInc.length > 0 && (
@@ -853,7 +853,7 @@ export default function PhasePanel() {
                   const sel = s.selFix.includes(code);
                   return (
                     <div key={code} onClick={() => s.toggleFix(code)}
-                      className={['text-xs rounded p-2 mb-1 cursor-pointer border', sel ? 'bg-green-900/30 border-green-700 text-green-300' : 'bg-white/5 border-white/10 text-white/70'].join(' ')}>
+                      className={['text-xs rounded p-2 mb-1 cursor-pointer border', sel ? 'bg-green-900/30 border-green-700 text-green-300' : 'bg-white/5 border-white/10 text-white/82'].join(' ')}>
                       <div className="font-semibold text-xs text-red-300">{inc.short}</div>
                       <div className="leading-snug">{FIXES[code] || 'Generic patch applied.'}</div>
                     </div>
@@ -865,29 +865,29 @@ export default function PhasePanel() {
             {/* Custom incident form */}
             <button
               onClick={() => setCustomIncOpen(o => !o)}
-              className="w-full text-left text-xs font-medium text-white/70 hover:text-white flex items-center gap-1.5 mt-2 mb-1.5"
+              className="w-full text-left text-xs font-medium text-white/82 hover:text-white flex items-center gap-1.5 mt-2 mb-1.5"
             >
-              <span className="text-white/45">{customIncOpen ? '▾' : '▸'}</span> Add Custom Incident / Ticket
+              <span className="text-white/62">{customIncOpen ? '▾' : '▸'}</span> Add Custom Incident / Ticket
             </button>
             {customIncOpen && (
               <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Title / Short Description</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Title / Short Description</label>
                   <SuggestInput fieldId="title" value={newCustomInc.title} onChange={v => setNewCustomInc(p => ({ ...p, title: v }))} placeholder="e.g. SSL cert expiry on app server" />
                 </div>
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Full Description</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Full Description</label>
                   <SuggestInput fieldId="desc" value={newCustomInc.desc} onChange={v => setNewCustomInc(p => ({ ...p, desc: v }))} placeholder="Detail the issue or ticket scope" />
                 </div>
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Severity</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Severity</label>
                   <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
                     value={newCustomInc.sev} onChange={e => setNewCustomInc(p => ({ ...p, sev: e.target.value }))}>
                     {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Assigned Owner</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Assigned Owner</label>
                   <SuggestInput fieldId="owner" value={newCustomInc.owner} onChange={v => setNewCustomInc(p => ({ ...p, owner: v }))} placeholder="Team or person responsible" />
                 </div>
                 <button
@@ -914,18 +914,18 @@ export default function PhasePanel() {
             {/* Custom incidents display */}
             {s.customInc?.length > 0 && (
               <div className="mb-2">
-                <div className="text-xs text-white/50 mb-1">Custom Entries ({s.customInc.length})</div>
+                <div className="text-xs text-white/82 mb-1">Custom Entries ({s.customInc.length})</div>
                 {s.customInc.map(ci => {
                   const sel = s.selInc.includes(ci.code);
                   return (
-                    <div key={ci.id} className={['text-xs rounded p-1.5 mb-1 cursor-pointer border flex items-start gap-2', sel ? 'bg-amber-900/30 border-amber-700 text-amber-200' : 'bg-white/5 border-white/10 text-white/60'].join(' ')}
+                    <div key={ci.id} className={['text-xs rounded p-1.5 mb-1 cursor-pointer border flex items-start gap-2', sel ? 'bg-amber-900/30 border-amber-700 text-amber-200' : 'bg-white/5 border-white/10 text-white/78'].join(' ')}
                       onClick={() => s.toggleInc(ci.code)}>
                       <span className={['flex-shrink-0 w-3 h-3 rounded border flex items-center justify-center text-xs font-bold mt-0.5', sel ? 'bg-amber-500 border-amber-500 text-white' : 'border-white/30'].join(' ')}>{sel ? '✓' : ''}</span>
                       <div>
                         <div className="font-medium">{ci.short}</div>
-                        <div className="text-white/40 text-xs">{ci.sev} — {ci.owner || 'Unassigned'}</div>
+                        <div className="text-white/58 text-xs">{ci.sev} — {ci.owner || 'Unassigned'}</div>
                       </div>
-                      <button className="ml-auto text-white/30 hover:text-red-400 text-xs" onClick={e => { e.stopPropagation(); s.removeCustomInc(ci.id); if (sel) s.toggleInc(ci.code); }}>✕</button>
+                      <button className="ml-auto text-white/52 hover:text-red-400 text-xs" onClick={e => { e.stopPropagation(); s.removeCustomInc(ci.id); if (sel) s.toggleInc(ci.code); }}>✕</button>
                     </div>
                   );
                 })}
@@ -933,12 +933,12 @@ export default function PhasePanel() {
             )}
 
             <div className="text-xs font-semibold text-white/85 mt-4 mb-1">Schedule UUM Items</div>
-            <div className="text-xs text-white/55 mb-1.5">{s.selUUM.length} selected</div>
+            <div className="text-xs text-white/75 mb-1.5">{s.selUUM.length} selected</div>
             <ItemList items={ALL_UUM} selected={s.selUUM} onToggle={s.toggleUUM} colorClass="bg-amber-900/30 border-l-2 border-amber-500" />
 
             {/* Injection summary + confirm */}
             {!s.phase2Active && (s.selInc.length > 0 || s.selUUM.length > 0) && (
-              <div className="bg-white/5 border border-white/10 rounded-lg p-2 mt-2 text-xs text-white/60">
+              <div className="bg-white/5 border border-white/10 rounded-lg p-2 mt-2 text-xs text-white/78">
                 <div className="font-semibold text-white/80 mb-1">Ready to inject to this build:</div>
                 {s.selInc.length > 0 && <div className="text-red-300">{s.selInc.length} incident{s.selInc.length > 1 ? 's' : ''}</div>}
                 {s.selUUM.length > 0 && <div className="text-amber-300">{s.selUUM.length} UUM item{s.selUUM.length > 1 ? 's' : ''}</div>}
@@ -956,7 +956,7 @@ export default function PhasePanel() {
           <div>
             <div className="section-hdr">CAB Gate</div>
             <div className={['rounded-lg border p-2', s.cabApproved ? 'border-green-600 bg-green-900/20' : s.cabDeclined ? 'border-red-500 bg-red-900/30' : 'border-red-600 bg-red-900/20'].join(' ')}>
-              <label className="text-xs text-white/60 block mb-1">CAB Authorization</label>
+              <label className="text-xs text-white/78 block mb-1">CAB Authorization</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
                 value={s.cabApproved ? 'valid' : s.cabDeclined ? 'declined' : 'invalid'}
@@ -1044,13 +1044,13 @@ export default function PhasePanel() {
         {s.isBuilt && (
           <div>
             <button onClick={() => setEmergencyOpen(!emergencyOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white flex items-center gap-1.5 mb-1.5">
-              <span className="text-white/45">{emergencyOpen ? '▾' : '▸'}</span> Emergency / Manual Changes
+              <span className="text-white/62">{emergencyOpen ? '▾' : '▸'}</span> Emergency / Manual Changes
             </button>
             {emergencyOpen && (
               <div className="bg-white/5 rounded-lg p-2 space-y-1.5 fade-in">
                 {/* Type */}
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Type</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Type</label>
                   <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
                     value={newChange.type} onChange={e => setNewChange({ ...newChange, type: e.target.value })}>
                     {['Emergency', 'Weekend', 'Weekday', 'Out-of-Band'].map(o => <option key={o} value={o}>{o}</option>)}
@@ -1058,23 +1058,23 @@ export default function PhasePanel() {
                 </div>
                 {/* Title with suggestions */}
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Title</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Title</label>
                   <SuggestInput fieldId="title" value={newChange.title} onChange={v => setNewChange({ ...newChange, title: v })} placeholder="Change title" />
                 </div>
                 {/* Date/Time */}
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Date / Time</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Date / Time</label>
                   <input type="datetime-local" className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
                     value={newChange.datetime} onChange={e => setNewChange({ ...newChange, datetime: e.target.value })} />
                 </div>
                 {/* Description with suggestions */}
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Description</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Description</label>
                   <SuggestInput fieldId="desc" value={newChange.desc} onChange={v => setNewChange({ ...newChange, desc: v })} placeholder="Describe the change" />
                 </div>
                 {/* Impact */}
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Impact Level</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Impact Level</label>
                   <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
                     value={newChange.impact} onChange={e => setNewChange({ ...newChange, impact: e.target.value })}>
                     {['Critical', 'High', 'Medium', 'Low'].map(o => <option key={o} value={o}>{o}</option>)}
@@ -1082,7 +1082,7 @@ export default function PhasePanel() {
                 </div>
                 {/* Owner with suggestions */}
                 <div>
-                  <label className="text-xs text-white/50 block mb-0.5">Owner</label>
+                  <label className="text-xs text-white/82 block mb-0.5">Owner</label>
                   <SuggestInput fieldId="owner" value={newChange.owner} onChange={v => setNewChange({ ...newChange, owner: v })} placeholder="Change owner" />
                 </div>
 
@@ -1096,7 +1096,7 @@ export default function PhasePanel() {
                 {s.emergencyChanges.length > 0 && (
                   <div className="mt-2">
                     {s.emergencyChanges.map(c => (
-                      <div key={c.id} className="text-xs text-white/60 border border-white/10 rounded p-1.5 mb-1">
+                      <div key={c.id} className="text-xs text-white/78 border border-white/10 rounded p-1.5 mb-1">
                         <span className="badge badge-amber mr-1">{c.type}</span>
                         <span>{c.title}</span>
                       </div>
@@ -1123,11 +1123,11 @@ export default function PhasePanel() {
         {/* Save / Load Builds */}
         <div className="pb-2">
           <button onClick={() => setBuildsOpen(o => !o)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white flex items-center gap-1.5 mb-1.5">
-            <span className="text-white/45">{buildsOpen ? '▾' : '▸'}</span> Saved Builds ({savedBuilds.length})
+            <span className="text-white/62">{buildsOpen ? '▾' : '▸'}</span> Saved Builds ({savedBuilds.length})
           </button>
           {buildsOpen && (
             <div className="bg-white/5 rounded-lg p-2 space-y-2 fade-in">
-              <div className="text-xs text-white/65 leading-relaxed">
+              <div className="text-xs text-white/78 leading-relaxed">
                 {cloudEnabled
                   ? 'Builds sync to cloud and IndexedDB.'
                   : 'Builds saved in browser IndexedDB.'}
@@ -1161,7 +1161,7 @@ export default function PhasePanel() {
               {s.isBuilt && (
                 <div className="flex gap-1">
                   <input
-                    className="flex-1 text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/30 focus:outline-none"
+                    className="flex-1 text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/52 focus:outline-none"
                     placeholder="Save as new build..."
                     value={saveName}
                     onChange={e => setSaveName(e.target.value)}
@@ -1171,13 +1171,13 @@ export default function PhasePanel() {
                 </div>
               )}
               {savedBuilds.length === 0 && (
-                <div className="text-xs text-white/30 text-center py-2">No saved builds yet</div>
+                <div className="text-xs text-white/52 text-center py-2">No saved builds yet</div>
               )}
               {savedBuilds.map(b => (
                 <div key={b.id} className="bg-white/5 border border-white/10 rounded p-2 flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-white/80 truncate">{b.name}</div>
-                    <div className="text-xs text-white/40">{b.ctx?.hw?.split(' ')[0] || '?'} / {b.ctx?.os?.split(' ')[0] || '?'} / {b.ctx?.db?.split(' ')[0] || '?'} — {new Date(b.savedAt).toLocaleDateString()}</div>
+                    <div className="text-xs text-white/58">{b.ctx?.hw?.split(' ')[0] || '?'} / {b.ctx?.os?.split(' ')[0] || '?'} / {b.ctx?.db?.split(' ')[0] || '?'} — {new Date(b.savedAt).toLocaleDateString()}</div>
                     <div className="flex gap-1 mt-1 flex-wrap">
                       {b.isBuilt && <span className="badge badge-teal" style={{ fontSize: 9 }}>Built</span>}
                       {b.designApplied && <span className="badge badge-blue" style={{ fontSize: 9 }}>Design</span>}
@@ -1189,11 +1189,11 @@ export default function PhasePanel() {
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     <button className="text-xs text-teal hover:text-white font-medium" onClick={() => handleLoadBuild(b)}>Load</button>
                     <button
-                      className="text-xs text-white/45 hover:text-teal"
+                      className="text-xs text-white/62 hover:text-teal"
                       title="Copy this build — creates a new build with the same configuration"
                       onClick={() => handleCopyBuild(b)}
                     >Copy</button>
-                    <button className="text-xs text-white/30 hover:text-red-400" onClick={() => handleDeleteBuild(b.id)}>Del</button>
+                    <button className="text-xs text-white/52 hover:text-red-400" onClick={() => handleDeleteBuild(b.id)}>Del</button>
                   </div>
                 </div>
               ))}
@@ -1212,10 +1212,13 @@ export default function PhasePanel() {
 
       {/* Disclaimer */}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.10)', padding: '12px 16px 14px', marginTop: 'auto' }}>
-        <p style={{ fontSize: '10.5px', lineHeight: '1.6', color: 'rgba(255,255,255,0.50)', margin: 0 }}>
+        <p style={{ fontSize: '10.5px', lineHeight: '1.6', color: 'rgba(255,255,255,0.72)', margin: 0 }}>
           OpsManifest guides infra teams through structured provisioning workflows — not a replacement for ITSM, CMDB, or platforms such as ServiceNow, Jira, or Confluence.
         </p>
-        <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none', marginTop: '5px', display: 'inline-block' }}>About this tool ↗</a>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '5px' }}>
+          <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none' }}>About this tool ↗</a>
+          <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>Privacy</a>
+        </div>
       </div>
 
       {showScan && <ScanModal onClose={() => setShowScan(false)} onComplete={handleScanComplete} />}

@@ -1,5 +1,6 @@
 import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
+import { useCoherenceEngine } from '../lib/useCoherenceEngine.js';
 import ExecSummaryTab from './tabs/ExecSummaryTab.jsx';
 import SystemDesignTab from './tabs/SystemDesignTab.jsx';
 import GanttTab from './tabs/GanttTab.jsx';
@@ -40,6 +41,7 @@ const TABS = [
     label: 'Gantt',
     unlocked: s => s.designApplied,
     lockMsg: 'Apply System Design first',
+    staleDot: s => !!s.tasksStaleReason,
   },
   {
     id: 'raid',
@@ -52,6 +54,7 @@ const TABS = [
     label: 'RTM',
     unlocked: s => s.phase2Active,
     lockMsg: 'Start Phase 2 first',
+    staleDot: s => !!s.rtmStale,
   },
   {
     id: 'closure',
@@ -87,6 +90,8 @@ export default function PmTabs() {
   const { authUser } = useAuth();
   const activeTab = s.activeTab || 'exec';
 
+  useCoherenceEngine();
+
   function isTabUnlocked(tab) {
     if (s.unlockedForRevision) return true;
     return tab.unlocked(s);
@@ -113,6 +118,9 @@ export default function PmTabs() {
         {TABS.map(tab => {
           const unlocked = isTabUnlocked(tab);
           const isActive = activeTab === tab.id;
+          const showStaleDot = unlocked && tab.staleDot && tab.staleDot(s);
+          const insightCount = s.coherenceAlerts.filter(a => a.tabs.includes(tab.id)).length;
+          const showInsightDot = unlocked && insightCount > 0;
           return (
             <button
               key={tab.id}
@@ -130,6 +138,15 @@ export default function PmTabs() {
                 <span className="inline-block ml-1 text-xs bg-teal-100 text-teal-700 font-bold rounded px-1 py-0 leading-tight">
                   Pro
                 </span>
+              )}
+              {showStaleDot && (
+                <span className="inline-block ml-1 w-1.5 h-1.5 rounded-full bg-amber-400 align-middle animate-pulse" title="Needs attention" />
+              )}
+              {showInsightDot && (
+                <span className="inline-block ml-0.5 w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" title={`${insightCount} agent insight(s)`} />
+              )}
+              {tab.id === 'exec' && s.promoted && (
+                <span className="inline-block ml-1 text-xs bg-green-100 text-green-700 font-bold rounded px-1 py-0 leading-tight">Live</span>
               )}
               {!unlocked && (
                 <svg className="inline-block ml-1 w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 20 20">

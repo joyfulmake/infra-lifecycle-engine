@@ -1,6 +1,7 @@
 import { useStore } from '../../store/useStore.js';
 import { ALL_INC } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 const CLOSURE_CHECKLIST = [
   { id: 'C01', label: 'All incidents closed and verified in production', dep: 'promoted' },
@@ -65,6 +66,7 @@ export default function ClosureTab() {
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+      <AgentInsights tab="closure" />
       {/* Banner */}
       <div className="bg-green-50 border-2 border-green-400 rounded-lg px-4 py-3 mb-4 flex items-start gap-3">
         <div className="w-3 h-3 rounded-full bg-green-500 mt-1 flex-shrink-0" />

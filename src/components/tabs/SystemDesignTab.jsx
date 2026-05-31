@@ -5,6 +5,8 @@ import { matchSuggestKeys } from '../../lib/suggestDb.js';
 import { generateTaskPlan } from '../../lib/smartScan.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { canUseFeature } from '../../lib/auth.js';
+import { getUserRolesForBuild, canEditDesignSection } from '../../lib/roleAccess.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
   const [pos, setPos] = useState(null);
@@ -128,7 +130,7 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
   );
 }
 
-function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle, techMode, presentMode, onResetSection }) {
+function DesignSection({ section, sectionData, readOnly, onFieldChange, open, onToggle, techMode, presentMode, onResetSection, roleOwned }) {
   const filled = section.fields.filter(f => sectionData[f]?.trim()).length;
   const total = section.fields.length;
   const completePct = Math.round((filled / total) * 100);
@@ -170,6 +172,9 @@ function DesignSection({ section, sectionData, readOnly, onFieldChange, open, on
         <div className="flex items-center gap-2">
           <span className="font-semibold text-slate-700 text-sm">{section.label}</span>
           <span className="text-xs text-slate-400">— {section.owner}</span>
+          {roleOwned && (
+            <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 rounded px-1.5 py-0 font-semibold leading-tight">Your section</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className={`badge ${badgeColor}`}>{filled}/{total} filled</span>
@@ -224,6 +229,7 @@ export default function SystemDesignTab() {
 
   const isLocked = !s.scanComplete;
   const isReadOnly = s.phase2Active;
+  const userRoles = getUserRolesForBuild(authUser, s.roleAssignments);
 
   const totalFields = DESIGN_SECTIONS.reduce((n, sec) => n + sec.fields.filter(f => f !== 'notes').length, 0);
   const filledFields = DESIGN_SECTIONS.reduce((n, sec) =>
@@ -283,6 +289,20 @@ export default function SystemDesignTab() {
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+
+      {s.designApplied && s.tasksStaleReason && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mb-3 text-xs text-amber-700">
+          <span className="text-amber-500 flex-shrink-0">⚠</span>
+          <span>Changes here will mark tasks as stale — open the <strong>Gantt</strong> tab to regenerate.</span>
+        </div>
+      )}
+      {s.designApplied && !s.tasksStaleReason && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-3 text-xs text-slate-500">
+          <span className="flex-shrink-0">ℹ</span>
+          <span>Design is applied. Any changes will prompt a task regeneration in the Gantt tab.</span>
+        </div>
+      )}
+      <AgentInsights tab="design" />
 
       {/* Header with mode toggles */}
       <div className="flex items-center justify-between mb-4">
@@ -351,20 +371,25 @@ export default function SystemDesignTab() {
       )}
 
       {/* Sections */}
-      {DESIGN_SECTIONS.map(section => (
-        <DesignSection
-          key={section.key}
-          section={section}
-          sectionData={s.sysDesignData[section.key] || {}}
-          readOnly={isReadOnly && !techMode}
-          onFieldChange={s.setDesignField}
-          open={presentMode || !!s.designSectionOpen[section.key]}
-          onToggle={() => !presentMode && s.toggleDesignSection(section.key)}
-          techMode={techMode}
-          presentMode={presentMode}
-          onResetSection={!isReadOnly ? handleResetSection : null}
-        />
-      ))}
+      {DESIGN_SECTIONS.map(section => {
+        const roleOwnsSection = canEditDesignSection(userRoles, section.key);
+        const sectionReadOnly = (isReadOnly && !techMode) && !roleOwnsSection;
+        return (
+          <DesignSection
+            key={section.key}
+            section={section}
+            sectionData={s.sysDesignData[section.key] || {}}
+            readOnly={sectionReadOnly}
+            onFieldChange={s.setDesignField}
+            open={presentMode || !!s.designSectionOpen[section.key]}
+            onToggle={() => !presentMode && s.toggleDesignSection(section.key)}
+            techMode={techMode}
+            presentMode={presentMode}
+            onResetSection={!sectionReadOnly ? handleResetSection : null}
+            roleOwned={roleOwnsSection && isReadOnly && !techMode}
+          />
+        );
+      })}
 
       {/* Task Plan Generation — no API key needed */}
       {!isReadOnly && (

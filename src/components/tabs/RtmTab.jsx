@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useStore } from '../../store/useStore.js';
+import { useAuth } from '../../lib/AuthContext.jsx';
 import { ALL_INC, FIXES } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
+import { isQATeamLead, getUserRolesForBuild } from '../../lib/roleAccess.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 // Resolve any incident code — checks catalog first, then customInc
 function resolveInc(code, customInc) {
@@ -68,8 +71,11 @@ function RtmRow({ row, onStatusChange, readOnly, reviewed }) {
 
 export default function RtmTab() {
   const s = useStore();
+  const { authUser } = useAuth();
   // Track which rows the reviewer has explicitly touched this session
   const [sessionReviewed, setSessionReviewed] = useState({});
+  const qaLead = isQATeamLead(authUser, s.roleAssignments);
+  const userRoles = getUserRolesForBuild(authUser, s.roleAssignments);
 
   const isLocked = !s.phase2Active;
 
@@ -163,6 +169,22 @@ export default function RtmTab() {
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+      {s.rtmStale && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 mb-4 gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-amber-500 flex-shrink-0">⚠</span>
+            <div>
+              <div className="text-xs font-semibold text-amber-800">Scope changed since RTM sign-off</div>
+              <div className="text-xs text-amber-700">Design or incident scope has been updated. Review key RTM rows and re-sign if requirements have changed.</div>
+            </div>
+          </div>
+          <button
+            className="flex-shrink-0 text-xs bg-amber-600 text-white font-semibold px-3 py-1.5 rounded-md hover:bg-amber-700 transition-colors"
+            onClick={() => s.setRtmStale(false)}
+          >Dismiss</button>
+        </div>
+      )}
+      <AgentInsights tab="rtm" />
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-sm font-bold text-slate-700">Requirements Traceability Matrix</div>
@@ -191,7 +213,7 @@ export default function RtmTab() {
           )}
           {canSign && (
             <button className="btn-teal px-4 py-1.5 text-xs" onClick={() => s.signRtm()}>
-              Sign Off RTM
+              {qaLead ? 'Sign Off RTM (QA Lead)' : 'Sign Off RTM'}
             </button>
           )}
           {s.rtmSigned && (
@@ -230,7 +252,7 @@ export default function RtmTab() {
 
       {s.rtmSigned && (
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2 mb-4 text-xs text-green-700 font-semibold">
-          RTM signed off by QA Lead — production cutover authorized.
+          RTM signed off {qaLead ? 'by QA Lead' : userRoles.length ? `by ${userRoles[0]}` : 'by QA Lead'} — production cutover authorized.
         </div>
       )}
 

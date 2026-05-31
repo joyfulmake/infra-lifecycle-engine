@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy Policy — OpsManifest</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --navy: #0F1F35; --accent: #3B82F6; --teal: #0D9488; --text: #1E293B; --muted: #64748B; --border: #E2E8F0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #F8FAFC; color: var(--text); line-height: 1.7; }
+
+  header {
+    background: var(--navy); color: #fff; padding: 20px 0;
+  }
+  header .inner { max-width: 760px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 32px; height: 32px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent), var(--teal));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 800; color: #fff; flex-shrink: 0;
+  }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: #93C5FD; }
+  header a { color: rgba(255,255,255,0.6); font-size: 13px; margin-left: auto; text-decoration: none; }
+  header a:hover { color: #fff; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  h1 { font-size: 28px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+  .meta { font-size: 13px; color: var(--muted); margin-bottom: 40px; }
+
+  h2 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 14px; font-weight: 700; color: var(--text); margin: 20px 0 6px; }
+  p  { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+  ul { font-size: 14px; color: var(--text); padding-left: 20px; margin-bottom: 12px; }
+  ul li { margin-bottom: 5px; }
+  a  { color: var(--accent); }
+
+  .callout {
+    background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px;
+    padding: 14px 18px; margin: 20px 0; font-size: 14px; color: #1D4ED8;
+  }
+  .callout strong { font-weight: 700; }
+
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <div class="logo-mark">O</div>
+    <div class="logo-text">OpsManifest</div>
+    <a href="https://opsmanifest.netlify.app">&#8592; Back to app</a>
+  </div>
+</header>
+
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Effective date: 1 June 2026 &nbsp;|&nbsp; Last updated: 31 May 2026</p>
+
+  <div class="callout">
+    <strong>Short version:</strong> OpsManifest stores your build data locally in your browser by default. No data leaves your device unless you sign in to a paid plan and enable cloud sync. We do not run advertising, sell data, or track behaviour.
+  </div>
+
+  <h2>1. Who we are</h2>
+  <p>OpsManifest is operated by an independent developer (contact: <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>). The app is published at <a href="https://opsmanifest.netlify.app">opsmanifest.netlify.app</a>.</p>
+
+  <h2>2. What data we collect</h2>
+
+  <h3>Free plan (no account)</h3>
+  <p>No personal data is collected. All build data (system design, incidents, RTM rows, Gantt tasks, role assignments) is stored exclusively in your browser's IndexedDB via the Dexie.js library. This data never leaves your device.</p>
+
+  <h3>Pro / Team plan (signed-in users)</h3>
+  <p>When you create an account and enable cloud sync, we collect and store:</p>
+  <ul>
+    <li>Your email address (used as your account identifier)</li>
+    <li>A hashed password (via Firebase Authentication — we never see your plaintext password)</li>
+    <li>Your saved builds (system design data, incidents, tasks, roles, RTM rows) stored in Firebase Firestore, keyed to your email address</li>
+    <li>Subscription status and Stripe customer ID (for paid plans)</li>
+  </ul>
+  <p>Team plan users: builds shared to a team workspace are visible to all members of that organisation.</p>
+
+  <h3>AI-assisted features</h3>
+  <p>When you use the AI Smart Scan or AI system design generation, the app sends your selected hardware/OS/app stack context (no personal identifiers) to our Cloudflare Worker proxy, which forwards the request to the Anthropic API. Neither the proxy nor Anthropic retains your build data beyond processing the request. We do not store AI request logs.</p>
+
+  <h2>3. How we use your data</h2>
+  <ul>
+    <li>To authenticate you and associate cloud-synced builds with your account</li>
+    <li>To process subscription payments via Stripe</li>
+    <li>To restore your builds across devices when you sign in on a new device</li>
+  </ul>
+  <p>We do not use your data for advertising, profiling, or sale to third parties.</p>
+
+  <h2>4. Third-party services</h2>
+  <ul>
+    <li><strong>Firebase (Google)</strong> — authentication and Firestore database for Pro/Team users. <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Firebase Privacy Policy</a></li>
+    <li><strong>Stripe</strong> — payment processing for paid plans. Your card details are handled directly by Stripe and never pass through our servers. <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe Privacy Policy</a></li>
+    <li><strong>Anthropic</strong> — AI model API for Smart Scan and design assistance, accessed via a Cloudflare Worker proxy. <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener">Anthropic Privacy Policy</a></li>
+    <li><strong>Netlify</strong> — static hosting. Netlify may log standard HTTP access data (IP, user agent, request path) per their own privacy policy. <a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener">Netlify Privacy Policy</a></li>
+    <li><strong>Cloudflare</strong> — proxy and edge workers. <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Privacy Policy</a></li>
+  </ul>
+
+  <h2>5. Local storage and cookies</h2>
+  <p>The app uses browser <strong>IndexedDB</strong> (via Dexie.js) to store build data locally. It does not use tracking cookies. A service worker is registered for offline support; it caches static application assets only and does not store personal data.</p>
+
+  <h2>6. Data retention</h2>
+  <ul>
+    <li><strong>Local data</strong>: stored in your browser until you clear site data or delete builds manually.</li>
+    <li><strong>Cloud data (Pro/Team)</strong>: retained while your account is active. Deleting a build removes it from Firestore immediately. Account deletion requests can be sent to <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a> — we will delete your Firestore data and Firebase Auth record within 30 days.</li>
+  </ul>
+
+  <h2>7. Children</h2>
+  <p>OpsManifest is a professional productivity tool intended for adults. We do not knowingly collect data from anyone under 16 years of age.</p>
+
+  <h2>8. Your rights</h2>
+  <p>Depending on your jurisdiction, you may have the right to access, correct, or delete your personal data. To exercise these rights, email <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>. Free-plan users can clear all local data by clearing site data in their browser settings.</p>
+
+  <h2>9. Changes to this policy</h2>
+  <p>We may update this policy as the app evolves. The "Last updated" date at the top of this page reflects the most recent revision. Significant changes will be noted in the app on next launch.</p>
+
+  <h2>10. Contact</h2>
+  <p>Questions or requests: <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></p>
+</main>
+
+<footer>
+  &copy; 2026 OpsManifest &nbsp;|&nbsp;
+  <a href="https://opsmanifest.netlify.app">App</a> &nbsp;|&nbsp;
+  <a href="https://opsmanifest.netlify.app/slides.html">Overview</a>
+</footer>
+
+</body>
+</html>

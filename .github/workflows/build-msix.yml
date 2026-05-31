@@ -1,0 +1,220 @@
+name: Build MSIX for Microsoft Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      publisher_id:
+        description: 'Publisher ID from Partner Center (e.g. CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX). Leave blank to use placeholder — update before submitting to store.'
+        required: false
+        default: 'CN=00000000-0000-0000-0000-000000000000'
+      publisher_display_name:
+        description: 'Publisher display name (your name or company)'
+        required: false
+        default: 'Sriram C'
+      app_version:
+        description: 'App version (must be x.x.x.x format)'
+        required: false
+        default: '1.0.0.0'
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+
+    steps:
+      - name: Prepare folders
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path msix\images -Force | Out-Null
+
+      - name: Download app icon
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://opsmanifest.netlify.app/icon-512.png" `
+            -OutFile "msix\images\source.png"
+
+      - name: Generate all required icon sizes
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Drawing
+
+          $src = [System.Drawing.Image]::FromFile(
+            (Resolve-Path "msix\images\source.png").Path
+          )
+
+          # name, width, height
+          $icons = @(
+            @("Square44x44Logo.png",   44,  44),
+            @("Square71x71Logo.png",   71,  71),
+            @("Square150x150Logo.png", 150, 150),
+            @("Square310x310Logo.png", 310, 310),
+            @("Wide310x150Logo.png",   310, 150),
+            @("StoreLogo.png",         50,  50),
+            @("SplashScreen.png",      620, 300)
+          )
+
+          foreach ($ic in $icons) {
+            $name = $ic[0]; $w = $ic[1]; $h = $ic[2]
+            $bmp = New-Object System.Drawing.Bitmap($w, $h)
+            $g   = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(255, 15, 31, 53))
+            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+            # Centre the source image, preserving aspect ratio
+            $ratio = [Math]::Min($w / $src.Width, $h / $src.Height)
+            $dw    = [int]($src.Width  * $ratio)
+            $dh    = [int]($src.Height * $ratio)
+            $dx    = [int](($w - $dw) / 2)
+            $dy    = [int](($h - $dh) / 2)
+            $g.DrawImage($src, $dx, $dy, $dw, $dh)
+            $g.Dispose()
+
+            $bmp.Save("msix\images\$name", [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Dispose()
+            Write-Host "  created msix\images\$name ($w x $h)"
+          }
+          $src.Dispose()
+
+      - name: Write AppxManifest.xml
+        shell: powershell
+        env:
+          PUBLISHER_ID:           ${{ github.event.inputs.publisher_id }}
+          PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name }}
+          APP_VERSION:            ${{ github.event.inputs.app_version }}
+        run: |
+          $manifest = @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <Package
+            xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+            xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+            xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+            IgnorableNamespaces="uap3">
+
+            <Identity
+              Name="com.opsmanifest.app"
+              Publisher="$env:PUBLISHER_ID"
+              Version="$env:APP_VERSION"
+              ProcessorArchitecture="neutral" />
+
+            <Properties>
+              <DisplayName>OpsManifest</DisplayName>
+              <PublisherDisplayName>$env:PUBLISHER_DISPLAY_NAME</PublisherDisplayName>
+              <Description>Guided provisioning workflow for infra teams — from hardware selection through CAB approval, RTM sign-off and closure.</Description>
+              <Logo>images\StoreLogo.png</Logo>
+            </Properties>
+
+            <Dependencies>
+              <TargetDeviceFamily
+                Name="Windows.Universal"
+                MinVersion="10.0.17763.0"
+                MaxVersionTested="10.0.19041.0" />
+            </Dependencies>
+
+            <Resources>
+              <Resource Language="en-us" />
+            </Resources>
+
+            <Applications>
+              <Application
+                Id="App"
+                StartPage="https://opsmanifest.netlify.app">
+                <uap:VisualElements
+                  DisplayName="OpsManifest"
+                  Description="Guided provisioning workflow for infra teams"
+                  BackgroundColor="#0F1F35"
+                  Square150x150Logo="images\Square150x150Logo.png"
+                  Square44x44Logo="images\Square44x44Logo.png">
+                  <uap:DefaultTile
+                    Wide310x150Logo="images\Wide310x150Logo.png"
+                    Square310x310Logo="images\Square310x310Logo.png"
+                    Square71x71Logo="images\Square71x71Logo.png"
+                    ShortName="OpsManifest">
+                    <uap:ShowNameOnTiles>
+                      <uap:ShowOn Tile="square150x150Logo" />
+                      <uap:ShowOn Tile="wide310x150Logo" />
+                    </uap:ShowNameOnTiles>
+                  </uap:DefaultTile>
+                  <uap:SplashScreen
+                    Image="images\SplashScreen.png"
+                    BackgroundColor="#0F1F35" />
+                </uap:VisualElements>
+                <Extensions>
+                  <uap3:Extension Category="windows.appUriHandler">
+                    <uap3:AppUriHandler>
+                      <uap3:Host Name="opsmanifest.netlify.app" />
+                    </uap3:AppUriHandler>
+                  </uap3:Extension>
+                </Extensions>
+              </Application>
+            </Applications>
+
+            <Capabilities>
+              <Capability Name="internetClient" />
+            </Capabilities>
+
+          </Package>
+          "@
+          $manifest.Trim() | Out-File -FilePath "msix\AppxManifest.xml" -Encoding utf8
+          Write-Host "AppxManifest.xml written"
+
+      - name: Validate manifest with MakePri
+        shell: powershell
+        run: |
+          # Create a minimal resources.pri so makeappx doesn't complain
+          $priConfig = @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources targetOsVersion="10.0.0" majorVersion="1">
+            <packaging>
+              <autoResourcePackage qualifier="Language" />
+            </packaging>
+            <index root="\" startIndexAt="\">
+              <default>
+                <qualifier name="Language" value="en-US" />
+              </default>
+            </index>
+          </resources>
+          "@
+          $priConfig | Out-File -FilePath "msix\priconfig.xml" -Encoding utf8
+
+          # makepri may or may not be on PATH; locate it
+          $makepri = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter makepri.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+
+          if ($makepri) {
+            Write-Host "makepri found at $($makepri.FullName)"
+            & $makepri.FullName createconfig /cf msix\priconfig.xml /dq en-US /pv 10.0.0 /o
+            & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
+          } else {
+            Write-Host "makepri not found — skipping resources.pri (store will generate it)"
+          }
+
+      - name: Package MSIX with MakeAppx
+        shell: powershell
+        run: |
+          $makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+            -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*x64*" } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+
+          if (-not $makeappx) {
+            $makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+              -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          }
+
+          if (-not $makeappx) {
+            Write-Error "makeappx.exe not found. Check Windows SDK installation."
+            exit 1
+          }
+
+          Write-Host "makeappx found at $($makeappx.FullName)"
+          & $makeappx.FullName pack /d msix /p opsmanifest.msix /o
+          Write-Host "MSIX created: opsmanifest.msix"
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opsmanifest-msix
+          path: opsmanifest.msix
+          retention-days: 30

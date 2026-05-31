@@ -163,6 +163,7 @@ export const useStore = create((set, get) => ({
   phase2Active: false,
   cabApproved: false,
   rtmSigned: false,
+  rtmStale: false,
   promoted: false,
 
   // Dirty tracking — true whenever state has changed since last save/load
@@ -231,6 +232,9 @@ export const useStore = create((set, get) => ({
   // Closure notes text
   closureNotes: '',
 
+  // Cross-tab coherence alerts from the agent engine: [{ id, severity, tabs, message, action }]
+  coherenceAlerts: [],
+
   // Active PM tab
   activeTab: 'exec',
 
@@ -238,6 +242,8 @@ export const useStore = create((set, get) => ({
   designSectionOpen: {},
 
   // Actions
+  setCoherenceAlerts: (alerts) => set({ coherenceAlerts: alerts }),
+
   markDirty: () => set({ isDirty: true }),
   markClean: () => set({ isDirty: false }),
   setCurrentBuildId: (id) => set({ currentBuildId: id }),
@@ -272,7 +278,7 @@ export const useStore = create((set, get) => ({
     ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [],
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
-    unlockedForRevision: false, tasksStaleReason: null, roleAssignments: {},
+    unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
   }),
 
   completeScan: (results) => set({ scanComplete: true, scanResults: results || [], isDirty: true }),
@@ -285,12 +291,14 @@ export const useStore = create((set, get) => ({
     selInc: s.selInc.includes(code) ? s.selInc.filter(c => c !== code) : [...s.selInc, code],
     isDirty: true,
     ...(s.phase2Active ? { tasksStaleReason: 'Incidents changed — tasks may not reflect current scope' } : {}),
+    ...(s.rtmSigned ? { rtmStale: true } : {}),
   })),
 
   toggleUUM: (code) => set(s => ({
     selUUM: s.selUUM.includes(code) ? s.selUUM.filter(c => c !== code) : [...s.selUUM, code],
     isDirty: true,
     ...(s.phase2Active ? { tasksStaleReason: 'UUM items changed — task sequences may have changed' } : {}),
+    ...(s.rtmSigned ? { rtmStale: true } : {}),
   })),
 
   toggleFix: (code) => set(s => ({
@@ -313,7 +321,7 @@ export const useStore = create((set, get) => ({
     return { lockedDesignFields: next, isDirty: true };
   }),
 
-  signRtm: () => set({ rtmSigned: true, isDirty: true }),
+  signRtm: () => set({ rtmSigned: true, rtmStale: false, isDirty: true }),
 
   promote: () => set({ promoted: true, isDirty: true }),
 
@@ -324,16 +332,22 @@ export const useStore = create((set, get) => ({
     },
     isDirty: true,
     ...(s.designApplied ? { tasksStaleReason: 'System design changed — tasks may not reflect current configuration' } : {}),
+    ...(s.rtmSigned ? { rtmStale: true } : {}),
   })),
 
   setAllDesignFields: (data) => set(s => ({
     sysDesignData: data, isDirty: true,
     ...(s.designApplied ? { tasksStaleReason: 'System design changed — tasks may not reflect current configuration' } : {}),
+    ...(s.rtmSigned ? { rtmStale: true } : {}),
   })),
 
   setAiTasks: (tasks) => set({ sdAiTasks: tasks, isDirty: true }),
   setTasksStaleReason: (reason) => set({ tasksStaleReason: reason }),
-  setUnlockedForRevision: (val) => set({ unlockedForRevision: val }),
+  setRtmStale: (val) => set({ rtmStale: val }),
+  setUnlockedForRevision: (val) => set(s => ({
+    unlockedForRevision: val,
+    ...(val && s.designApplied ? { tasksStaleReason: 'Build unlocked for revision — regenerate tasks to reflect current scope' } : {}),
+  })),
   setRoleAssignment: (role, data) => set(s => ({ roleAssignments: { ...s.roleAssignments, [role]: data }, isDirty: true })),
   resubmitCAB: () => set({ cabDeclined: false, unlockedForRevision: false, isDirty: true }),
 
@@ -385,6 +399,7 @@ export const useStore = create((set, get) => ({
     ganttOverrides: b.ganttOverrides ?? {},
     unlockedForRevision: b.unlockedForRevision ?? false,
     tasksStaleReason: b.tasksStaleReason ?? null,
+    rtmStale: b.rtmStale ?? false,
     roleAssignments: b.roleAssignments ?? {},
     activeTab: 'exec',
     isDirty: false,

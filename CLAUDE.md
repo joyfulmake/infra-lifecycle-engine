@@ -83,6 +83,7 @@ src/
       RaidTab.jsx         — RAID log (Risks, Assumptions, Issues, Decisions)
       ClosureTab.jsx      — post-go-live closure checklist & notes
       RolesTab.jsx        — 20-role RACI table; editable by PM/backup (Pro+); view-only for all plans
+    AgentInsights.jsx   — compact cross-tab advisory panel; takes `tab` prop; reads `coherenceAlerts` from store; collapses to single-line strip, expands to full list; blue = info, amber = warn; rendered at top of ExecSummary, SystemDesign, RTM, Closure, Roles tabs
   lib/
     incidents.js          — incident catalog
     uumItems.js           — UUM (Unix/User/Middleware) catalog
@@ -92,6 +93,9 @@ src/
     incidentFixTasks.js   — fix task definitions per incident
     smartScan.js          — standalone CVE/EOL scan + auto-suggest incidents/UUM codes
     suggestDb.js          — suggestion engine: `matchSuggestKeys(val, fieldId, minChars=3)` (static DB) + `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` (context-aware, used by SuggestInput in PhasePanel)
+    roleAccess.js         — email-match role-based access: `getUserRolesForBuild(authUser, roleAssignments)`, `canEditDesignSection(userRoles, sectionKey)`, `isQATeamLead(authUser, roleAssignments)`; `ROLE_SECTION_MAP` maps RACI roles to design section keys
+    coherenceEngine.js    — pure `runCoherenceChecks(stateSnapshot)` → `[{ id, severity, tabs, message, action }]`; no React, no deps; runs 11 cross-tab checks (compliance gap, DR/backup, security incidents, network incidents, SLA/monitoring, design sparseness, empty Phase 2, RTM fails, roles missing, RTM pending count, storage incidents)
+    useCoherenceEngine.js — React hook; debounces 600ms; watches selInc/selUUM/sysDesignData/requirements/rtmRows/roleAssignments; calls `setCoherenceAlerts`; mounted in PmTabs
     exportExcel.js        — 12-sheet styled Excel export using xlsx-js-style
     db.js                 — Dexie IndexedDB wrapper (localGetBuilds, localSaveBuild, localDeleteBuild)
     firebase.js           — lazy Firebase singleton (fbSignIn, fbSignOut, cloudSaveBuild, cloudLoadBuilds)
@@ -120,13 +124,40 @@ All state is in `src/store/useStore.js`. Key slices:
 - `ganttOverrides` — `{ [taskKey]: { durationHours, dep, parallel } }` — Pro+ inline task edits
 - `isDirty` — true whenever state has changed since last save or load; drives "Unsaved" indicator
 - `currentBuildId` — ID of the currently loaded/saved build; enables "Update Build" in-place save
-- `unlockedForRevision` — set true after CAB decline when PM clicks "Unlock Tabs for Revision"; bypasses all tab locks in PmTabs; cleared by `resubmitCAB()`
-- `tasksStaleReason` — string message set when design/incidents/periods/schedule change after tasks generated; shown as amber banner in GanttTab with Regenerate button; cleared by `setTasksStaleReason(null)` + `setAiTasks([])`
+- `coherenceAlerts` — `[{ id, severity: 'warn'|'info', tabs: string[], message, action }]` — set by `useCoherenceEngine` hook; read by `AgentInsights`; NOT persisted to Dexie/Firestore (recomputed on load)
+- `unlockedForRevision` — set true after CAB decline when PM clicks "Unlock Tabs for Revision"; bypasses all tab locks in PmTabs; also auto-sets `tasksStaleReason`; cleared by `resubmitCAB()`
+- `tasksStaleReason` — string message set when design/incidents/periods/schedule change after tasks generated; shown as amber banner in GanttTab with Regenerate button; cleared by `setTasksStaleReason(null)` + `setAiTasks([])`; also set by `setUnlockedForRevision(true)` when `designApplied`
+- `rtmStale` — boolean; set true when incidents/design change after `rtmSigned`; cleared by `signRtm()` or `setRtmStale(false)` (dismiss button in RTM tab); shown as amber advisory banner in RtmTab; amber dot on RTM tab in PmTabs
 - `roleAssignments` — `{ [roleName]: { name, email, backup, raci } }` — RACI assignments for 20 standard roles
 - `requirements.pmEmail` / `requirements.pmBackupEmail` — restrict Roles tab editing to these accounts (Pro+)
 
 Key actions: `markDirty()`, `markClean()`, `setCurrentBuildId(id)` — called by PhasePanel on save/load. Every significant state action automatically sets `isDirty: true`.
-New actions: `setUnlockedForRevision(val)`, `setTasksStaleReason(reason)`, `setRoleAssignment(role, data)`, `resubmitCAB()` — resets cabDeclined + unlockedForRevision.
+New actions: `setUnlockedForRevision(val)`, `setTasksStaleReason(reason)`, `setRtmStale(val)`, `setRoleAssignment(role, data)`, `resubmitCAB()` — resets cabDeclined + unlockedForRevision.
+
+## Agent Intelligence — cross-tab coherence
+
+**Pattern**: Tabs behave as loosely-coupled agents sharing a semantic context bus (Zustand store). The coherence engine detects drift between tabs and emits advisories without page reloads, API calls, or heavyweight dependencies.
+
+**Flow**:
+1. Any significant state change updates Zustand
+2. `useCoherenceEngine` (mounted in `PmTabs`) debounces 600ms then calls `runCoherenceChecks(snapshot)`
+3. `runCoherenceChecks` runs 11 rule-based checks (pure JS, no external deps) and returns `coherenceAlerts[]`
+4. `setCoherenceAlerts(alerts)` updates the store
+5. `AgentInsights` panels in each tab read the store and render relevant alerts
+
+**Adding a new check**: add a block to `runCoherenceChecks` in `coherenceEngine.js`. Each alert must have: `id` (unique string), `severity` ('warn'|'info'), `tabs` (array of tab IDs that should show it), `message` (user-facing string), `action` (short hint, optional).
+
+**Tab dot colors**: blue dot = coherence insight; amber dot = stale/needs-review (existing system). Both can appear simultaneously on the same tab label.
+
+**Not persisted**: `coherenceAlerts` is runtime-only and not saved to Dexie or Firestore. It is recomputed whenever relevant state changes. `loadBuild` does not need to restore it.
+
+## Tab badges and advisory protocol
+
+- **Gantt tab**: amber pulsing dot appears when `tasksStaleReason` is set; banner inside tab shows reason + Regenerate button
+- **RTM tab**: amber pulsing dot appears when `rtmStale` is true; banner inside tab prompts re-review + dismiss
+- **Exec tab**: green "Live" badge appears when `promoted` is true
+- **System Design tab**: advisory bar when `designApplied` warns that changes will mark tasks stale
+- **Revision Mode** (PmTabs amber banner): shown when `unlockedForRevision`; all tabs unlocked regardless of phase gates
 
 Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS`, `DB_OPTIONS`, `APP_OPTIONS`.
 
@@ -147,6 +178,31 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 - "Save as new build…" input creates a fresh build entry (new ID)
 - Loading a build warns "Unsaved changes will be lost" if `isDirty` is true
 - All tab changes (incidents, design fields, RTM rows, Gantt overrides, closure, CAB, etc.) feed into `isDirty` automatically via the store
+
+## Store submission (Microsoft Store + Meta Quest)
+
+**Ready-to-submit via pwabuilder.com** — enter `https://opsmanifest.netlify.app` and package for Windows (MSIX) and Meta Quest.
+
+**Assets in place:**
+- `public/icon-192.png` and `public/icon-512.png` — generated by `scripts/gen-icons.mjs` (navy background, blue-teal gradient tile, white ring mark)
+- `public/privacy.html` — full privacy policy at `https://opsmanifest.netlify.app/privacy.html`
+- `public/manifest.json` — has `id`, `scope`, `prefer_related_applications: false`, separate `any` + `maskable` icon entries, `edge_side_panel` for Edge sidebar, `dir: ltr`, `lang: en-GB`
+
+**To regenerate icons:** `node scripts/gen-icons.mjs` (requires `pngjs` devDependency — already installed)
+
+**Microsoft Store steps:**
+1. pwabuilder.com → enter URL → validate → "Package for Store" → Windows
+2. Download MSIX + signing cert instructions
+3. Create Microsoft Partner Center account (one-time $19 USD)
+4. Submit MSIX under Apps & Games → new app
+5. Fill store listing: description, age rating (3+), privacy policy URL, screenshots
+
+**Meta Quest steps:**
+1. pwabuilder.com → "Package for Store" → Meta Quest
+2. Follow Meta's Horizon Store developer portal submission
+3. Note: Meta requires the app to work in landscape — already set in manifest
+
+**Screenshots:** Not yet created. Stores ask for them but will accept the app without during initial submission. Take 1280×720 screenshots of the Phase 1 build screen and the System Design tab for the listing.
 
 ## Disclaimer + presentation
 
@@ -201,8 +257,11 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **Auto-suggestions**: Fixed with React Portal (`createPortal`) in both `SystemDesignTab.jsx` and `PhasePanel.jsx`. Dropdowns render at `document.body` level with `position: fixed`. `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3. `SuggestInput` in PhasePanel calls `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` which reads the store and prepends stack-specific hints (scan findings, Oracle/AIX/RHEL/WebSphere error patterns, EOL flags, role owner suggestions) before the static DB results. `SystemDesignTab` still uses plain `matchSuggestKeys` (design fields are already field-specific enough).
 - **RTM sign-off**: Requires every row explicitly set via `s.setRtmRow(id, status)`. "All PASS" and "All N/A" buttons bulk-set.
 - **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel and rollback tasks in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`. After decline, PM can click "Unlock Tabs for Revision" → `unlockedForRevision = true` → all tabs unlocked in PmTabs regardless of phase gates. "Resubmit to CAB" calls `resubmitCAB()` which clears `cabDeclined` and `unlockedForRevision`. "Quick Change — PM Override" (Pro+) calls `setCabApproved(true)` — bypasses re-review and immediately allows cutover. Do NOT call `resubmitCAB()` here; that resets to pending and blocks the PM.
-- **Tasks stale detection**: `tasksStaleReason` is set (as a string) by `toggleInc`/`toggleUUM` (when `phase2Active`), `setDesignField`/`setAllDesignFields` (when `designApplied`), `setChangePeriods` (when `designApplied`), and `setRequirements` (when `projectStartDate` or `hoursPerDay` changes and `designApplied`). GanttTab shows an amber banner with a Regenerate button that calls `setAiTasks([])` + `setTasksStaleReason(null)` — returning to rule-based auto-computed tasks.
+- **Tasks stale detection**: `tasksStaleReason` is set (as a string) by `toggleInc`/`toggleUUM` (when `phase2Active`), `setDesignField`/`setAllDesignFields` (when `designApplied`), `setChangePeriods` (when `designApplied`), `setRequirements` (when `projectStartDate` or `hoursPerDay` changes and `designApplied`), and `setUnlockedForRevision(true)` (when `designApplied`). GanttTab shows an amber banner with a Regenerate button that calls `setAiTasks([])` + `setTasksStaleReason(null)` — returning to rule-based auto-computed tasks. PmTabs shows amber pulsing dot on the Gantt tab label when `tasksStaleReason` is set.
+- **RTM stale detection**: `rtmStale` is set true by `toggleInc`/`toggleUUM` (when `rtmSigned`), `setDesignField`/`setAllDesignFields` (when `rtmSigned`). Cleared by `signRtm()` or the Dismiss button in RtmTab. PmTabs shows amber pulsing dot on the RTM tab label when `rtmStale` is true. Advisory banner in RtmTab prompts re-review.
+- **Sidebar text opacity**: PhasePanel uses `text-white/82` (labels), `text-white/85` (headings), `text-white/78` (subtitles), `text-white/75` (section headers/pill roles), `text-white/62` (arrows), `text-white/58` (meta info), `text-white/52` (disabled/inactive), `rgba(255,255,255,0.72)` (disclaimer). Never go below `/52` on the navy (#1A2E4A) background — lower values are illegible.
 - **Roles tab edit gating**: editing requires `canUseFeature(authUser, 'save_builds')` (Pro+) AND `!pmEmail || authUser?.email === pmEmail || authUser?.email === pmBackupEmail`. If no `pmEmail` is set, any Pro+ user can edit. `RoleRow` uses `useEffect` to sync local `form` state when `assignment` prop changes externally (e.g. build load) — only syncs while not actively editing to avoid clobbering in-progress edits.
+- **Email-match role-based access** (Pro+): `getUserRolesForBuild(authUser, roleAssignments)` matches `authUser.email` against all role assignments in the build. `canEditDesignSection(userRoles, sectionKey)` unlocks specific System Design sections for the role owner even when `phase2Active` (normal lock). `isQATeamLead` enables QA Lead to sign RTM. Roles tab shows "Your role in this build" teal banner. System Design shows "Your section" badge on owned sections. Future: Team/Enterprise plan → SSO via Firebase Auth SAML provider or OIDC; `authUser.email` already drives all permission checks, so SSO just changes the auth source, not the permission model.
 - **Tech-review locked fields**: `s.lockDesignField('section.field', data)` / `s.unlockDesignField(key)`. PM sees locked fields read-only with amber label. Only visible in Tech Review Mode.
 - **Custom incidents**: `s.addCustomInc(inc)` / `s.removeCustomInc(id)`. Appear alongside ALL_INC in Phase 2 and RTM.
 - **Phase guidemark**: `PHASE_HINTS` map in PhasePanel.jsx includes `cabdeclined` state. `currentPhaseId` checks `s.cabDeclined` before `s.cabApproved`.

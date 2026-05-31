@@ -1,6 +1,7 @@
 import { useStore } from '../../store/useStore.js';
 import { ALL_INC } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 export default function ExecSummaryTab() {
   const s = useStore();
@@ -23,6 +24,8 @@ export default function ExecSummaryTab() {
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
       <div className="max-w-4xl mx-auto space-y-4">
+
+        <AgentInsights tab="exec" />
 
         {/* Status Banner */}
         <div className={['rounded-lg border-2 px-4 py-3',
