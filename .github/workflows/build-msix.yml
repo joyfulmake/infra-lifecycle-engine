@@ -3,14 +3,15 @@ name: Build MSIX for Microsoft Store
 on:
   workflow_dispatch:
     inputs:
+      package_name:
+        description: 'Package/Identity/Name from Partner Center App identity page (e.g. 12345Flourishing.OpsManifest)'
+        required: true
       publisher_id:
-        description: 'Publisher ID from Partner Center (CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)'
-        required: false
-        default: 'CN=00000000-0000-0000-0000-000000000000'
+        description: 'Package/Identity/Publisher from Partner Center App identity page (CN=XXXXXXXX-...)'
+        required: true
       publisher_display_name:
-        description: 'Publisher display name - must match Partner Center exactly'
-        required: false
-        default: 'Flourishing.'
+        description: 'Publisher display name from Partner Center App identity page - copy-paste exactly'
+        required: true
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
@@ -78,11 +79,13 @@ jobs:
       - name: Write AppxManifest.xml
         shell: powershell
         env:
+          PACKAGE_NAME:           ${{ github.event.inputs.package_name }}
           PUBLISHER_ID:           ${{ github.event.inputs.publisher_id }}
           PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name }}
           APP_VERSION:            ${{ github.event.inputs.app_version }}
         run: |
           # Use XmlWriter so no encoding surprises — no BOM, no invisible chars
+          $packageName          = $env:PACKAGE_NAME.Trim()
           $publisherId          = $env:PUBLISHER_ID.Trim()
           $publisherDisplayName = $env:PUBLISHER_DISPLAY_NAME.Trim()
           $appVersion           = $env:APP_VERSION.Trim()
@@ -108,7 +111,7 @@ jobs:
 
             # Identity
             $w.WriteStartElement("Identity", $ns)
-            $w.WriteAttributeString("Name",                 "com.opsmanifest.app")
+            $w.WriteAttributeString("Name",                 $packageName)
             $w.WriteAttributeString("Publisher",            $publisherId)
             $w.WriteAttributeString("Version",              $appVersion)
             $w.WriteAttributeString("ProcessorArchitecture","neutral")
