@@ -97,7 +97,7 @@ src/
     roleAccess.js         — email-match role-based access: `getUserRolesForBuild(authUser, roleAssignments)`, `canEditDesignSection(userRoles, sectionKey)`, `isQATeamLead(authUser, roleAssignments)`; `ROLE_SECTION_MAP` maps RACI roles to design section keys
     coherenceEngine.js    — pure `runCoherenceChecks(stateSnapshot)` → `[{ id, severity, tabs, message, action }]`; no React, no deps; runs 11 cross-tab checks (compliance gap, DR/backup, security incidents, network incidents, SLA/monitoring, design sparseness, empty Phase 2, RTM fails, roles missing, RTM pending count, storage incidents)
     useCoherenceEngine.js — React hook; debounces 600ms; watches selInc/selUUM/sysDesignData/requirements/rtmRows/roleAssignments; calls `setCoherenceAlerts`; mounted in PmTabs
-    exportExcel.js        — 12-sheet styled Excel export using xlsx-js-style
+    exportExcel.js        — 13-sheet styled Excel export using xlsx-js-style
     db.js                 — Dexie IndexedDB wrapper (localGetBuilds, localSaveBuild, localDeleteBuild)
     firebase.js           — lazy Firebase singleton (fbSignIn, fbSignOut, cloudSaveBuild, cloudLoadBuilds)
     firebaseConfig.js     — Firebase project config + FIREBASE_CONFIGURED flag
