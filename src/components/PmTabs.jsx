@@ -10,6 +10,7 @@ import ClosureTab from './tabs/ClosureTab.jsx';
 import InfraDiagramTab from './tabs/InfraDiagramTab.jsx';
 import CmdbTab from './tabs/CmdbTab.jsx';
 import RolesTab from './tabs/RolesTab.jsx';
+import MatrixTab from './tabs/MatrixTab.jsx';
 
 const TABS = [
   {
@@ -68,6 +69,12 @@ const TABS = [
     unlocked: s => s.isBuilt,
     lockMsg: 'Build environment first',
   },
+  {
+    id: 'matrix',
+    label: 'Matrix',
+    unlocked: s => s.phase2Active,
+    lockMsg: 'Inject Phase 2 to activate',
+  },
 ];
 
 function TabContent({ activeTab }) {
@@ -81,6 +88,7 @@ function TabContent({ activeTab }) {
     case 'rtm': return <RtmTab />;
     case 'closure': return <ClosureTab />;
     case 'roles': return <RolesTab />;
+    case 'matrix': return <MatrixTab />;
     default: return <ExecSummaryTab />;
   }
 }
