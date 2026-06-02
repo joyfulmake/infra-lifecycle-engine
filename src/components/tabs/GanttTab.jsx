@@ -7,6 +7,8 @@ import { buildDesignTasks } from '../../lib/designTasks.js';
 import { canUseFeature } from '../../lib/auth.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
+import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
+import { enrichTaskWithGroq } from '../../lib/groq.js';
 
 const BUFFER = 1.3;
 
@@ -196,16 +198,37 @@ function ExpandedTaskPanel({ taskKey, task, override, onSave, onClear, canEdit, 
 // ── FSM Metadata panel ────────────────────────────────────────────────────────
 
 function FsmPanel({ task, ctx }) {
-  const meta = enrichTask(task, ctx);
-  const stateStyle = FSM_STATE_STYLE[meta.fsmState] || FSM_STATE_STYLE.PENDING;
+  const baseMeta = enrichTask(task, ctx);
+  const stateStyle = FSM_STATE_STYLE[baseMeta.fsmState] || FSM_STATE_STYLE.PENDING;
 
-  const Field = ({ icon, label, value, mono }) => (
+  const [aiMeta, setAiMeta] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiModel, setAiModel] = useState(null);
+
+  const meta = aiMeta ? { ...baseMeta, ...aiMeta } : baseMeta;
+  const isAi = !!aiMeta;
+
+  async function handleDeepen() {
+    setAiLoading(true); setAiError(null);
+    try {
+      const result = await enrichTaskWithGroq(task, ctx, baseMeta);
+      setAiMeta(result.enriched); setAiModel(result.model);
+    } catch (e) { setAiError(e.message); }
+    finally { setAiLoading(false); }
+  }
+
+  const Field = ({ icon, label, value, mono, aiEnhanced }) => (
     <div className="mb-2.5">
       <div className="flex items-center gap-1 mb-0.5">
         <span className="text-slate-400 text-xs">{icon}</span>
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+        {aiEnhanced && <span className="text-xs text-teal ml-1">✦ AI</span>}
       </div>
-      <div className={['text-xs leading-relaxed rounded px-2 py-1.5 border', mono ? 'font-mono bg-slate-900 text-green-300 border-slate-700 whitespace-pre-wrap break-all' : 'bg-slate-50 text-slate-700 border-slate-200'].join(' ')}>
+      <div className={['text-xs leading-relaxed rounded px-2 py-1.5 border',
+        mono ? 'font-mono bg-slate-900 text-green-300 border-slate-700 whitespace-pre-wrap break-all'
+        : aiEnhanced ? 'bg-teal/5 text-slate-700 border-teal/30'
+        : 'bg-slate-50 text-slate-700 border-slate-200'].join(' ')}>
         {value}
       </div>
     </div>
@@ -215,27 +238,52 @@ function FsmPanel({ task, ctx }) {
     <div className="px-3 pb-3 pt-2 bg-gradient-to-b from-slate-50 to-white border-t border-slate-200">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold text-slate-600 tracking-wide">FSM TASK STATE</span>
-        <span className={['text-xs font-bold px-2 py-0.5 rounded border', stateStyle.cls].join(' ')}>
-          {stateStyle.label}
-        </span>
+        <div className="flex items-center gap-2">
+          {isAi && aiModel && <span className="text-xs text-teal">✦ {aiModel.split('-').slice(0,3).join('-')}</span>}
+          <span className={['text-xs font-bold px-2 py-0.5 rounded border', stateStyle.cls].join(' ')}>
+            {stateStyle.label}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-x-3">
         <div>
           <Field icon="▦" label="Hardware Dimension" value={meta.hwDimension} />
-          <Field icon="→" label="Pre-Condition States" value={meta.preCondition} />
-          <Field icon="⚙" label="Execution Engine" value={meta.execEngine} mono />
+          <Field icon="→" label="Pre-Condition States" value={meta.preCondition} aiEnhanced={isAi} />
+          <Field icon="⚙" label="Execution Engine" value={meta.execEngine} mono aiEnhanced={isAi} />
         </div>
         <div>
-          <Field icon="✓" label="Post-Condition Validation" value={meta.postValidation} />
-          <Field icon="⚡" label="Failure Blast Radius" value={meta.blastRadius} />
-          <Field icon="⇢" label="Downstream Successors" value={meta.downstream} />
+          <Field icon="✓" label="Post-Condition Validation" value={meta.postValidation} aiEnhanced={isAi} />
+          <Field icon="⚡" label="Failure Blast Radius" value={meta.blastRadius} aiEnhanced={isAi} />
+          <Field icon="⇢" label="Downstream Successors" value={meta.downstream} aiEnhanced={isAi} />
         </div>
       </div>
+
+      {isAi && aiMeta?.cveRisks && aiMeta.cveRisks !== 'none identified' && (
+        <Field icon="🛡" label="CVE / Security Risks" value={aiMeta.cveRisks} aiEnhanced />
+      )}
+      {isAi && aiMeta?.bestPractice && (
+        <Field icon="★" label="Best Practice" value={aiMeta.bestPractice} aiEnhanced />
+      )}
 
       {meta.stackContext && (
         <div className="mt-1 text-xs text-slate-400 border-t border-slate-100 pt-1.5">
           Stack context: <span className="text-teal font-medium">{meta.stackContext}</span>
+        </div>
+      )}
+
+      {GROQ_CONFIGURED && (
+        <div className="mt-2 pt-2 border-t border-slate-100">
+          {aiError && <div className="text-xs text-red-500 mb-1">{aiError}</div>}
+          <button
+            onClick={handleDeepen}
+            disabled={aiLoading}
+            className={['text-xs rounded px-3 py-1 font-semibold border transition-colors',
+              aiLoading ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+              : 'bg-teal/10 text-teal border-teal/30 hover:bg-teal/20'].join(' ')}
+          >
+            {aiLoading ? '⟳ Querying Groq...' : isAi ? '⟳ Re-enrich' : '✦ AI Deepen — Groq'}
+          </button>
         </div>
       )}
     </div>

@@ -6,6 +6,8 @@ import { getRealTasks } from '../../lib/realTasks.js';
 import { getIncidentFixTasks } from '../../lib/incidentFixTasks.js';
 import { buildDesignTasks } from '../../lib/designTasks.js';
 import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
+import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
+import { enrichTaskWithGroq } from '../../lib/groq.js';
 
 // ── Layer definitions (bottom of stack → top) ────────────────────────────────
 
@@ -131,22 +133,47 @@ function getLayerId(task) {
 function FsmDetailPanel({ item, ctx, onClose }) {
   if (!item) return null;
   const { task, sourceLabel } = item;
-  const meta = enrichTask(task, ctx);
-  const ss = FSM_STATE_STYLE[meta.fsmState] || FSM_STATE_STYLE.PENDING;
+  const baseMeta = enrichTask(task, ctx);
+  const ss = FSM_STATE_STYLE[baseMeta.fsmState] || FSM_STATE_STYLE.PENDING;
 
-  const Field = ({ icon, label, value, mono }) => (
+  const [aiMeta, setAiMeta] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiModel, setAiModel] = useState(null);
+
+  const meta = aiMeta ? { ...baseMeta, ...aiMeta } : baseMeta;
+
+  async function handleDeepen() {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await enrichTaskWithGroq(task, ctx, baseMeta);
+      setAiMeta(result.enriched);
+      setAiModel(result.model);
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  const Field = ({ icon, label, value, mono, aiEnhanced }) => (
     <div className="mb-3">
       <div className="flex items-center gap-1 mb-1">
         <span className="text-slate-400 text-xs">{icon}</span>
         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{label}</span>
+        {aiEnhanced && <span className="text-xs text-teal-400 ml-1">✦ AI</span>}
       </div>
       <div className={['text-xs leading-relaxed rounded px-2 py-1.5 border',
         mono ? 'font-mono bg-slate-900 text-green-300 border-slate-700 whitespace-pre-wrap break-all'
+             : aiEnhanced ? 'bg-teal-950 text-teal-100 border-teal-800'
              : 'bg-slate-800 text-slate-200 border-slate-700'].join(' ')}>
         {value}
       </div>
     </div>
   );
+
+  const isAi = !!aiMeta;
 
   return (
     <div className="w-80 flex-shrink-0 bg-slate-900 border-l border-slate-700 overflow-y-auto flex flex-col">
@@ -157,20 +184,59 @@ function FsmDetailPanel({ item, ctx, onClose }) {
         </div>
         <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-sm flex-shrink-0">✕</button>
       </div>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700">
+
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700 flex-shrink-0">
         <span className={['text-xs font-bold px-2 py-0.5 rounded border', ss.cls].join(' ')}>{ss.label}</span>
         <span className="text-xs text-slate-400">from <span className="text-teal-400">{sourceLabel}</span></span>
+        {isAi && <span className="text-xs text-teal-400 ml-auto">✦ Groq</span>}
       </div>
+
       <div className="p-3 flex-1">
         <Field icon="▦" label="Hardware Dimension" value={meta.hwDimension} />
-        <Field icon="→" label="Pre-Condition States" value={meta.preCondition} />
-        <Field icon="⚙" label="Execution Engine" value={meta.execEngine} mono />
-        <Field icon="✓" label="Post-Condition Validation" value={meta.postValidation} />
-        <Field icon="⚡" label="Failure Blast Radius" value={meta.blastRadius} />
-        <Field icon="⇢" label="Downstream Successors" value={meta.downstream} />
+        <Field icon="→" label="Pre-Condition States" value={isAi ? meta.preCondition : baseMeta.preCondition} aiEnhanced={isAi} />
+        <Field icon="⚙" label="Execution Engine" value={meta.execEngine} mono aiEnhanced={isAi} />
+        <Field icon="✓" label="Post-Condition Validation" value={meta.postValidation} aiEnhanced={isAi} />
+        <Field icon="⚡" label="Failure Blast Radius" value={meta.blastRadius} aiEnhanced={isAi} />
+        <Field icon="⇢" label="Downstream Successors" value={meta.downstream} aiEnhanced={isAi} />
+
+        {isAi && aiMeta.cveRisks && aiMeta.cveRisks !== 'none identified' && (
+          <Field icon="🛡" label="CVE / Security Risks" value={aiMeta.cveRisks} aiEnhanced />
+        )}
+        {isAi && aiMeta.bestPractice && (
+          <Field icon="★" label="Best Practice" value={aiMeta.bestPractice} aiEnhanced />
+        )}
+
         {meta.stackContext && (
-          <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-700">
+          <div className="text-xs text-slate-500 mt-1 pt-2 border-t border-slate-700">
             Stack: <span className="text-teal-400">{meta.stackContext}</span>
+          </div>
+        )}
+
+        {/* Groq enrich button */}
+        {GROQ_CONFIGURED && (
+          <div className="mt-3 pt-3 border-t border-slate-700">
+            {aiError && (
+              <div className="text-xs text-red-400 mb-2 bg-red-950 border border-red-800 rounded px-2 py-1">{aiError}</div>
+            )}
+            {isAi && aiModel && (
+              <div className="text-xs text-slate-500 mb-2">Enriched by <span className="text-teal-400">{aiModel}</span></div>
+            )}
+            <button
+              onClick={handleDeepen}
+              disabled={aiLoading}
+              className={['w-full text-xs rounded px-3 py-1.5 font-semibold transition-colors border',
+                aiLoading ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
+                : isAi ? 'bg-teal-900 text-teal-200 border-teal-700 hover:bg-teal-800'
+                : 'bg-teal text-white border-teal hover:bg-teal/80'].join(' ')}
+            >
+              {aiLoading ? '⟳ Querying Groq...' : isAi ? '⟳ Re-enrich with Groq' : '✦ AI Deepen — Groq'}
+            </button>
+          </div>
+        )}
+        {!GROQ_CONFIGURED && (
+          <div className="mt-3 pt-3 border-t border-slate-700 text-xs text-slate-600">
+            Deploy <code className="text-slate-500">workers/ai-worker.js</code> and set{' '}
+            <code className="text-slate-500">GROQ_CONFIGURED = true</code> to enable Groq enrichment.
           </div>
         )}
       </div>
