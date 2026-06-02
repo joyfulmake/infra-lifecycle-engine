@@ -6,6 +6,7 @@ import { getRealTasks } from '../../lib/realTasks.js';
 import { buildDesignTasks } from '../../lib/designTasks.js';
 import { canUseFeature } from '../../lib/auth.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
+import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
 
 const BUFFER = 1.3;
 
@@ -162,9 +163,88 @@ function TaskEditPanel({ taskKey: key, task, override, onSave, onClear, canEdit 
   );
 }
 
+// ── Two-tab expanded panel: Schedule | FSM State ─────────────────────────────
+
+function ExpandedTaskPanel({ taskKey, task, override, onSave, onClear, canEdit, ctx }) {
+  const [activeTab, setActiveTab] = useState('schedule');
+  return (
+    <div>
+      <div className="flex border-b border-slate-200 bg-slate-50">
+        {['schedule', 'fsm'].map(t => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={[
+              'px-3 py-1.5 text-xs font-semibold border-b-2 -mb-px transition-colors',
+              activeTab === t
+                ? 'border-teal text-teal bg-white'
+                : 'border-transparent text-slate-400 hover:text-slate-600',
+            ].join(' ')}
+          >
+            {t === 'schedule' ? '⏱ Schedule' : '⬡ FSM State'}
+          </button>
+        ))}
+      </div>
+      {activeTab === 'schedule'
+        ? <TaskEditPanel taskKey={taskKey} task={task} override={override} onSave={onSave} onClear={onClear} canEdit={canEdit} />
+        : <FsmPanel task={task} ctx={ctx} />
+      }
+    </div>
+  );
+}
+
+// ── FSM Metadata panel ────────────────────────────────────────────────────────
+
+function FsmPanel({ task, ctx }) {
+  const meta = enrichTask(task, ctx);
+  const stateStyle = FSM_STATE_STYLE[meta.fsmState] || FSM_STATE_STYLE.PENDING;
+
+  const Field = ({ icon, label, value, mono }) => (
+    <div className="mb-2.5">
+      <div className="flex items-center gap-1 mb-0.5">
+        <span className="text-slate-400 text-xs">{icon}</span>
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+      </div>
+      <div className={['text-xs leading-relaxed rounded px-2 py-1.5 border', mono ? 'font-mono bg-slate-900 text-green-300 border-slate-700 whitespace-pre-wrap break-all' : 'bg-slate-50 text-slate-700 border-slate-200'].join(' ')}>
+        {value}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="px-3 pb-3 pt-2 bg-gradient-to-b from-slate-50 to-white border-t border-slate-200">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-slate-600 tracking-wide">FSM TASK STATE</span>
+        <span className={['text-xs font-bold px-2 py-0.5 rounded border', stateStyle.cls].join(' ')}>
+          {stateStyle.label}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3">
+        <div>
+          <Field icon="▦" label="Hardware Dimension" value={meta.hwDimension} />
+          <Field icon="→" label="Pre-Condition States" value={meta.preCondition} />
+          <Field icon="⚙" label="Execution Engine" value={meta.execEngine} mono />
+        </div>
+        <div>
+          <Field icon="✓" label="Post-Condition Validation" value={meta.postValidation} />
+          <Field icon="⚡" label="Failure Blast Radius" value={meta.blastRadius} />
+          <Field icon="⇢" label="Downstream Successors" value={meta.downstream} />
+        </div>
+      </div>
+
+      {meta.stackContext && (
+        <div className="mt-1 text-xs text-slate-400 border-t border-slate-100 pt-1.5">
+          Stack context: <span className="text-teal font-medium">{meta.stackContext}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Task row with expand/edit ─────────────────────────────────────────────────
 
-function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHours, isUum, canEdit, onSave, onClear }) {
+function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHours, isUum, canEdit, onSave, onClear, ctx }) {
   const role = task.team || task.role || '';
   const color = TEAM_COLORS[role] || 'badge-slate';
   const barColor = TEAM_BAR_COLOR[role] || '#14B8A6';
@@ -227,9 +307,9 @@ function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHour
         </div>
       </div>
       {expanded && (
-        <TaskEditPanel
+        <ExpandedTaskPanel
           taskKey={key} task={task} override={override}
-          onSave={onSave} onClear={onClear} canEdit={canEdit}
+          onSave={onSave} onClear={onClear} canEdit={canEdit} ctx={ctx}
         />
       )}
     </div>
@@ -630,6 +710,7 @@ export default function GanttTab() {
                 canEdit={canEdit}
                 onSave={handleSaveOverride}
                 onClear={handleClearOverride}
+                ctx={s.ctx}
               />
             );
           })}
@@ -669,6 +750,7 @@ export default function GanttTab() {
                     canEdit={canEdit}
                     onSave={handleSaveOverride}
                     onClear={handleClearOverride}
+                    ctx={s.ctx}
                   />
                 );
               })}
