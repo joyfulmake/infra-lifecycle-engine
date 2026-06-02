@@ -200,6 +200,12 @@ await shot('roles-raci-table');
 await clickTab('CMDB');
 await shot('cmdb-inventory');
 
+// Screenshot 11: Matrix — Universal Cross-Stack Dependency Matrix
+const matrixOk = await clickTab('Matrix');
+if (matrixOk) {
+  await shot('matrix-cross-stack');
+}
+
 await browser.close();
 
 console.log('\n── Done ──');
