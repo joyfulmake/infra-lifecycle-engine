@@ -21,13 +21,13 @@ root.render(
 );
 
 // Remove splash screen once React has painted
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => {
-    const splash = document.getElementById('splash');
-    if (splash) {
-      splash.style.transition = 'opacity 0.3s';
-      splash.style.opacity = '0';
-      setTimeout(() => splash.remove(), 320);
-    }
-  });
-});
+function removeSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  splash.style.transition = 'opacity 0.3s';
+  splash.style.opacity = '0';
+  setTimeout(() => splash.remove(), 320);
+}
+requestAnimationFrame(() => requestAnimationFrame(removeSplash));
+// Hard fallback: force-remove after 4s in case React throws during mount
+setTimeout(removeSplash, 4000);
