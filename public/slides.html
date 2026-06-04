@@ -441,35 +441,81 @@
     <div class="accent-bar"></div>
     <div class="eyebrow">Live API Intelligence</div>
     <h2>Know your stack's real lifecycle status — before cutover</h2>
-    <p class="sub" style="margin-top:12px;font-size:14px;">
-      The CMDB tab queries <strong>endoflife.date</strong> in real time — 500+ products — to confirm whether
-      your selected OS, database, and middleware are still under vendor support.
-      The Gantt tab adds <strong>Critical Path Method</strong> to flag which tasks, if delayed, push your go-live date.
+    <p class="sub" style="margin-top:10px;font-size:13px;">
+      The CMDB tab queries <strong>endoflife.date</strong> in real time for 500+ products.
+      Goes beyond EOL/EOS — surfaces LTS status, Extended Support windows, Security-Only periods, and day-precise countdowns.
     </p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:28px;max-width:860px;width:100%;">
-      <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.25);border-radius:10px;padding:20px;">
-        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px;">LIVE CMDB</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px;max-width:960px;width:100%;">
+      <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.25);border-radius:10px;padding:18px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px;">LIVE CMDB</div>
         <div class="feat-list">
-          <div class="feat"><div class="feat-dot"></div><span>Auto-fetches lifecycle data for your stack on CMDB open</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Shows cycle, latest version, EOS date, EOL date, live status</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Free-text search — any of 500+ products live</span></div>
-          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span>EOL confirmed = coherence alert surfaced across all relevant tabs</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Stack auto-check on open — OS, DB, App vs live API</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>LTS flag, Extended Support date, days-until-EOL countdown</span></div>
+          <div class="feat"><div class="feat-dot" style="background:var(--amber);"></div><span>Security-Only detection: patches but no new features</span></div>
+          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span>EOL confirmed = cross-tab coherence alert</span></div>
         </div>
       </div>
-      <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:20px;">
-        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:var(--red);margin-bottom:10px;">CRITICAL PATH METHOD</div>
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:18px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#A5B4FC;margin-bottom:10px;">UUM KEYWORD MATCHER</div>
         <div class="feat-list">
-          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span><strong>CP</strong> badge on tasks where any delay shifts the project end date</span></div>
-          <div class="feat"><div class="feat-dot" style="background:var(--teal);"></div><span><strong>+Nd float</strong> on parallel tasks showing their slack in working days</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Gantt header: CP count vs float count at a glance</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Computed from duration overrides — updates live as you edit tasks</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#A5B4FC;"></div><span>Type any project description — scores entire UUM catalog</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#A5B4FC;"></div><span>"oracle migration aix linux" finds DBM, UPG, SEC items instantly</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Toggle-add matched UUM items directly from results</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Live API context (EOL/LTS) fetched in parallel per keyword</span></div>
+        </div>
+      </div>
+      <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:18px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--red);margin-bottom:10px;">CRITICAL PATH METHOD</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span><strong>CP</strong> badge — sequential tasks where delay shifts go-live</span></div>
+          <div class="feat"><div class="feat-dot" style="background:var(--teal);"></div><span><strong>+Nd float</strong> on parallel tasks — working-day slack shown</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>CP/Float summary in Gantt header</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Recalculates live as duration overrides are applied</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">endoflife.date API — no key required</span>
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">LTS · ESU · Security-Only detection</span>
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:#A5B4FC;">Keyword → UUM auto-add</span>
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#FCA5A5;">CPM critical-path highlighting</span>
+    </div>
+  </div>
+
+  <!-- ── Slide 9: Smart Input ───────────────────────────── -->
+  <div class="slide" id="s8input">
+    <div class="accent-bar"></div>
+    <div class="eyebrow">Smart Input Layer</div>
+    <h2>Every field knows your stack — and the live API does too</h2>
+    <p class="sub" style="margin-top:12px;font-size:14px;">
+      Auto-suggestions in the build phase, requirements, and all 240 System Design fields are context-aware —
+      and the OS / DB / App selectors now also query <strong>endoflife.date</strong> live to surface options
+      that don't appear in the standard dropdown.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;max-width:860px;width:100%;">
+      <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.25);border-radius:10px;padding:20px;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px;">KEYBOARD NAVIGATION — ALL FIELDS</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot"></div><span><strong>↓ ↑</strong> navigates suggestions — highlighted in teal</span></div>
+          <div class="feat"><div class="feat-dot"></div><span><strong>Enter</strong> selects the highlighted item (or top suggestion)</span></div>
+          <div class="feat"><div class="feat-dot"></div><span><strong>Escape</strong> closes the dropdown without selecting</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Works in: build phase, requirements fields, all System Design inputs</span></div>
+        </div>
+      </div>
+      <div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:20px;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:var(--accent2);margin-bottom:10px;">LIVE API IN BUILD PHASE</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:var(--accent2);"></div><span>Type 3+ chars in OS/DB/App selector — endoflife.date queried live</span></div>
+          <div class="feat"><div class="feat-dot" style="background:var(--accent2);"></div><span>Catalog matches + Live API results in separate sections</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Each live result shows lifecycle badge (Supported / EOS Soon / EOL)</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Select any API result as your stack component — not just predefined list</span></div>
         </div>
       </div>
     </div>
     <div style="margin-top:20px;display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">endoflife.date API — no key required</span>
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#FCA5A5;">60+ stack component mappings</span>
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);color:var(--accent2);">Cross-tab EOL coherence alerts</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">Keyboard nav in every suggest input</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);color:var(--accent2);">Live API alongside catalog — 500+ extra options</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">Context-aware: suggestions based on current build</span>
     </div>
   </div>
 

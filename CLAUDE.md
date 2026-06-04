@@ -95,8 +95,9 @@ src/
     smartScan.js          — standalone CVE/EOL scan + auto-suggest incidents/UUM codes
     suggestDb.js          — suggestion engine: `matchSuggestKeys(val, fieldId, minChars=3)` (static DB) + `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` (context-aware, used by SuggestInput in PhasePanel)
     roleAccess.js         — email-match role-based access: `getUserRolesForBuild(authUser, roleAssignments)`, `canEditDesignSection(userRoles, sectionKey)`, `isQATeamLead(authUser, roleAssignments)`; `ROLE_SECTION_MAP` maps RACI roles to design section keys
-    coherenceEngine.js    — pure `runCoherenceChecks(stateSnapshot)` → `[{ id, severity, tabs, message, action }]`; no React, no deps; runs 11 cross-tab checks (compliance gap, DR/backup, security incidents, network incidents, SLA/monitoring, design sparseness, empty Phase 2, RTM fails, roles missing, RTM pending count, storage incidents)
-    useCoherenceEngine.js — React hook; debounces 600ms; watches selInc/selUUM/sysDesignData/requirements/rtmRows/roleAssignments; calls `setCoherenceAlerts`; mounted in PmTabs
+    coherenceEngine.js    — pure `runCoherenceChecks(stateSnapshot)` → `[{ id, severity, tabs, message, action }]`; no React, no deps; runs 12 cross-tab checks (compliance gap, DR/backup, security incidents, network incidents, SLA/monitoring, design sparseness, empty Phase 2, RTM fails, roles missing, RTM pending count, storage incidents, live EOL from liveEolData)
+    useCoherenceEngine.js — React hook; debounces 600ms; watches selInc/selUUM/sysDesignData/requirements/rtmRows/roleAssignments/liveEolData; calls `setCoherenceAlerts`; mounted in PmTabs
+    eolApi.js             — endoflife.date REST client; `fetchProductCycles(slug)`, `searchProducts(query)`, `fetchComponentLiveData(componentName)`, `cycleLiveStatus(cycle)`; `EOL_SLUG_MAP` maps 60+ component names to API slugs; `daysUntil()`, `securityOnlyStatus()`, `LtsBadge`, `DaysChip`, `ExtendedSupportChip` helpers live in CmdbTab.jsx
     exportExcel.js        — 13-sheet styled Excel export using xlsx-js-style
     db.js                 — Dexie IndexedDB wrapper (localGetBuilds, localSaveBuild, localDeleteBuild)
     firebase.js           — lazy Firebase singleton (fbSignIn, fbSignOut, cloudSaveBuild, cloudLoadBuilds)
@@ -231,7 +232,7 @@ After approval, follow Part 5 of the guide (post-certification steps).
 
 - Disclaimer shown at bottom of left sidebar (10px, muted) explaining the tool's scope
 - "About this tool ↗" link points to `/slides.html`
-- **Presentation deck**: https://opsmanifest.netlify.app/slides.html — 5-slide standalone HTML, keyboard/click navigation, no dependencies
+- **Presentation deck**: https://opsmanifest.netlify.app/slides.html — 10-slide standalone HTML, keyboard/click navigation, no dependencies
 
 ## AI integration
 
@@ -257,11 +258,14 @@ Always keep the proxy pattern — never call `api.groq.com` directly from the fr
 ### endoflife.date Live API (CMDB tab — always on, no key required)
 - **Module**: `src/lib/eolApi.js` — REST client for `https://endoflife.date/api`
 - **EOL_SLUG_MAP**: 60+ component-to-product-slug mappings (OS, DB, App/Middleware)
-- **Stack Live Check**: auto-fetches lifecycle data for current ctx (hw/os/db/app) on CMDB open; shows cycle, latest version, EOS, EOL, live status
-- **Search**: any of 500+ products by keyword via product index + cycle fetch
-- **Store**: `liveEolData: { [componentName]: { slug, matchedCycle, allCycles, fetchedAt } }` — non-persisted runtime state
+- **Stack Live Check**: auto-fetches lifecycle data for current ctx (hw/os/db/app) on CMDB open; shows cycle, latest version, EOS, EOL, LTS, Extended Support, days-until-EOL countdown, security-only period
+- **Live Search**: any of 500+ products by keyword; same enhanced columns
+- **UUM Keyword Matcher**: free-text input in CMDB tab; scores entire ALL_UUM catalog by keyword overlap; toggle-add matched items to selUUM; live API EOL context fetched in parallel
+- **Lifecycle data surfaces**: `cycle.lts` (LTS flag/date), `cycle.extendedSupport` (ESU availability), `cycle.support` vs `cycle.eol` delta = security-only period detection, day-precise countdown chips (red <90d, amber <1yr, months otherwise)
+- **Store**: `liveEolData: { [componentName]: { slug, matchedCycle, allCycles, fetchedAt } }` — non-persisted runtime state; `setLiveEolData(componentName, data)`
 - **Coherence check 12**: `runCoherenceChecks` emits `live_eol_detected` (warn) / `live_eos_soon` (info) alerts when live API confirms EOL/EOS-soon stack components
 - **CSP**: `https://endoflife.date` added to `connect-src` in `netlify.toml`
+- **Build phase live search**: `FilteredSuggestInput` in PhasePanel queries endoflife.date on 3+ chars alongside catalog; shows "Live API" section in dropdown with lifecycle badge per result; any API result can be selected as ctx value
 
 ### Tab sync via coherence engine
 All AI outputs feed into the Zustand store. `useCoherenceEngine` (mounted in PmTabs) now watches 12 state slices including `liveEolData`, runs checks on every state change, and emits `coherenceAlerts` read by `AgentInsights` panels. The Matrix tab recomputes from `selInc`/`selUUM`/`designApplied` reactively — no manual sync needed.
@@ -313,6 +317,8 @@ GitHub repo is connected to Netlify for auto-deploy on push to `main`.
 - **React 19**: Some third-party component libraries haven't updated peer deps for React 19 yet. Check compatibility before adding dependencies.
 - **xlsx-js-style**: Excel export uses `xlsx-js-style` npm package (API-compatible with SheetJS, adds cell `s` style property). Do NOT upgrade to `xlsx` v0.19+ — it removes community cell styles.
 - **Auto-suggestions**: Fixed with React Portal (`createPortal`) in both `SystemDesignTab.jsx` and `PhasePanel.jsx`. Dropdowns render at `document.body` level with `position: fixed`. `matchSuggestKeys(val, fieldId, minChars=3)` — returns `[]` if val.length < 3. `SuggestInput` in PhasePanel calls `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` which reads the store and prepends stack-specific hints (scan findings, Oracle/AIX/RHEL/WebSphere error patterns, EOL flags, role owner suggestions) before the static DB results. `SystemDesignTab` still uses plain `matchSuggestKeys` (design fields are already field-specific enough).
+- **Keyboard navigation in all suggest inputs**: All three suggest input variants (`SuggestInput`, `FilteredSuggestInput` in PhasePanel; `DesignField` in SystemDesignTab) support ArrowDown/ArrowUp to navigate, Enter to select (highlighted item, or first if none highlighted), Escape to close. `SuggestDropdown` portals accept `activeIdx` prop and scroll the active item into view. Active item is highlighted with teal background.
+- **FilteredSuggestInput live API**: When 3+ chars typed in any build-phase OS/DB/App selector, a debounced (500ms) search hits endoflife.date. Results appear in a "Live API" section beneath the catalog section. Selecting an API result sets that as the ctx value — allows picking any product not in the predefined list.
 - **RTM sign-off**: Requires every row explicitly set via `s.setRtmRow(id, status)`. "All PASS" and "All N/A" buttons bulk-set.
 - **CAB declined**: `s.cabDeclined` triggers rollback plan in PhasePanel and rollback tasks in GanttTab. `setCabDeclined(true)` also sets `cabApproved = false`. After decline, PM can click "Unlock Tabs for Revision" → `unlockedForRevision = true` → all tabs unlocked in PmTabs regardless of phase gates. "Resubmit to CAB" calls `resubmitCAB()` which clears `cabDeclined` and `unlockedForRevision`. "Quick Change — PM Override" (Pro+) calls `setCabApproved(true)` — bypasses re-review and immediately allows cutover. Do NOT call `resubmitCAB()` here; that resets to pending and blocks the PM.
 - **Tasks stale detection**: `tasksStaleReason` is set (as a string) by `toggleInc`/`toggleUUM` (when `phase2Active`), `setDesignField`/`setAllDesignFields` (when `designApplied`), `setChangePeriods` (when `designApplied`), `setRequirements` (when `projectStartDate` or `hoursPerDay` changes and `designApplied`), and `setUnlockedForRevision(true)` (when `designApplied`). GanttTab shows an amber banner with a Regenerate button that calls `setAiTasks([])` + `setTasksStaleReason(null)` — returning to rule-based auto-computed tasks. PmTabs shows amber pulsing dot on the Gantt tab label when `tasksStaleReason` is set.
