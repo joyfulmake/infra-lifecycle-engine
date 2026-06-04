@@ -85,6 +85,39 @@ function calcDates(tasks, startDateStr, hpd, overrides, blocked = []) {
   });
 }
 
+// Critical Path Method: sequential tasks ARE the critical path in this model.
+// Parallel tasks have slack = working-day gap until next sequential task starts.
+function computeCPM(tasks, dates, overrides, hpd = 8, blocked = []) {
+  const result = tasks.map(() => ({ isCritical: true, slackDays: 0 }));
+  if (!dates || dates.some(d => !d)) return result;
+
+  // Walk backwards to find the next sequential task's start for each parallel
+  let nextSeqStart = null;
+  for (let i = tasks.length - 1; i >= 0; i--) {
+    const key = taskKey(tasks[i], i);
+    const isParallel = overrides[key]?.parallel ?? false;
+    if (!isParallel) {
+      nextSeqStart = dates[i]?.start || null;
+      result[i] = { isCritical: true, slackDays: 0 };
+    } else {
+      result[i].isCritical = false;
+      if (nextSeqStart && dates[i]?.end) {
+        let slack = 0;
+        let c = new Date(dates[i].end);
+        const target = new Date(nextSeqStart);
+        while (c < target) {
+          c.setDate(c.getDate() + 1);
+          const iso = c.toISOString().slice(0, 10);
+          const isBlocked = blocked.some(b => b.start && b.end && b.start <= iso && iso <= b.end);
+          if (c.getDay() !== 0 && c.getDay() !== 6 && !isBlocked) slack++;
+        }
+        result[i].slackDays = Math.max(0, slack);
+      }
+    }
+  }
+  return result;
+}
+
 function getEnvTag(task) {
   const n = (task.name || task.title || '').toLowerCase();
   const prod = !!task.window || /\bprod\b|cutover|go.live|switch|promo/i.test(n);
@@ -292,7 +325,7 @@ function FsmPanel({ task, ctx }) {
 
 // ── Task row with expand/edit ─────────────────────────────────────────────────
 
-function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHours, isUum, canEdit, onSave, onClear, ctx }) {
+function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHours, isUum, canEdit, onSave, onClear, ctx, cpm }) {
   const role = task.team || task.role || '';
   const color = TEAM_COLORS[role] || 'badge-slate';
   const barColor = TEAM_BAR_COLOR[role] || '#14B8A6';
@@ -303,11 +336,15 @@ function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHour
   const key = taskKey(task, index);
   const isParallel = override?.parallel ?? false;
 
+  const isCritical = cpm?.isCritical ?? !isParallel;
+  const slackDays = cpm?.slackDays ?? 0;
+
   return (
     <div className={[
       'border-b border-slate-100',
       isMilestone ? 'bg-amber-50/60 border-l-2 border-amber-400' : '',
-      isParallel ? 'border-l-2 border-teal/40' : '',
+      isCritical && !isMilestone ? 'border-l-2 border-red-300' : '',
+      !isCritical ? 'border-l-2 border-teal/40' : '',
     ].join(' ')}>
       <div
         className="flex items-start gap-2 px-3 py-2 hover:bg-slate-50 transition-colors cursor-pointer"
@@ -317,6 +354,12 @@ function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHour
           {isParallel ? '‖' : String(index + 1).padStart(2, '0')}
         </div>
         <span className={`badge ${color} flex-shrink-0 text-xs`}>{role}</span>
+        {isCritical && !isParallel && (
+          <span className="text-xs text-red-400 font-semibold flex-shrink-0 leading-5" title="Critical path task — delay propagates to project end">CP</span>
+        )}
+        {!isCritical && slackDays > 0 && (
+          <span className="text-xs text-teal-500 flex-shrink-0 leading-5" title={`Float: ${slackDays} working day(s) of slack`}>+{slackDays}d</span>
+        )}
         <div className="flex-1 min-w-0">
           <div className={['text-xs font-medium leading-snug', isMilestone ? 'text-amber-800 font-bold' : 'text-slate-700'].join(' ')}>
             {isMilestone && <span className="mr-1">◆</span>}{task.title || task.name}
@@ -649,6 +692,10 @@ export default function GanttTab() {
   const lastDesignEnd = designDates[designDates.length - 1]?.end || s.requirements.projectStartDate;
   const allUumDates = uumTaskGroups.map(({ tasks }) => calcDates(tasks, lastDesignEnd, hpd, s.ganttOverrides, blocked));
 
+  const designCPM = computeCPM(designTasks, designDates, s.ganttOverrides, hpd, blocked);
+  const criticalCount = designCPM.filter(c => c.isCritical).length;
+  const floatCount = designCPM.filter(c => !c.isCritical).length;
+
   const regions = s.selRegions || ['Production'];
 
   function toggleEdit(key) {
@@ -692,6 +739,13 @@ export default function GanttTab() {
             {uumTaskGroups.length > 0 && ` + ${uumTaskGroups.length} UUM (~${uumTotal}h)`}
             <span className="ml-2 text-amber-600 font-medium">~{totalBufDays}d buffered @ {hpd}h/day</span>
             {!hasStartDate && <span className="ml-2 text-slate-400">— set start date to see scheduled dates</span>}
+          </div>
+          <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+            <span className="text-red-400 font-semibold">CP: {criticalCount}</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-teal-500 font-semibold">Float: {floatCount}</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-slate-400">Critical path = sequential tasks (any delay shifts project end)</span>
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -759,6 +813,7 @@ export default function GanttTab() {
                 onSave={handleSaveOverride}
                 onClear={handleClearOverride}
                 ctx={s.ctx}
+                cpm={designCPM[i]}
               />
             );
           })}

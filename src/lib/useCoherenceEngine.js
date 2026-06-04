@@ -16,6 +16,7 @@ export function useCoherenceEngine() {
   const requirements = useStore(s => s.requirements);
   const rtmRows = useStore(s => s.rtmRows);
   const roleAssignments = useStore(s => s.roleAssignments);
+  const liveEolData = useStore(s => s.liveEolData);
   const setCoherenceAlerts = useStore(s => s.setCoherenceAlerts);
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function useCoherenceEngine() {
     const snapshot = {
       isBuilt, designApplied, phase2Active, rtmSigned,
       selInc, selUUM, customInc, sysDesignData, requirements, rtmRows, roleAssignments,
+      liveEolData,
     };
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
@@ -33,5 +35,5 @@ export function useCoherenceEngine() {
     }, 600);
     return () => clearTimeout(timerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBuilt, designApplied, phase2Active, rtmSigned, selInc, selUUM, customInc, sysDesignData, requirements, rtmRows, roleAssignments]);
+  }, [isBuilt, designApplied, phase2Active, rtmSigned, selInc, selUUM, customInc, sysDesignData, requirements, rtmRows, roleAssignments, liveEolData]);
 }

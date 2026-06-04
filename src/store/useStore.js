@@ -217,6 +217,9 @@ export const useStore = create((set, get) => ({
   // Revision mode — unlocked after CAB decline so PM can update any tab
   unlockedForRevision: false,
 
+  // Live EOL data from endoflife.date API: { [componentName]: { slug, matchedCycle, allCycles, fetchedAt, error } }
+  liveEolData: {},
+
   // Tasks stale reason — set when design/incidents/periods change after tasks generated
   tasksStaleReason: null,
 
@@ -370,6 +373,10 @@ export const useStore = create((set, get) => ({
   })),
 
   setClosureNotes: (notes) => set({ closureNotes: notes, isDirty: true }),
+
+  setLiveEolData: (componentName, data) => set(s => ({
+    liveEolData: { ...s.liveEolData, [componentName]: data },
+  })),
 
   loadBuild: (b) => set({
     isBuilt: b.isBuilt ?? false,

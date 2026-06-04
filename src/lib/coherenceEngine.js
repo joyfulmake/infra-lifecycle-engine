@@ -203,5 +203,51 @@ export function runCoherenceChecks(state) {
     }
   }
 
+  // 12. Live EOL alerts from endoflife.date API
+  const liveEolData = state.liveEolData || {};
+  const liveEolEntries = Object.entries(liveEolData);
+  if (liveEolEntries.length > 0) {
+    const today = new Date();
+    function liveStatus(cycle) {
+      if (!cycle) return 'unknown';
+      const eolDate = cycle.eol === true ? new Date('1970-01-01') :
+        cycle.eol === false ? null : cycle.eol ? new Date(cycle.eol) : null;
+      const eosDate = cycle.support === false ? new Date('1970-01-01') :
+        (typeof cycle.support === 'string' ? new Date(cycle.support) : null);
+      if (eolDate && eolDate < today) return 'eol';
+      if (eosDate && eosDate < today) return 'eos';
+      const yr = 365 * 24 * 60 * 60 * 1000;
+      if (eolDate && (eolDate - today) < yr) return 'eos_soon';
+      if (eosDate && (eosDate - today) < yr) return 'eos_soon';
+      return 'active';
+    }
+
+    const eolComponents = liveEolEntries
+      .filter(([, d]) => liveStatus(d.matchedCycle) === 'eol')
+      .map(([name]) => name);
+    const eosSoonComponents = liveEolEntries
+      .filter(([, d]) => ['eos_soon', 'eos'].includes(liveStatus(d.matchedCycle)))
+      .map(([name]) => name);
+
+    if (eolComponents.length > 0) {
+      alerts.push({
+        id: 'live_eol_detected',
+        severity: 'warn',
+        tabs: ['cmdb', 'exec', 'design'],
+        message: `Live API confirms ${eolComponents.length} stack component(s) are End of Life: ${eolComponents.slice(0, 2).join(', ')}${eolComponents.length > 2 ? ` +${eolComponents.length - 2} more` : ''}.`,
+        action: 'CMDB tab for detailed lifecycle report',
+      });
+    }
+    if (eosSoonComponents.length > 0 && !eolComponents.length) {
+      alerts.push({
+        id: 'live_eos_soon',
+        severity: 'info',
+        tabs: ['cmdb'],
+        message: `${eosSoonComponents.length} component(s) approaching end-of-support in the next 12 months per live API.`,
+        action: 'CMDB tab for lifecycle planning',
+      });
+    }
+  }
+
   return alerts;
 }
