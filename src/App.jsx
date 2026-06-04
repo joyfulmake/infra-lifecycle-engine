@@ -2,10 +2,11 @@ import PhasePanel from './components/PhasePanel.jsx';
 import ExecOverview from './components/ExecOverview.jsx';
 import PmTabs from './components/PmTabs.jsx';
 import AuthModal from './components/AuthModal.jsx';
+import DemoTour from './components/DemoTour.jsx';
 import { useAuth } from './lib/AuthContext.jsx';
 
 export default function App() {
-  const { showAuthModal, setShowAuthModal } = useAuth();
+  const { showAuthModal, setShowAuthModal, authModalReason } = useAuth();
 
   return (
     <>
@@ -29,7 +30,8 @@ export default function App() {
         </div>
       </div>
 
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      {showAuthModal && <AuthModal reason={authModalReason} onClose={() => setShowAuthModal(false)} />}
+      <DemoTour />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PLANS, signIn, signOut, resolvePromoCode } from '../lib/auth.js';
+import { PLANS, signIn, signOut, resolvePromoCode, promoDaysRemaining, PROMO_VALIDITY_DAYS } from '../lib/auth.js';
 import { FIREBASE_CONFIGURED, fbSignIn } from '../lib/firebase.js';
 import { STRIPE_CONFIGURED, startCheckout, openCustomerPortal } from '../lib/stripe.js';
 import { useAuth } from '../lib/AuthContext.jsx';
@@ -20,16 +20,26 @@ const PLAN_BADGE = {
 
 export { PLAN_BADGE };
 
-export default function AuthModal({ onClose }) {
+const REASON_META = {
+  save:        { title: 'Sign in to save your build', sub: 'Free account — 2 builds saved in your browser. No credit card.', defaultPlan: 'starter', showPricing: false },
+  export:      { title: 'Sign in to export to Excel', sub: 'Free Starter account includes a 9-sheet Excel export.', defaultPlan: 'starter', showPricing: false },
+  build_limit: { title: "You've used all builds on your plan", sub: 'Upgrade to continue building and unlock more features.', defaultPlan: 'professional', showPricing: true },
+  signup:      { title: 'OpsManifest — Plans & Pricing', sub: 'Purpose-built for Unix/Linux infrastructure teams. All data stays in your browser.', defaultPlan: 'professional', showPricing: true },
+};
+
+export default function AuthModal({ reason = 'signup', onClose }) {
   const { authUser, setAuthUser } = useAuth();
+  const meta = REASON_META[reason] || REASON_META.signup;
+  const [showPricing, setShowPricing] = useState(meta.showPricing);
   const [annual, setAnnual] = useState(true);
-  const [selectedPlan, setSelectedPlan] = useState(authUser?.plan || 'professional');
+  const [selectedPlan, setSelectedPlan] = useState(authUser?.plan || meta.defaultPlan);
   const [email, setEmail] = useState(authUser?.email || '');
   const [syncPassword, setSyncPassword] = useState('');
   const [showSyncPw, setShowSyncPw] = useState(false);
   const [promo, setPromo] = useState('');
   const [showPromo, setShowPromo] = useState(false);
   const [promoMsg, setPromoMsg] = useState('');
+  const [appliedPromoCode, setAppliedPromoCode] = useState(null);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -48,13 +58,16 @@ export default function AuthModal({ onClose }) {
   }
 
   function handlePromoApply() {
-    const plan = resolvePromoCode(promo);
+    const code = promo.trim().toUpperCase();
+    const plan = resolvePromoCode(code);
     if (plan) {
       setSelectedPlan(plan);
-      setPromoMsg(`Code accepted — ${PLANS[plan]?.name} plan unlocked.`);
+      setAppliedPromoCode(code);
+      setPromoMsg(`Code accepted — ${PLANS[plan]?.name} access for ${PROMO_VALIDITY_DAYS} days.`);
       setPromo('');
     } else {
-      setPromoMsg('Invalid code. Try OPSPRO, OPSTEAM or OPSADMIN.');
+      setAppliedPromoCode(null);
+      setPromoMsg('Invalid or expired code. Contact hello@opsmanifest.app for a valid access code.');
     }
   }
 
@@ -78,7 +91,7 @@ export default function AuthModal({ onClose }) {
       if (needsCloudSync && syncPassword.trim()) {
         await fbSignIn(email.trim().toLowerCase(), syncPassword.trim());
       }
-      const user = signIn(email.trim(), selectedPlan, needsCloudSync ? syncPassword.trim() : null);
+      const user = signIn(email.trim(), selectedPlan, needsCloudSync ? syncPassword.trim() : null, appliedPromoCode);
       setAuthUser(user);
       onClose();
     } catch (err) {
@@ -101,17 +114,33 @@ export default function AuthModal({ onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[94vh] overflow-y-auto">
+      <div className={['bg-white rounded-2xl shadow-2xl w-full max-h-[94vh] overflow-y-auto', showPricing ? 'max-w-5xl' : 'max-w-md'].join(' ')}>
 
         {/* Header */}
         <div className="px-8 pt-7 pb-5 border-b border-slate-200">
+          {/* Promo expiry notice for current signed-in user */}
+          {authUser && (() => {
+            const days = promoDaysRemaining(authUser);
+            if (days === null) return null;
+            if (authUser.promoExpired) return (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                Your demo access has expired. To continue with {PLANS[authUser.plan]?.name || 'this plan'}, email{' '}
+                <a href="mailto:hello@opsmanifest.app?subject=OpsManifest Access Renewal" className="font-semibold underline">hello@opsmanifest.app</a>.
+              </div>
+            );
+            return (
+              <div className={['mb-4 rounded-lg px-4 py-3 text-sm border', days <= 3 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'].join(' ')}>
+                <strong>Demo access — {days} day{days !== 1 ? 's' : ''} remaining.</strong>{' '}
+                {days <= 3 ? 'Expiring soon. ' : ''}
+                To subscribe, select a plan below. To extend your demo, email{' '}
+                <a href="mailto:hello@opsmanifest.app?subject=OpsManifest Demo Extension" className="font-semibold underline">hello@opsmanifest.app</a>.
+              </div>
+            );
+          })()}
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-xl font-bold text-slate-800">OpsManifest — Plans &amp; Pricing</div>
-              <div className="text-sm text-slate-500 mt-1">
-                Purpose-built for Unix/Linux infrastructure teams.{' '}
-                <span className="text-slate-400">All data stays in your browser — no server, no tracking.</span>
-              </div>
+              <div className="text-xl font-bold text-slate-800">{meta.title}</div>
+              <div className="text-sm text-slate-500 mt-1">{meta.sub}</div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {canManageBilling && (
@@ -125,37 +154,28 @@ export default function AuthModal({ onClose }) {
                 </button>
               )}
               <button onClick={onClose} className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
-                {authUser ? 'Close' : 'Continue as Guest'}
+                {authUser ? 'Close' : reason === 'signup' ? 'Continue as Guest' : 'Not now'}
               </button>
             </div>
           </div>
 
-          {/* Billing toggle */}
-          <div className="flex items-center gap-3 mt-4">
-            <button
-              onClick={() => setAnnual(false)}
-              className={`text-sm font-medium transition-colors ${!annual ? 'text-slate-800' : 'text-slate-400'}`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setAnnual(a => !a)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${annual ? 'bg-teal-500' : 'bg-slate-300'}`}
-            >
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${annual ? 'left-6' : 'left-1'}`} />
-            </button>
-            <button
-              onClick={() => setAnnual(true)}
-              className={`text-sm font-medium transition-colors ${annual ? 'text-slate-800' : 'text-slate-400'}`}
-            >
-              Annual
-              <span className="ml-1.5 text-xs font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5">Save 17%</span>
-            </button>
-          </div>
+          {/* Billing toggle — only when pricing is visible */}
+          {showPricing && (
+            <div className="flex items-center gap-3 mt-4">
+              <button onClick={() => setAnnual(false)} className={`text-sm font-medium transition-colors ${!annual ? 'text-slate-800' : 'text-slate-400'}`}>Monthly</button>
+              <button onClick={() => setAnnual(a => !a)} className={`relative w-11 h-6 rounded-full transition-colors ${annual ? 'bg-teal-500' : 'bg-slate-300'}`}>
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${annual ? 'left-6' : 'left-1'}`} />
+              </button>
+              <button onClick={() => setAnnual(true)} className={`text-sm font-medium transition-colors ${annual ? 'text-slate-800' : 'text-slate-400'}`}>
+                Annual
+                <span className="ml-1.5 text-xs font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5">Save 17%</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Plan cards */}
-        <div className="px-8 py-6">
+        {/* Plan cards — only when showPricing */}
+        {showPricing && <div className="px-8 py-6">
           <div className="grid grid-cols-4 gap-4">
             {planList.map(planId => {
               const plan = PLANS[planId];
@@ -239,10 +259,22 @@ export default function AuthModal({ onClose }) {
               );
             })}
           </div>
-        </div>
+        </div>}
+
+        {/* "See all plans" toggle for compact mode */}
+        {!showPricing && !authUser && (
+          <div className="px-8 pt-2 pb-0">
+            <button
+              onClick={() => setShowPricing(true)}
+              className="text-xs text-teal-600 hover:text-teal-700 underline"
+            >
+              See all plans & pricing →
+            </button>
+          </div>
+        )}
 
         {/* Sign-in form */}
-        <div className="px-8 pb-8 border-t border-slate-100">
+        <div className="px-8 pb-8 border-t border-slate-100 mt-4">
           <div className="max-w-md mx-auto pt-6">
 
             {selectedPlan === 'enterprise' ? (
@@ -281,30 +313,24 @@ export default function AuthModal({ onClose }) {
 
                   {/* Cloud sync password — Pro+ with Firebase configured */}
                   {needsCloudSync && (
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                    <div className="border border-teal-200 rounded-lg p-3 bg-teal-50">
+                      <label className="block text-xs font-semibold text-teal-800 mb-1">
                         Cloud Sync Password
-                        <span className="ml-1 text-xs text-teal-600 font-normal">(enables cross-device backup)</span>
                       </label>
-                      {!showSyncPw ? (
-                        <button type="button" onClick={() => setShowSyncPw(true)} className="text-xs text-teal-600 hover:text-teal-700 border border-teal-200 rounded px-2 py-1 w-full text-left">
-                          + Set sync password to enable cloud backup
-                        </button>
-                      ) : (
-                        <>
-                          <input
-                            type="password"
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                            value={syncPassword}
-                            onChange={e => setSyncPassword(e.target.value)}
-                            placeholder="Choose a sync password (min 8 chars)"
-                            autoComplete="new-password"
-                          />
-                          <div className="text-xs text-slate-400 mt-1">
-                            This password is stored locally for silent re-auth on this device. Use the same password on any new device to restore your cloud builds.
-                          </div>
-                        </>
-                      )}
+                      <div className="text-xs text-teal-700 mb-2 leading-relaxed">
+                        <strong>You create this password right now.</strong> No email is sent to you. This is the password you will use to sign in from any new device and restore your builds from the cloud. Write it down and keep it safe.
+                      </div>
+                      <input
+                        type="password"
+                        className="w-full border border-teal-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                        value={syncPassword}
+                        onChange={e => setSyncPassword(e.target.value)}
+                        placeholder="Create a sync password (min 8 characters)"
+                        autoComplete="new-password"
+                      />
+                      <div className="text-xs text-teal-600 mt-1.5 font-medium">
+                        Remember this password — it cannot be recovered if forgotten.
+                      </div>
                     </div>
                   )}
 
@@ -317,31 +343,41 @@ export default function AuthModal({ onClose }) {
 
                   {!showPromo ? (
                     <button type="button" onClick={() => setShowPromo(true)} className="text-xs text-teal-600 hover:text-teal-700 underline">
-                      Have a promo or admin code?
+                      Have a demo or access code?
                     </button>
                   ) : (
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Promo / Admin Code</label>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Demo / Access Code</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 uppercase tracking-widest"
+                          className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 uppercase tracking-widest font-mono"
                           value={promo}
                           onChange={e => setPromo(e.target.value.toUpperCase())}
-                          placeholder="e.g. OPSPRO"
+                          placeholder="Enter your access code"
+                          autoComplete="off"
                         />
                         <button type="button" onClick={handlePromoApply} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200">
                           Apply
                         </button>
                       </div>
                       {promoMsg && (
-                        <div className={`text-xs mt-1.5 font-medium ${promoMsg.includes('unlocked') ? 'text-green-600' : 'text-red-500'}`}>{promoMsg}</div>
+                        <div className={`text-xs mt-1.5 font-medium ${promoMsg.includes('accepted') ? 'text-green-600' : 'text-red-500'}`}>{promoMsg}</div>
                       )}
-                      <div className="text-xs text-slate-400 mt-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
-                        <span className="font-semibold text-slate-500 mr-1">Demo codes:</span>
-                        <span className="font-mono">OPSPRO</span> (Professional) ·{' '}
-                        <span className="font-mono">OPSTEAM</span> (Team) ·{' '}
-                        <span className="font-mono">OPSADMIN</span> (Enterprise)
+                      {appliedPromoCode && (
+                        <div className="text-xs mt-1 text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+                          Access valid for {PROMO_VALIDITY_DAYS} days from sign-in. Code saved in your browser profile.
+                        </div>
+                      )}
+                      <div className="text-xs text-slate-500 mt-2 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200 leading-relaxed">
+                        Demo codes are issued by the publisher on request — they are not displayed here.
+                        To request a code, email{' '}
+                        <a href="mailto:hello@opsmanifest.app?subject=OpsManifest Demo Access Request" className="text-teal-600 hover:underline font-semibold">
+                          hello@opsmanifest.app
+                        </a>.
+                        By using a code you agree to OpsManifest's{' '}
+                        <a href="/privacy.html" className="text-teal-600 hover:underline" target="_blank" rel="noopener">terms of use</a>.
+                        Codes are personal, non-transferable, and valid for {PROMO_VALIDITY_DAYS} days from first use.
                       </div>
                     </div>
                   )}

@@ -9,6 +9,10 @@ export function useCoherenceEngine() {
   const designApplied = useStore(s => s.designApplied);
   const phase2Active = useStore(s => s.phase2Active);
   const rtmSigned = useStore(s => s.rtmSigned);
+  const promoted = useStore(s => s.promoted);
+  const cabApproved = useStore(s => s.cabApproved);
+  const rtmStale = useStore(s => s.rtmStale);
+  const tasksStaleReason = useStore(s => s.tasksStaleReason);
   const selInc = useStore(s => s.selInc);
   const selUUM = useStore(s => s.selUUM);
   const customInc = useStore(s => s.customInc);
@@ -26,6 +30,7 @@ export function useCoherenceEngine() {
     }
     const snapshot = {
       isBuilt, designApplied, phase2Active, rtmSigned,
+      promoted, cabApproved, rtmStale, tasksStaleReason,
       selInc, selUUM, customInc, sysDesignData, requirements, rtmRows, roleAssignments,
       liveEolData,
     };
@@ -35,5 +40,5 @@ export function useCoherenceEngine() {
     }, 600);
     return () => clearTimeout(timerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBuilt, designApplied, phase2Active, rtmSigned, selInc, selUUM, customInc, sysDesignData, requirements, rtmRows, roleAssignments, liveEolData]);
+  }, [isBuilt, designApplied, phase2Active, rtmSigned, promoted, cabApproved, rtmStale, tasksStaleReason, selInc, selUUM, customInc, sysDesignData, requirements, rtmRows, roleAssignments, liveEolData]);
 }

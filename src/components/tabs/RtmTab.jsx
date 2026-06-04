@@ -10,6 +10,10 @@ import AgentInsights from '../AgentInsights.jsx';
 function resolveInc(code, customInc) {
   return ALL_INC.find(i => i.code === code) || (customInc || []).find(c => c.code === code) || null;
 }
+// Resolve any UUM code — checks catalog first, then customUUM
+function resolveUUM(code, customUUM) {
+  return ALL_UUM.find(u => u.code === code) || (customUUM || []).find(u => u.id === code) || null;
+}
 
 const RTM_BASE = [
   { id: 'R01', req: 'Platform provisioned per approved topology', test: 'Physical/VM inventory matches CMDB', method: 'Config review + CMDB diff', owner: 'Unix Admin' },
@@ -114,17 +118,18 @@ export default function RtmTab() {
   });
 
   s.selUUM.forEach((code, idx) => {
-    const uum = ALL_UUM.find(u => u.code === code);
+    const uum = resolveUUM(code, s.customUUM);
     if (!uum) return;
     const id = `UUM${String(idx + 1).padStart(2, '0')}`;
+    const layers = uum.layers || [uum.layer].filter(Boolean);
     rows.push({
       id,
       req: `${uum.short} change completed and verified`,
       test: `${uum.type === 'migration' ? 'Data integrity check + cutover verified' : uum.type === 'upgrade' ? 'Version confirmed + regression suite passed' : 'Patch applied + health check passed'}`,
       method: uum.type === 'migration' ? 'Row count + checksum + app functional test' : 'Version query + test suite',
-      owner: uum.layers?.includes('db') ? 'DBA + QA Team' : 'QA Team',
-      // Always PENDING until user explicitly sets
+      owner: layers.includes('db') ? 'DBA + QA Team' : 'QA Team',
       status: s.rtmRows?.[id] || 'PENDING',
+      isCustomUUM: !ALL_UUM.find(u => u.code === code),
     });
   });
 

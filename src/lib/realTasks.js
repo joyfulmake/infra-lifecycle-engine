@@ -1,5 +1,95 @@
-function T(role, name, dep, validate, window) {
-  return { role, name, dep: dep || '', validate: validate || '', window: window || '' };
+function T(role, name, dep, validate, window, est_hours) {
+  return { role, name, dep: dep || '', validate: validate || '', window: window || '', ...(est_hours ? { est_hours } : {}) };
+}
+
+// Batch job + DB-side scheduler migration tasks — inserted into migration scenarios
+// Always relevant when moving a server (batch scheduler) or DB (DBMS_SCHEDULER / SQL Agent / pg_cron)
+function batchSchedulerTasks() {
+  return [
+    T('Unix Admin',
+      'Inventory all batch jobs on source system — cron, at, Control-M, IBM Workload Scheduler, AutoSys, Tivoli TWS, or custom scheduler entries',
+      'Source OS migration confirmed; app team has provided list of all scheduled automation and SLA windows',
+      'Complete batch job inventory documented: job names, cron schedules, script paths, output log paths, upstream/downstream dependencies, notification contacts, SLA windows, and on-failure actions captured for every job',
+      'Working hours', 6),
+
+    T('Unix Admin',
+      'Export and archive all batch job definitions from source — cron tabs, at jobs, scheduler configuration exports',
+      'Batch job inventory signed off by App Admin and PM; write access confirmed to version control',
+      'All cron tabs exported (crontab -l per user); at queue archived; scheduler tool job definitions exported in native format; all wrapper scripts, config files, and referenced binaries archived to version control with MD5 checksums',
+      'Working hours', 4),
+
+    T('Unix Admin / App Admin',
+      'Validate all batch job dependencies on target — scripts, binaries, shared libraries, data mount points, NFS paths, network endpoints, credentials, and service accounts',
+      'Target OS build complete; batch inventory and archive available; App Admin confirms dependency checklist complete',
+      'All required scripts deployed on target with correct permissions; binaries and shared libraries confirmed present and compatible with target OS; mount points and NFS shares verified accessible; network connectivity to all downstream systems confirmed; service accounts and credentials vaulted on target; App Admin signs off dependency validation',
+      'Working hours', 8),
+
+    T('Unix Admin',
+      'Recreate and configure all batch jobs on target scheduler — import cron tabs, register jobs, configure alerts, failure actions, and SLA monitoring',
+      'Dependencies validated on target; scheduler tool installed and configured on target; job definitions archived from source',
+      'All jobs registered in target scheduler; cron tabs restored for all required users with correct ownership and permissions; failure notification routes configured and tested; scheduler monitoring integration verified; test dry-run in non-production passes for all jobs',
+      'Working hours', 6),
+
+    T('Unix Admin / App Admin',
+      'Shadow run — execute all critical batch jobs on target in parallel with source using a non-production data copy, compare outputs',
+      'Target scheduler fully configured; test data copy available on target; App Admin and DBA confirm parallel run is safe for non-production data',
+      'All critical batch jobs complete on target without error; output files, row counts, report checksums, and log output compared line-by-line against source reference run from same window; all discrepancies documented, root-caused, and resolved; App Admin signs off shadow run results in writing',
+      'Weekend window', 12),
+
+    T('QA Team',
+      'Batch job regression validation — confirm all jobs produce correct outputs on target, meet SLA windows, and failure handling works correctly',
+      'Shadow run completed; App Admin has reviewed and signed output comparison; failure injection tests completed',
+      'Full batch regression report produced: every job verified correct output, timing within SLA window, and failure path tested; first-run anomalies documented and accepted by application owner; QA Lead signs off batch validation',
+      'Weekend window', 8),
+  ];
+}
+
+function dbJobMigrationTasks(isOracle) {
+  return [
+    T('DB Admin',
+      'Inventory all database-side scheduled jobs on source — DBMS_SCHEDULER (Oracle), SQL Server Agent jobs, pg_cron, DB2 Scheduler, MySQL Event Scheduler, or custom dbms procedures',
+      'DB migration planning confirmed; DBA has access to source DB job catalog and metadata views',
+      'Complete DB job inventory: job names, schedules (cron_expr / repeat_interval), owner schemas, PL/SQL blocks or stored procedure references, job chains, window definitions, success/failure actions, and downstream dependencies documented for every job',
+      'Working hours', 4),
+
+    T('DB Admin',
+      isOracle
+        ? 'Export all DB job definitions using DBMS_METADATA — DBMS_SCHEDULER jobs, programs, chains, schedules, and window objects'
+        : 'Export all DB-side job definitions from source — stored procedure source, event/agent job scripts, schedule configurations',
+      isOracle
+        ? 'Inventory complete; DBA confirmed access to DBA_SCHEDULER_JOBS, DBA_SCHEDULER_PROGRAMS, DBA_SCHEDULER_CHAINS metadata views'
+        : 'Inventory complete; DBA confirmed access to system job tables on source database',
+      isOracle
+        ? 'DBMS_METADATA.GET_DDL output generated for all scheduler objects; job, program, chain, and schedule DDL scripts saved to version control; window definitions exported; all referenced stored procedures and packages extracted'
+        : 'All job definitions exported in native format; stored procedure and event scripts saved to version control with version history; schedule definitions documented',
+      'Working hours', 4),
+
+    T('DB Admin',
+      isOracle
+        ? 'Convert and adapt DB job definitions for target database platform — rewrite PL/SQL blocks to target syntax if cross-platform, resolve deprecated DBMS_SCHEDULER features'
+        : 'Review and adapt DB job definitions for target database version — resolve deprecated syntax, incompatible features, or changed API calls',
+      'Source job definitions exported and archived; target DB version and compatibility matrix confirmed with vendor documentation',
+      'All jobs reviewed against target platform compatibility; converted scripts peer-reviewed by DBA Lead; PL/SQL or T-SQL differences documented and tested in non-prod target; any logic changes validated against expected job output',
+      'Working hours', 6),
+
+    T('DB Admin',
+      'Deploy and register all converted DB-side jobs on target database — create schemas, load procedures, register scheduler entries',
+      'Job definitions converted and peer-reviewed; target DB available with correct schema and user accounts',
+      'All jobs registered in target scheduler; schedule configurations match source; owner schema and object privileges confirmed; jobs set to disabled initially for safety; DBMS_SCHEDULER / SQL Agent / pg_cron confirms all entries present',
+      'Working hours', 4),
+
+    T('DB Admin',
+      'Execute test run of all DB-side jobs on target with test data — trigger each job manually and verify completion, output, and side effects',
+      'Jobs registered on target; test data set available in target DB; DBA confirms safe to run in non-production environment',
+      'All jobs execute without error on target; output tables, audit log entries, and report outputs captured; job chains execute in correct dependency order; DBA confirms no data corruption or unexpected side effects',
+      'Working hours', 6),
+
+    T('QA Team / DB Admin',
+      'Validate DB-side job outputs against source baseline — row counts, checksums, report content, downstream data feed correctness',
+      'Test run completed on target; comparison dataset from source available for same input data',
+      'All job outputs match source baseline within agreed tolerance (row count variance < 0.01%); data transformation differences documented and accepted by application data owner; timing within source SLA windows; QA Lead and DBA Lead sign off DB job validation',
+      'Working hours', 4),
+  ];
 }
 
 export function getRealTasks(uum, ctx) {
@@ -180,6 +270,10 @@ export function getRealTasks(uum, ctx) {
           'No filesystem space events; all required mount points available; Unix Admin available on bridge call throughout DB migration activities',
           'Working hours'),
 
+        // ── Batch scheduler + DB-side job migration ────────────────────────
+        ...batchSchedulerTasks(),
+        ...dbJobMigrationTasks(isOracle),
+
         // ── Cutover ───────────────────────────────────────────────────────
         T('Change Manager',
           'Book production outage window and notify all stakeholders',
@@ -332,6 +426,9 @@ export function getRealTasks(uum, ctx) {
             : 'Invalid objects recompiled; statistics gathered; DB health confirmed',
           'Working hours'),
 
+        // ── DB-side job migration (DBMS_SCHEDULER, SQL Agent, pg_cron, etc.) ──
+        ...dbJobMigrationTasks(isOracle),
+
         T('DB Admin',
           'Verify DB health — alert log, listeners, tablespace utilisation, redo logs',
           'Post-import recompile and stats complete',
@@ -414,6 +511,9 @@ export function getRealTasks(uum, ctx) {
           'AppAdmin confirms app started cleanly and DB connected in staging',
           'All P0 test cases pass; QA Lead signs off',
           'Weekend window'),
+
+        // ── Batch scheduler migration ─────────────────────────────────────
+        ...batchSchedulerTasks(),
 
         T('Change Manager',
           'Production cutover — update DNS / VIP to new OS platform',

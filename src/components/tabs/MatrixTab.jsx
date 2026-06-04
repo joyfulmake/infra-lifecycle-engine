@@ -91,23 +91,29 @@ LAYERS.forEach(layer => layer.roles.forEach(r => { ROLE_LAYER[r] = layer.id; }))
 
 // ── Task collector ────────────────────────────────────────────────────────────
 
-function collectAllTasks(selInc, selUUM, designApplied, sysDesignData, ctx) {
+function collectAllTasks(selInc, selUUM, designApplied, sysDesignData, ctx, customInc, customUUM) {
   const out = []; // { task, source, sourceLabel }
 
-  // Incident fix tasks
+  // Incident fix tasks (catalog + custom)
+  const allInc = [...ALL_INC, ...(customInc || [])];
   selInc.forEach(code => {
-    const inc = ALL_INC.find(i => i.code === code);
+    const inc = allInc.find(i => i.code === code);
     if (!inc) return;
     getIncidentFixTasks(inc, ctx).forEach(t => {
       out.push({ task: t, source: 'incident', sourceLabel: inc.short || code, code });
     });
   });
 
-  // UUM real tasks
+  // UUM real tasks (catalog + custom)
   selUUM.forEach(code => {
-    const uum = ALL_UUM.find(u => u.code === code);
+    const catalog = ALL_UUM.find(u => u.code === code);
+    const custom = !catalog ? (customUUM || []).find(u => u.id === code) : null;
+    const uum = catalog || custom;
     if (!uum) return;
-    getRealTasks(uum, ctx).forEach(t => {
+    const tasks = custom?.aiTasks?.length
+      ? custom.aiTasks
+      : getRealTasks({ ...uum, code: uum.code || uum.id }, ctx);
+    tasks.forEach(t => {
       out.push({ task: t, source: 'uum', sourceLabel: uum.short || code, code });
     });
   });
@@ -351,8 +357,8 @@ export default function MatrixTab() {
   const [selected, setSelected] = useState(null);
 
   const allItems = useMemo(
-    () => collectAllTasks(s.selInc, s.selUUM, s.designApplied, s.sysDesignData, s.ctx),
-    [s.selInc, s.selUUM, s.designApplied, s.sysDesignData, s.ctx]
+    () => collectAllTasks(s.selInc, s.selUUM, s.designApplied, s.sysDesignData, s.ctx, s.customInc, s.customUUM),
+    [s.selInc, s.selUUM, s.designApplied, s.sysDesignData, s.ctx, s.customInc, s.customUUM]
   );
 
   const layerMap = useMemo(() => {

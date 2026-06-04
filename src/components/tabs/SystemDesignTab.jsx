@@ -250,9 +250,10 @@ export default function SystemDesignTab() {
   const [taskMsg, setTaskMsg] = useState('');
   const [presentMode, setPresentMode] = useState(false);
   const [techMode, setTechMode] = useState(false);
+  const [editOverride, setEditOverride] = useState(false);
 
   const isLocked = !s.scanComplete;
-  const isReadOnly = s.phase2Active;
+  const isReadOnly = s.phase2Active && !editOverride;
   const userRoles = getUserRolesForBuild(authUser, s.roleAssignments);
 
   const totalFields = DESIGN_SECTIONS.reduce((n, sec) => n + sec.fields.filter(f => f !== 'notes').length, 0);
@@ -331,14 +332,30 @@ export default function SystemDesignTab() {
       {/* Header with mode toggles */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          {!isReadOnly && (
+          {!s.phase2Active && (
             <div className="text-xs text-slate-500">
               {filledFields}/{totalFields} fields filled &mdash;{' '}
               <span className={overallPct === 100 ? 'text-green-600 font-semibold' : 'text-amber-600'}>{overallPct}% complete</span>
             </div>
           )}
-          {isReadOnly && (
-            <div className="text-xs text-amber-600 font-medium">Phase 2 Active — fields locked</div>
+          {s.phase2Active && !editOverride && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-amber-600 font-medium">Phase 2 Active — fields locked</span>
+              <button
+                className="text-xs px-2 py-0.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+                onClick={() => setEditOverride(true)}
+                title="Unlock design fields for editing — changes will mark Gantt tasks as stale"
+              >Edit Design</button>
+            </div>
+          )}
+          {s.phase2Active && editOverride && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-amber-600 font-medium">Editing — Gantt tasks will need regeneration</span>
+              <button
+                className="text-xs px-2 py-0.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+                onClick={() => setEditOverride(false)}
+              >Lock Design</button>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">

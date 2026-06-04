@@ -566,7 +566,7 @@ function ChangePeriodsPanel({ periods, onUpdate, requirements, onUpdateReq, tota
 
 // ── Incident/UUM scope panel ──────────────────────────────────────────────────
 
-function IncidentEnvPanel({ selInc, selUUM, customInc, regions }) {
+function IncidentEnvPanel({ selInc, selUUM, customInc, customUUM, regions }) {
   if (selInc.length === 0 && selUUM.length === 0) return null;
   const allInc = [...ALL_INC, ...(customInc || [])];
   return (
@@ -588,7 +588,8 @@ function IncidentEnvPanel({ selInc, selUUM, customInc, regions }) {
           );
         })}
         {selUUM.map(code => {
-          const uum = ALL_UUM.find(u => u.code === code);
+          const uum = ALL_UUM.find(u => u.code === code)
+                  || (customUUM || []).find(u => u.id === code);
           if (!uum) return null;
           return (
             <div key={code} className="flex items-center gap-1.5 rounded border border-amber-100 bg-amber-50 px-2 py-1">
@@ -674,9 +675,15 @@ export default function GanttTab() {
   const hasStartDate = !!s.requirements.projectStartDate;
 
   const uumTaskGroups = s.selUUM.map(code => {
-    const uum = ALL_UUM.find(u => u.code === code);
+    const catalog = ALL_UUM.find(u => u.code === code);
+    const custom = !catalog ? (s.customUUM || []).find(u => u.id === code) : null;
+    const uum = catalog || custom;
     if (!uum) return null;
-    return { uum, tasks: getRealTasks(uum, s.ctx) };
+    // Custom UUM: use Groq-generated tasks if available, else derive from layer/type
+    const tasks = custom?.aiTasks?.length
+      ? custom.aiTasks
+      : getRealTasks({ ...uum, code: uum.code || uum.id }, s.ctx);
+    return { uum: { ...uum, code: uum.code || uum.id }, tasks };
   }).filter(Boolean);
 
   const rawTotal = designTasks.reduce((n, t) => {
@@ -770,7 +777,7 @@ export default function GanttTab() {
 
       {/* Incident/UUM scope */}
       {s.phase2Active && (
-        <IncidentEnvPanel selInc={s.selInc} selUUM={s.selUUM} customInc={s.customInc} regions={regions} />
+        <IncidentEnvPanel selInc={s.selInc} selUUM={s.selUUM} customInc={s.customInc} customUUM={s.customUUM || []} regions={regions} />
       )}
 
       {/* Phase timeline */}

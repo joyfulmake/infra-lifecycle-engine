@@ -80,6 +80,9 @@ export const PLANS = {
   },
 };
 
+// Private promo codes — NOT displayed in the UI.
+// Users must contact hello@opsmanifest.app to request a demo access code.
+// Each code grants the mapped plan for PROMO_VALIDITY_DAYS days from first use.
 export const PROMO_CODES = {
   OPSPRO:       'professional',
   PROKEY2026:   'professional',
@@ -89,27 +92,84 @@ export const PROMO_CODES = {
   OPSTARTER:    'starter',
 };
 
+export const PROMO_VALIDITY_DAYS = 14;
+
+// Seeded accounts — permanent plan grant, never expires, never shown in promo hints.
+export const SEEDED_ACCOUNTS = {
+  'sriram.c76@gmail.com': 'professional',
+};
+
 const AUTH_KEY = 'opsmanifest_auth';
+
+/** Returns days remaining on a promo grant, or null if not promo-based. */
+export function promoDaysRemaining(user) {
+  if (!user?.promoExpiresAt) return null;
+  if (SEEDED_ACCOUNTS[user?.email]) return null; // seeded accounts don't expire
+  const ms = user.promoExpiresAt - Date.now();
+  return ms > 0 ? Math.ceil(ms / 86400000) : 0;
+}
 
 export function getAuthUser() {
   try {
     const raw = localStorage.getItem(AUTH_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+
+    // Seeded accounts: always return seeded plan, never expire
+    const seededPlan = SEEDED_ACCOUNTS[user?.email];
+    if (seededPlan) {
+      if (user.plan !== seededPlan) {
+        const upgraded = { ...user, plan: seededPlan, promoExpiresAt: null, promoExpired: false };
+        localStorage.setItem(AUTH_KEY, JSON.stringify(upgraded));
+        return upgraded;
+      }
+      return user;
+    }
+
+    // Promo expiry check — downgrade to starter if expired
+    if (user.promoExpiresAt && Date.now() > user.promoExpiresAt) {
+      const downgraded = {
+        ...user,
+        plan: 'starter',
+        promoExpired: true,
+        promoExpiresAt: null,
+        promoCode: null,
+      };
+      localStorage.setItem(AUTH_KEY, JSON.stringify(downgraded));
+      return downgraded;
+    }
+
+    return user;
   } catch {
     return null;
   }
 }
 
-export function signIn(email, plan = 'starter', syncPassword = null) {
+/** Signs in a user. Pass promoCode to set a 14-day access window. */
+export function signIn(email, plan = 'starter', syncPassword = null, promoCode = null) {
+  const cleanEmail = email.trim().toLowerCase();
+  const seededPlan = SEEDED_ACCOUNTS[cleanEmail];
+  const effectivePlan = seededPlan || plan;
   const existing = getAuthUser();
+
+  const promoFields = (!seededPlan && promoCode)
+    ? {
+        promoCode: promoCode.trim().toUpperCase(),
+        promoExpiresAt: Date.now() + PROMO_VALIDITY_DAYS * 24 * 60 * 60 * 1000,
+        promoExpired: false,
+      }
+    : (existing?.promoCode && !seededPlan
+        ? { promoCode: existing.promoCode, promoExpiresAt: existing.promoExpiresAt, promoExpired: existing.promoExpired }
+        : {});
+
   const user = {
-    email: email.trim().toLowerCase(),
-    displayName: email.split('@')[0],
-    plan,
+    email: cleanEmail,
+    displayName: cleanEmail.split('@')[0],
+    plan: effectivePlan,
     buildsUsed: existing?.buildsUsed ?? 0,
     joinedAt: existing?.joinedAt ?? new Date().toISOString().slice(0, 10),
-    // syncPassword stored locally for silent Firebase re-auth on same device
     ...(syncPassword ? { syncPassword } : existing?.syncPassword ? { syncPassword: existing.syncPassword } : {}),
+    ...promoFields,
   };
   localStorage.setItem(AUTH_KEY, JSON.stringify(user));
   return user;
@@ -151,15 +211,18 @@ const FEATURE_TIER = {
 };
 
 export function canUseFeature(user, feature) {
-  const tier = user?.plan ?? 'guest';
+  const email = user?.email;
+  const tier = SEEDED_ACCOUNTS[email] ?? user?.plan ?? 'guest';
   const userLevel = TIER_ORDER.indexOf(tier);
   return userLevel >= (FEATURE_TIER[feature] ?? 0);
 }
 
 export function buildLimitReached(user) {
-  if (!user || !user.plan) return true;
-  const plan = PLANS[user.plan];
-  if (!plan) return true;
+  // Guests can always build — they just can't save
+  if (!user || !user.plan) return false;
+  const effectivePlan = SEEDED_ACCOUNTS[user.email] ?? user.plan;
+  const plan = PLANS[effectivePlan];
+  if (!plan) return false;
   if (plan.buildsPerYear === Infinity) return false;
   return (user.buildsUsed || 0) >= plan.buildsPerYear;
 }

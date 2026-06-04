@@ -41,7 +41,7 @@ const TABS = [
     id: 'gantt',
     label: 'Gantt',
     unlocked: s => s.designApplied,
-    lockMsg: 'Apply System Design first',
+    lockMsg: 'Apply System Design first (Generate Task Plan)',
     staleDot: s => !!s.tasksStaleReason,
   },
   {
@@ -93,12 +93,31 @@ function TabContent({ activeTab }) {
   }
 }
 
+function getNextTabId(s) {
+  if (s.unlockedForRevision) return null;
+  if (!s.isBuilt) return null;
+  // Scan runs in the sidebar — no tab to point to until scan is done
+  if (!s.scanComplete) return null;
+  // System Design tab is the next concrete step after scan
+  if (!s.designApplied) return 'design';
+  // After design applied, Phase 2 injection happens in sidebar — no tab to highlight
+  // Once injected, Gantt shows the full task schedule including UUM + incident tasks
+  if (!s.phase2Active) return null;
+  // After Phase 2: review Gantt first, then RTM, then Closure
+  if (!s.cabApproved && !s.cabDeclined) return 'gantt';
+  if (!s.rtmSigned) return 'rtm';
+  if (!s.promoted) return 'closure';
+  return null;
+}
+
 export default function PmTabs() {
   const s = useStore();
   const { authUser } = useAuth();
   const activeTab = s.activeTab || 'exec';
 
   useCoherenceEngine();
+
+  const nextTabId = getNextTabId(s);
 
   function isTabUnlocked(tab) {
     if (s.unlockedForRevision) return true;
@@ -126,6 +145,7 @@ export default function PmTabs() {
         {TABS.map(tab => {
           const unlocked = isTabUnlocked(tab);
           const isActive = activeTab === tab.id;
+          const isNext = !isActive && unlocked && tab.id === nextTabId;
           const showStaleDot = unlocked && tab.staleDot && tab.staleDot(s);
           const insightCount = s.coherenceAlerts.filter(a => a.tabs.includes(tab.id)).length;
           const showInsightDot = unlocked && insightCount > 0;
@@ -133,15 +153,21 @@ export default function PmTabs() {
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab)}
-              title={!unlocked ? tab.lockMsg : undefined}
+              title={!unlocked ? tab.lockMsg : isNext ? 'Next recommended step' : undefined}
               className={[
                 'tab-btn relative',
                 isActive ? 'tab-btn-active' : '',
                 !unlocked ? 'opacity-40 cursor-not-allowed' : '',
+                isNext ? 'ring-2 ring-teal-400 ring-offset-1 animate-pulse-subtle' : '',
               ].join(' ')}
               disabled={!unlocked}
             >
               {tab.label}
+              {isNext && (
+                <span className="inline-block ml-1 text-xs bg-teal-500 text-white font-bold rounded px-1 py-0 leading-tight animate-pulse">
+                  Next
+                </span>
+              )}
               {tab.proBadge && (
                 <span className="inline-block ml-1 text-xs bg-teal-100 text-teal-700 font-bold rounded px-1 py-0 leading-tight">
                   Pro

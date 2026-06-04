@@ -211,6 +211,9 @@ export const useStore = create((set, get) => ({
   // Custom incidents added by user beyond catalog
   customInc: [],
 
+  // Custom UUM items added by user beyond catalog
+  customUUM: [],
+
   // CAB declined state
   cabDeclined: false,
 
@@ -278,7 +281,7 @@ export const useStore = create((set, get) => ({
   build: (ctx) => set({
     isBuilt: true, scanComplete: false, designApplied: false,
     phase2Active: false, cabApproved: false, cabDeclined: false, rtmSigned: false, promoted: false,
-    ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [],
+    ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [], customUUM: [],
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
     unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
@@ -314,6 +317,17 @@ export const useStore = create((set, get) => ({
 
   addCustomInc: (inc) => set(s => ({ customInc: [...s.customInc, inc], isDirty: true })),
   removeCustomInc: (id) => set(s => ({ customInc: s.customInc.filter(i => i.id !== id), isDirty: true })),
+
+  addCustomUUM: (uum) => set(s => ({ customUUM: [...(s.customUUM || []), uum], isDirty: true })),
+  updateCustomUUM: (id, patch) => set(s => ({
+    customUUM: (s.customUUM || []).map(u => u.id === id ? { ...u, ...patch } : u),
+    isDirty: true,
+  })),
+  removeCustomUUM: (id) => set(s => ({
+    customUUM: (s.customUUM || []).filter(u => u.id !== id),
+    selUUM: s.selUUM.filter(c => c !== id),
+    isDirty: true,
+  })),
 
   lockDesignField: (key, data) => set(s => ({
     lockedDesignFields: { ...s.lockedDesignFields, [key]: data }, isDirty: true,
@@ -393,6 +407,7 @@ export const useStore = create((set, get) => ({
     selUUM: b.selUUM ?? [],
     selFix: b.selFix ?? [],
     customInc: b.customInc ?? [],
+    customUUM: b.customUUM ?? [],
     sysDesignData: b.sysDesignData ?? initDesignData(),
     sdAiTasks: b.sdAiTasks ?? [],
     scanResults: b.scanResults ?? [],

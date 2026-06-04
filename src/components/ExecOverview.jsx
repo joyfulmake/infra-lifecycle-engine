@@ -2,7 +2,7 @@ import { useStore } from '../store/useStore.js';
 import { ALL_INC } from '../lib/incidents.js';
 import { ALL_UUM } from '../lib/uumItems.js';
 import { useAuth } from '../lib/AuthContext.jsx';
-import { PLANS } from '../lib/auth.js';
+import { PLANS, promoDaysRemaining } from '../lib/auth.js';
 import { PLAN_BADGE } from './AuthModal.jsx';
 
 function KpiTile({ label, value, sub, color }) {
@@ -39,7 +39,7 @@ function MilestoneDot({ label, done }) {
 
 export default function ExecOverview() {
   const s = useStore();
-  const { authUser, setShowAuthModal } = useAuth();
+  const { authUser, openAuthModal } = useAuth();
 
   const activeInc = s.selInc.length;
   const uumCount = s.selUUM.length;
@@ -80,7 +80,7 @@ export default function ExecOverview() {
         <div className="flex-shrink-0 ml-6">
           {authUser ? (
             <button
-              onClick={() => setShowAuthModal(true)}
+              onClick={() => openAuthModal('signup')}
               className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50 transition-colors"
             >
               <div className="w-6 h-6 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
@@ -88,14 +88,28 @@ export default function ExecOverview() {
               </div>
               <div className="text-left">
                 <div className="text-xs font-medium text-slate-700 leading-tight">{authUser.displayName || authUser.email}</div>
-                <span className={`text-xs font-bold rounded px-1 ${PLAN_BADGE[authUser.plan] || PLAN_BADGE.free}`}>
-                  {PLANS[authUser.plan]?.name || authUser.plan}
-                </span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className={`text-xs font-bold rounded px-1 ${PLAN_BADGE[authUser.plan] || PLAN_BADGE.free}`}>
+                    {PLANS[authUser.plan]?.name || authUser.plan}
+                  </span>
+                  {(() => {
+                    const days = promoDaysRemaining(authUser);
+                    if (days === null) return null;
+                    return (
+                      <span className={`text-xs rounded px-1 font-semibold ${days <= 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        Demo {days}d
+                      </span>
+                    );
+                  })()}
+                  {authUser.promoExpired && (
+                    <span className="text-xs rounded px-1 font-semibold bg-red-100 text-red-700">Expired</span>
+                  )}
+                </div>
               </div>
             </button>
           ) : (
             <button
-              onClick={() => setShowAuthModal(true)}
+              onClick={() => openAuthModal('signup')}
               className="flex items-center gap-1.5 text-xs text-teal-600 border border-teal-200 rounded-lg px-3 py-1.5 hover:bg-teal-50 transition-colors font-semibold"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -179,7 +193,7 @@ export default function ExecOverview() {
         {/* User chip */}
         {authUser ? (
           <button
-            onClick={() => setShowAuthModal(true)}
+            onClick={() => openAuthModal('signup')}
             className="flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 transition-colors"
           >
             <div className="w-4 h-4 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
@@ -192,7 +206,7 @@ export default function ExecOverview() {
           </button>
         ) : (
           <button
-            onClick={() => setShowAuthModal(true)}
+            onClick={() => openAuthModal('signup')}
             className="text-xs text-teal-600 border border-teal-200 rounded px-2 py-1 hover:bg-teal-50 transition-colors font-semibold"
           >
             Sign In / Plans

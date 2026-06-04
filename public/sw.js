@@ -1,7 +1,7 @@
 // OpsManifest Service Worker
 // Cache-first for static assets; network-first for API and dynamic content.
 
-const CACHE = 'opsmanifest-v1';
+const CACHE = 'opsmanifest-v2';
 
 const PRECACHE = [
   '/',
@@ -33,14 +33,15 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Never cache API calls
+  // Never cache API calls — always fetch live data
   if (
     url.hostname.includes('anthropic') ||
     url.hostname.includes('firebase') ||
     url.hostname.includes('firestore') ||
     url.hostname.includes('googleapis') ||
     url.hostname.includes('workers.dev') ||
-    url.hostname.includes('stripe')
+    url.hostname.includes('stripe') ||
+    url.hostname.includes('endoflife.date')
   ) {
     return; // fall through to network
   }

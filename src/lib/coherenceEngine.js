@@ -33,6 +33,11 @@ export function runCoherenceChecks(state) {
     requirements = {},
     rtmRows = {},
     roleAssignments = {},
+    // Sign-off flow fields
+    promoted = false,
+    cabApproved = false,
+    rtmStale = false,
+    tasksStaleReason = null,
   } = state;
 
   if (!isBuilt) return alerts;
@@ -201,6 +206,39 @@ export function runCoherenceChecks(state) {
         });
       }
     }
+  }
+
+  // 12a. Gantt tasks changed after RTM was signed
+  if (rtmSigned && state.tasksStaleReason) {
+    alerts.push({
+      id: 'rtm_signed_tasks_stale',
+      severity: 'warn',
+      tabs: ['gantt', 'rtm'],
+      message: 'RTM was signed but Gantt tasks have since changed — implementation scope may have drifted. Regenerate tasks and re-verify RTM rows before proceeding.',
+      action: 'Gantt → Regenerate tasks → RTM → re-verify all rows',
+    });
+  }
+
+  // 12b. Live (promoted) with stale RTM — potential rollback scenario
+  if (state.promoted && state.rtmStale) {
+    alerts.push({
+      id: 'post_live_rtm_stale',
+      severity: 'warn',
+      tabs: ['exec', 'rtm', 'closure'],
+      message: 'System is LIVE but RTM has become stale — changes were made after go-live. If service is degraded or acceptance criteria failed, execute rollback plan immediately.',
+      action: 'Closure tab → Rollback plan | RTM tab → re-verify all rows',
+    });
+  }
+
+  // 12c. Cutover possible but Gantt tasks are stale — implementation may be incomplete
+  if (state.rtmSigned && state.cabApproved && state.tasksStaleReason && !state.promoted) {
+    alerts.push({
+      id: 'cutover_ready_tasks_stale',
+      severity: 'warn',
+      tabs: ['gantt'],
+      message: 'Ready to cut over but Gantt tasks are stale — verify all implementation steps are complete before going live.',
+      action: 'Gantt → Regenerate and review task completion before cutover',
+    });
   }
 
   // 12. Live EOL alerts from endoflife.date API

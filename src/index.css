@@ -105,3 +105,9 @@
   50%      { box-shadow: 0 0 0 5px rgba(13,148,136,0); }
 }
 .pulse-ring { animation: pulseTeal 2s infinite; }
+
+@keyframes pulseSubtle {
+  0%,100% { opacity: 1; }
+  50% { opacity: .7; }
+}
+.animate-pulse-subtle { animation: pulseSubtle 2s ease-in-out infinite; }

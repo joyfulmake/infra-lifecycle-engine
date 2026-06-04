@@ -128,6 +128,94 @@ Return ONLY valid JSON array (no markdown):
   }
 }
 
+// ── /groq-uum-enrich — full enrichment of a custom UUM entry with tasks ──────
+
+async function handleUumEnrich(req, env) {
+  const { title, desc, layer, type } = await req.json();
+  if (!title) return err('title is required');
+
+  const prompt = `You are a principal infrastructure change architect. A user has described a custom infrastructure operation they need to execute:
+
+Title: "${title}"
+Description: "${desc || 'No additional description'}"
+Primary Layer: ${layer}
+Operation Type: ${type}
+
+Generate a complete, production-ready change implementation package for this operation. Include:
+1. A precise full description of the operation (technical, version-specific where possible)
+2. Key risks and prerequisites
+3. A sequenced task list — covering planning, pre-execution checks, execution steps, validation, and rollback — exactly as a skilled Unix/DBA/Middleware admin would execute this change
+
+Return ONLY valid JSON (no markdown, no code fences):
+{
+  "description": "Precise one-paragraph technical description including source/target platforms and versions",
+  "risks": ["Risk 1", "Risk 2", "Risk 3"],
+  "prerequisites": ["Prereq 1", "Prereq 2", "Prereq 3"],
+  "tasks": [
+    {
+      "role": "Unix Admin|DBA|Storage Admin|Network Admin|Change Manager|QA Team|SysAdmin Lead|App Admin|Security Admin",
+      "name": "Precise task name (imperative, specific)",
+      "dep": "What must be true / completed before this task can start",
+      "validate": "How to confirm this task succeeded (specific command or check)",
+      "window": "Working hours|Weekend window|Change window|CAB meeting|Overnight window",
+      "est_hours": 2
+    }
+  ]
+}
+
+Generate 8 to 14 tasks covering the full lifecycle. est_hours should be realistic (planning=1-2h, execution=4-16h, validation=1-4h). Total should be 40-120h for a migration.`;
+
+  try {
+    const groqRes = await groqChat(env, [{ role: 'user', content: prompt }], 2000);
+    const content = groqRes.choices?.[0]?.message?.content || '';
+    // Extract JSON object
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON object in response');
+    const enriched = JSON.parse(match[0]);
+    return json({ enriched, model: groqRes.model });
+  } catch (e) {
+    return err(`UUM enrich failed: ${e.message}`, 500);
+  }
+}
+
+// ── /groq-uum-search — generate UUM operation entries from free-text query ────
+
+async function handleUumSearch(req, env) {
+  const { query } = await req.json();
+  if (!query || !query.trim()) return err('query is required');
+
+  const prompt = `You are a senior enterprise infrastructure operations architect with deep knowledge of ITIL, data centre operations, and system lifecycle management.
+
+A user has typed the following free-text description of infrastructure work they need to capture in a change management system:
+"${query.trim()}"
+
+Generate 6 to 8 specific, real-world infrastructure operation entries that match this description. Each entry should be a discrete, schedulable operation that a Unix/Linux/DBA/Middleware admin would actually perform.
+
+Return ONLY a valid JSON array — no markdown, no explanation, no code fences:
+[
+  {
+    "short": "Short code + title, max 60 chars, e.g. 'DBM-X01: SAP ASE 15.7 to 16 Migration'",
+    "description": "One precise technical sentence describing the operation, version numbers, source/target platforms",
+    "type": "upgrade|migration|update|patch",
+    "layer": "os|db|app|web|security|storage|hardware|network|backup",
+    "grp": "Category, e.g. 'Database Migrations' or 'OS Upgrades'"
+  }
+]
+
+Be specific: include real product names, version numbers, and migration paths derived from the user's keywords. Cover the full breadth of what the query implies (e.g. pre-migration, migration, post-validation steps as separate entries).`;
+
+  try {
+    const groqRes = await groqChat(env, [{ role: 'user', content: prompt }], 1200);
+    const content = groqRes.choices?.[0]?.message?.content || '';
+    const match = content.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('No JSON array in response');
+    const results = JSON.parse(match[0]);
+    return json({ results, model: groqRes.model });
+  } catch (e) {
+    return err(`UUM search failed: ${e.message}`, 500);
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
@@ -152,6 +240,14 @@ export default {
 
     if (req.method === 'POST' && url.pathname === '/groq-suggest') {
       return handleSuggest(req, env);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/groq-uum-search') {
+      return handleUumSearch(req, env);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/groq-uum-enrich') {
+      return handleUumEnrich(req, env);
     }
 
     return err('Not found', 404);

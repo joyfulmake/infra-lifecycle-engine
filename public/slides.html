@@ -196,15 +196,15 @@
     <h1>Turn provisioning chaos into<br /><span>structured, auditable workflow</span></h1>
     <p class="tagline">
       A practitioner-grade guide for infra teams — from hardware selection through CAB approval,
-      go-live, and closure — in one focused, offline-capable tool.
+      RTM sign-off, batch job validation, and project closure — in one focused, offline-capable tool.
     </p>
-    <div style="margin-top:36px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:var(--accent2);">Free to use</span>
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">No server required</span>
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">Works offline</span>
-      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:var(--green);">Cloud sync for teams</span>
+    <div style="margin-top:28px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:var(--accent2);">Build &amp; explore as guest — no sign-in wall</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">No server · Offline-capable</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">Live EOL API — 500+ products</span>
+      <span style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:var(--green);">Cloud sync Pro+ · 14-day demo access</span>
     </div>
-    <p class="disclaim" style="margin-top:24px;">
+    <p class="disclaim" style="margin-top:22px;">
       OpsManifest <strong>guides</strong> infra teams through structured provisioning workflows.<br />
       It is <strong>not a replacement</strong> for ITSM, CMDB, or platforms like ServiceNow, Jira, or Confluence —<br />
       think of it as the structured pre-work that makes those systems more accurate.
@@ -251,14 +251,15 @@
       <div class="phase-pill hi">Closure</div>
     </div>
     <div class="feat-list">
-      <div class="feat"><div class="feat-dot"></div><span>Smart Scan — CVE/EOL auto-detection per HW/OS/App stack, no API key</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>232-field system design auto-filled from stack selection</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>Gantt — 7-point FSM metadata per task: exec engine, blast radius, downstream</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Smart Scan — CVE/EOL auto-detection per HW/OS/App stack, no API key needed</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>240-field system design auto-filled from stack selection</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Gantt — 7-point FSM per task + Critical Path Method + batch &amp; DB scheduler tasks</span></div>
       <div class="feat"><div class="feat-dot"></div><span>Universal Cross-Stack Matrix — 8-layer FSM swimlane dependency map</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>Groq AI enrichment — stack-specific CVE risks &amp; best practices on demand</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>Roles &amp; RACI tab — 20 roles, PM-gated editing, RTM stale advisory</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>CMDB Live Stack Check — EOS · EOL · EOSL · Security-Only · Next Milestone per component</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>7-step numbered sidebar roadmap — every phase always visible with lock/unlock state, so the app guides at every point</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>Sign-off workflow enforcement — Gantt stale warnings before RTM, rollback guidance post-live</span></div>
       <div class="feat"><div class="feat-dot"></div><span>CAB decline → Revision Mode → unlock all tabs → resubmit or Quick Change</span></div>
-      <div class="feat"><div class="feat-dot"></div><span>13-sheet styled Excel export · Offline-first · Cloud sync Pro+</span></div>
+      <div class="feat"><div class="feat-dot"></div><span>13-sheet styled Excel export · Offline-first · Cloud sync Pro+ · 14-day demo access</span></div>
     </div>
   </div>
 
@@ -438,47 +439,99 @@
 
   <!-- ── Slide 8: Live CMDB + CPM ─────────────────────── -->
   <div class="slide" id="s7cmdb">
-    <div class="accent-bar"></div>
-    <div class="eyebrow">Live API Intelligence</div>
-    <h2>Know your stack's real lifecycle status — before cutover</h2>
-    <p class="sub" style="margin-top:10px;font-size:13px;">
-      The CMDB tab queries <strong>endoflife.date</strong> in real time for 500+ products.
-      Goes beyond EOL/EOS — surfaces LTS status, Extended Support windows, Security-Only periods, and day-precise countdowns.
+    <div class="accent-bar" style="background:linear-gradient(90deg,#14B8A6,#3B82F6,#8B5CF6);"></div>
+    <div class="eyebrow">CMDB — Live Lifecycle Intelligence</div>
+    <h2>Every column your data centre needs — from a single API call</h2>
+    <p class="sub" style="margin-top:8px;font-size:13px;">
+      The Stack Live Lifecycle Check resolves <em>any</em> component name — predefined or custom — against
+      <strong>endoflife.date</strong>, then shows every lifecycle milestone that matters for data centre operations.
     </p>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px;max-width:960px;width:100%;">
-      <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.25);border-radius:10px;padding:18px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--teal);margin-bottom:10px;">LIVE CMDB</div>
-        <div class="feat-list">
-          <div class="feat"><div class="feat-dot"></div><span>Stack auto-check on open — OS, DB, App vs live API</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>LTS flag, Extended Support date, days-until-EOL countdown</span></div>
-          <div class="feat"><div class="feat-dot" style="background:var(--amber);"></div><span>Security-Only detection: patches but no new features</span></div>
-          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span>EOL confirmed = cross-tab coherence alert</span></div>
-        </div>
-      </div>
-      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:10px;padding:18px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#A5B4FC;margin-bottom:10px;">UUM KEYWORD MATCHER</div>
-        <div class="feat-list">
-          <div class="feat"><div class="feat-dot" style="background:#A5B4FC;"></div><span>Type any project description — scores entire UUM catalog</span></div>
-          <div class="feat"><div class="feat-dot" style="background:#A5B4FC;"></div><span>"oracle migration aix linux" finds DBM, UPG, SEC items instantly</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Toggle-add matched UUM items directly from results</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Live API context (EOL/LTS) fetched in parallel per keyword</span></div>
-        </div>
-      </div>
-      <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:18px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--red);margin-bottom:10px;">CRITICAL PATH METHOD</div>
-        <div class="feat-list">
-          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span><strong>CP</strong> badge — sequential tasks where delay shifts go-live</span></div>
-          <div class="feat"><div class="feat-dot" style="background:var(--teal);"></div><span><strong>+Nd float</strong> on parallel tasks — working-day slack shown</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>CP/Float summary in Gantt header</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Recalculates live as duration overrides are applied</span></div>
-        </div>
-      </div>
+
+    <!-- Lifecycle table mockup -->
+    <div style="margin-top:14px;max-width:980px;width:100%;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;border-radius:8px;overflow:hidden;">
+        <thead>
+          <tr style="background:rgba(255,255,255,0.06);color:#94A3B8;text-align:left;">
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Component</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#14B8A6;">Cycle</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Latest</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#F59E0B;">EOS</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#EF4444;">EOL</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#8B5CF6;">EOSL/ESU</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#F97316;">Security-Only</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#22C55E;">LTS</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Next Milestone</th>
+            <th style="padding:6px 10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:rgba(255,255,255,0.03);border-top:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:7px 10px;color:#F1F5F9;font-weight:600;">RHEL 9.x</td>
+            <td style="padding:7px 10px;color:#14B8A6;font-weight:700;">9</td>
+            <td style="padding:7px 10px;color:#CBD5E1;">9.4</td>
+            <td style="padding:7px 10px;color:#F59E0B;">2027-05-31<br/><span style="font-size:10px;">36mo left</span></td>
+            <td style="padding:7px 10px;color:#94A3B8;">2032-05-31</td>
+            <td style="padding:7px 10px;color:#8B5CF6;">—</td>
+            <td style="padding:7px 10px;color:#94A3B8;">—</td>
+            <td style="padding:7px 10px;"><span style="background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);border-radius:4px;padding:2px 6px;font-weight:700;">LTS</span></td>
+            <td style="padding:7px 10px;color:#F59E0B;font-weight:600;">EOS: 2027-05-31<br/><span style="font-size:10px;">36mo left</span></td>
+            <td style="padding:7px 10px;"><span style="background:rgba(34,197,94,0.15);color:#22C55E;border:1px solid rgba(34,197,94,0.3);border-radius:4px;padding:2px 8px;font-weight:700;">Supported</span></td>
+          </tr>
+          <tr style="background:rgba(255,255,255,0.015);border-top:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:7px 10px;color:#F1F5F9;font-weight:600;">Oracle 19c</td>
+            <td style="padding:7px 10px;color:#14B8A6;font-weight:700;">19c</td>
+            <td style="padding:7px 10px;color:#CBD5E1;">19.24</td>
+            <td style="padding:7px 10px;color:#F59E0B;">2024-04-30<br/><span style="font-size:10px;color:#EF4444;">Ended</span></td>
+            <td style="padding:7px 10px;color:#EF4444;font-weight:700;">2027-04-30<br/><span style="font-size:10px;">24mo left</span></td>
+            <td style="padding:7px 10px;color:#8B5CF6;font-weight:600;">2030-04-30</td>
+            <td style="padding:7px 10px;"><span style="background:rgba(249,115,22,0.15);color:#F97316;border:1px solid rgba(249,115,22,0.3);border-radius:4px;padding:2px 6px;font-weight:700;">Active Now</span></td>
+            <td style="padding:7px 10px;color:#94A3B8;">—</td>
+            <td style="padding:7px 10px;color:#EF4444;font-weight:600;">EOL: 2027-04-30<br/><span style="font-size:10px;">24mo left</span></td>
+            <td style="padding:7px 10px;"><span style="background:rgba(245,158,11,0.15);color:#F59E0B;border:1px solid rgba(245,158,11,0.3);border-radius:4px;padding:2px 8px;font-weight:700;">EOS</span></td>
+          </tr>
+          <tr style="background:rgba(239,68,68,0.04);border-top:1px solid rgba(255,255,255,0.05);">
+            <td style="padding:7px 10px;color:#F1F5F9;font-weight:600;">JBoss EAP 7.4</td>
+            <td style="padding:7px 10px;color:#14B8A6;font-weight:700;">7.4</td>
+            <td style="padding:7px 10px;color:#CBD5E1;">7.4.11</td>
+            <td style="padding:7px 10px;color:#EF4444;font-weight:700;">Ended</td>
+            <td style="padding:7px 10px;color:#EF4444;font-weight:700;">Ended</td>
+            <td style="padding:7px 10px;color:#8B5CF6;">2025-11-30<br/><span style="font-size:10px;color:#EF4444;">5mo left</span></td>
+            <td style="padding:7px 10px;color:#94A3B8;">—</td>
+            <td style="padding:7px 10px;color:#94A3B8;">—</td>
+            <td style="padding:7px 10px;color:#EF4444;font-weight:700;">EOSL: 2025-11-30<br/><span style="font-size:10px;">5mo left</span></td>
+            <td style="padding:7px 10px;"><span style="background:rgba(239,68,68,0.2);color:#EF4444;border:1px solid rgba(239,68,68,0.4);border-radius:4px;padding:2px 8px;font-weight:700;">End of Life</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-    <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
-      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">endoflife.date API — no key required</span>
-      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">LTS · ESU · Security-Only detection</span>
-      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:#A5B4FC;">Keyword → UUM auto-add</span>
-      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#FCA5A5;">CPM critical-path highlighting</span>
+
+    <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:980px;width:100%;">
+      <div style="background:rgba(20,184,166,0.07);border:1px solid rgba(20,184,166,0.2);border-radius:8px;padding:12px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--teal);margin-bottom:8px;">SMART SLUG RESOLUTION</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot"></div><span>Works for any component name — predefined or custom</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>4-step fallback: exact → case-insensitive → 50+ keyword aliases → API search</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>All Cycles accordion — every tracked version per product</span></div>
+        </div>
+      </div>
+      <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:12px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--amber);margin-bottom:8px;">LIFECYCLE COLUMNS</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:#F59E0B;"></div><span>EOS — End of Standard Support (bug fixes end)</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#EF4444;"></div><span>EOL — End of Life (fully unsupported)</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#8B5CF6;"></div><span>EOSL/ESU — Extended Security Updates window</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#F97316;"></div><span>Security-Only — between EOS and EOL (critical patches only)</span></div>
+        </div>
+      </div>
+      <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--red);margin-bottom:8px;">ACTIONABLE INTELLIGENCE</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:var(--red);"></div><span>Next Milestone — nearest upcoming date with countdown</span></div>
+          <div class="feat"><div class="feat-dot" style="background:var(--amber);"></div><span>Day-precise chips: red &lt;90d, amber &lt;1yr, months otherwise</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>EOL detected → cross-tab coherence alert on all tabs</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>CPM critical-path + float in Gantt header</span></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -519,21 +572,79 @@
     </div>
   </div>
 
-  <!-- ── Slide 9: CTA ────────────────────────────────────── -->
+  <!-- ── Slide 10: Smart Custom Entries + Sign-off ──────── -->
+  <div class="slide" id="s9uum">
+    <div class="accent-bar" style="background:linear-gradient(90deg,#F59E0B,#EF4444,#8B5CF6);"></div>
+    <div class="eyebrow">Smart Entries · Parallel Search · Sign-off Enforcement</div>
+    <h2>Your data centre language — with guardrails at every gate</h2>
+    <p class="sub" style="margin-top:8px;font-size:13px;">
+      Type freely — the engine auto-detects layers, type, severity. Three searches run in parallel as you type. And the sign-off flow enforces correctness before your change goes live.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px;max-width:980px;width:100%;">
+      <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:9px;padding:14px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#F59E0B;margin-bottom:8px;">UUM 3-SECTION PARALLEL SEARCH</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:#3B82F6;"></div><span><strong>Section 1 — Live EOL API:</strong> "sybase" → fetches sap-ase lifecycle, shows EOS/EOL/EOSL with countdown</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#F59E0B;"></div><span><strong>Section 2 — Catalog:</strong> multi-token scoring, relevance badge (↑), EOL chips on matched items</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#8B5CF6;"></div><span><strong>Section 3 — ✦ AI Generated:</strong> Groq creates 6-8 tailored operations (if configured)</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>600ms debounce · all three fire in parallel · one-click "+ Add" on every result</span></div>
+        </div>
+      </div>
+      <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:9px;padding:14px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#FCA5A5;margin-bottom:8px;">SMART CUSTOM UUM + INCIDENT</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:#FCA5A5;"></div><span>"Sybase ASE 15.7 migration AIX to RHEL" → layers DB+OS, type migration — auto-detected</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#FCA5A5;"></div><span>Incident title → severity CRITICAL/HIGH/MEDIUM, group Database/Security/Network — auto</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Custom UUM flows to: Gantt task groups · RTM rows · Matrix swimlanes · Exec Summary</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Batch &amp; DB scheduler tasks auto-generated for migration-type UUM entries</span></div>
+        </div>
+      </div>
+      <div style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:9px;padding:14px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#A5B4FC;margin-bottom:8px;">SIGN-OFF WORKFLOW ENFORCEMENT</div>
+        <div class="feat-list">
+          <div class="feat"><div class="feat-dot" style="background:#F59E0B;"></div><span>Before RTM sign-off: amber banner if Gantt tasks are stale — "Regenerate first"</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#EF4444;"></div><span>Before RTM: red count if FAIL/BLOCKED rows — must acknowledge before signing</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#EF4444;"></div><span>Post-live + RTM stale: "LIVE — rollback if service degraded" banner</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Before cutover: confirms FAIL rows as accepted risk, RTM staleness re-verified</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#F59E0B;">Custom entries flow: Gantt → RTM → Matrix → Exec Summary · Batch + DB jobs in migration tasks</span>
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:var(--teal);">Guest builds freely — "Next" tab badge guides progression</span>
+      <span style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:#A5B4FC;">Keyword engine: 9 layers × 4 types × severity — all auto</span>
+    </div>
+  </div>
+
+  <!-- ── Slide CTA ─────────────────────────────────────────── -->
   <div class="slide" id="s7cta">
     <div class="accent-bar"></div>
     <div class="eyebrow">Get started</div>
     <h2>See it in action — no sign-up needed</h2>
     <div class="cta-box">
       <h3>Live at opsmanifest.netlify.app</h3>
-      <p>Open the app, pick a hardware/OS/DB/App stack, run a Smart Scan, and walk the full provisioning flow — free, in your browser, right now.</p>
+      <p>Open the app, pick a hardware/OS/DB/App stack — guest access is immediate, no account required. Run a Smart Scan, walk the full provisioning flow, and explore every tab.</p>
       <a class="cta-url" href="https://opsmanifest.netlify.app" target="_blank" rel="noopener">Open OpsManifest ↗</a>
     </div>
-    <div style="display:flex;gap:24px;margin-top:22px;flex-wrap:wrap;justify-content:center;">
-      <span style="font-size:13px;color:var(--muted);">Free — browser only, no account needed</span>
-      <span style="font-size:13px;color:var(--muted);">Pro — cloud sync &amp; full Excel export</span>
-      <span style="font-size:13px;color:var(--muted);">Team — shared workspace &amp; org builds</span>
-      <span style="font-size:13px;color:var(--green);font-weight:600;">7-day free trial on paid plans</span>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px;max-width:700px;width:100%;">
+      <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:4px;">Guest</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;">Build freely · explore all tabs · no account · no card</div>
+      </div>
+      <div style="background:rgba(20,184,166,0.08);border:1px solid rgba(20,184,166,0.25);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:13px;font-weight:700;color:var(--teal);margin-bottom:4px;">Free / Starter</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;">Sign in · save 2 builds · full Excel (9 sheets)</div>
+      </div>
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:4px;">Pro</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;">15 builds · CMDB · full Excel · cloud sync · 14-day demo</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:var(--muted);text-align:center;">
+      Demo access codes are issued on request — email <span style="color:var(--teal);">hello@opsmanifest.app</span> · Personal, non-transferable, 14 days from first use
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,0.25);text-align:center;letter-spacing:0.06em;">
+      v1.1.0.0 · Microsoft Store · Meta Quest · PWA
     </div>
     <p class="disclaim">
       OpsManifest <strong>guides</strong> infra teams through structured provisioning workflows.<br />

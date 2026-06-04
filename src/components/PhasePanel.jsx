@@ -13,6 +13,14 @@ import { useAuth } from '../lib/AuthContext.jsx';
 import { canUseFeature, buildLimitReached, incrementBuildCount } from '../lib/auth.js';
 import { useBuildsDb } from '../lib/useBuildsDb.js';
 import { FIREBASE_CONFIGURED } from '../lib/firebase.js';
+import { GROQ_CONFIGURED } from '../lib/groqConfig.js';
+import { searchUUMWithGroq, enrichCustomUUMWithGroq } from '../lib/groq.js';
+import {
+  detectLayersFromText, detectTypeFromText, detectPrimaryLayerFromText,
+  detectSeverityFromText, detectIncidentGroupFromText,
+  buildUUMDescription, buildUUMGroup,
+  extractProductSlugs, formatEolDate,
+} from '../lib/uumKeywordDetect.js';
 import OrgPanel from './OrgPanel.jsx';
 
 const LOCK_ICON = (
@@ -325,49 +333,254 @@ function PhasePill({ label, role, locked, active, isCurrent, onClick }) {
   );
 }
 
-function ItemList({ items, selected, onToggle, colorClass }) {
-  const [search, setSearch] = useState('');
-  const filtered = items.filter(i =>
-    !search || i.txt.toLowerCase().includes(search.toLowerCase()) || i.short.toLowerCase().includes(search.toLowerCase())
-  );
+// StatusBadge for EOL status
+function EolBadge({ status }) {
+  if (!status) return null;
+  const cfg = {
+    eol:      { cls: 'bg-red-100 text-red-700 border-red-200',     label: 'EOL' },
+    eos:      { cls: 'bg-amber-100 text-amber-700 border-amber-200', label: 'EOS' },
+    eos_soon: { cls: 'bg-amber-100 text-amber-700 border-amber-200', label: 'EOS <12mo' },
+    active:   { cls: 'bg-green-100 text-green-700 border-green-200', label: 'Supported' },
+    unknown:  { cls: 'bg-slate-100 text-slate-500 border-slate-200', label: '?' },
+  };
+  const { cls, label } = cfg[status.status] || cfg.unknown;
+  return <span className={`text-xs font-bold rounded px-1 py-0 border flex-shrink-0 ${cls}`}>{label}</span>;
+}
+
+function ItemList({ items, selected, onToggle, colorClass, onAiAdd = null }) {
+  const [query, setQuery] = useState('');
+  const [eolData, setEolData]   = useState([]); // [{slug, name, cycle, status}]
+  const [aiData, setAiData]     = useState([]); // [{short, description, type, layer, grp}]
+  const [eolLoading, setEolLoading] = useState(false);
+  const [aiLoading, setAiLoading]   = useState(false);
+  const [searched, setSearched] = useState(false);
+  const timerRef = useRef(null);
+
+  // ── Multi-token catalog scoring ─────────────────────────────────────────────
+  const tokens = query.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+  const scored = tokens.length === 0
+    ? items.map(i => ({ item: i, score: 1 }))
+    : items.map(item => {
+        const hay = (item.txt + ' ' + item.short + ' ' + (item.grp || '')).toLowerCase();
+        const hits = tokens.filter(t => hay.includes(t)).length;
+        return { item, score: hits };
+      }).filter(s => s.score > 0).sort((a, b) => b.score - a.score);
+
   const byGroup = {};
-  filtered.forEach(i => { if (!byGroup[i.grp]) byGroup[i.grp] = []; byGroup[i.grp].push(i); });
+  scored.forEach(({ item, score }) => {
+    if (!byGroup[item.grp]) byGroup[item.grp] = [];
+    byGroup[item.grp].push({ ...item, _score: score });
+  });
+
+  // ── EOL badge for catalog items ─────────────────────────────────────────────
+  // Checks if any fetched slug's name parts appear in a catalog item's text
+  function catalogEolBadge(item) {
+    if (!eolData.length) return null;
+    const hay = (item.txt + ' ' + item.short).toLowerCase();
+    for (const eol of eolData) {
+      const parts = eol.slug.split('-').filter(p => p.length > 2);
+      if (parts.some(p => hay.includes(p))) return eol.status;
+    }
+    return null;
+  }
+
+  // ── 600ms debounced parallel search ────────────────────────────────────────
+  useEffect(() => {
+    clearTimeout(timerRef.current);
+    if (query.length < 3) {
+      setEolData([]); setAiData([]); setSearched(false);
+      return;
+    }
+    timerRef.current = setTimeout(async () => {
+      setSearched(true);
+
+      // ── EOL API: extract slugs → fetch cycles in parallel ──────────────────
+      const slugs = extractProductSlugs(query);
+      if (slugs.length) {
+        setEolLoading(true);
+        const results = await Promise.all(slugs.map(async slug => {
+          try {
+            const cycles = await fetchProductCycles(slug);
+            const latest = cycles[0];
+            return {
+              slug,
+              name: slug.replace(/-/g, ' '),
+              cycle: latest,
+              status: cycleLiveStatus(latest),
+              allCycles: cycles.slice(0, 3),
+            };
+          } catch { return null; }
+        }));
+        setEolData(results.filter(Boolean));
+        setEolLoading(false);
+      } else {
+        setEolData([]);
+      }
+
+      // ── Groq AI: only if configured ────────────────────────────────────────
+      if (GROQ_CONFIGURED) {
+        setAiLoading(true);
+        try {
+          const { results } = await searchUUMWithGroq(query);
+          setAiData(results || []);
+        } catch {
+          setAiData([]);
+        }
+        setAiLoading(false);
+      }
+    }, 600);
+    return () => clearTimeout(timerRef.current);
+  }, [query]);
+
+  const isSearching = tokens.length > 0;
+  const catalogCount = scored.length;
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white mb-2">
-      <input
-        className="w-full px-3 py-1.5 text-xs border-b border-slate-100 focus:outline-none focus:bg-blue-50 placeholder:text-slate-400"
-        placeholder="Search..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-      />
-      <div className="max-h-52 overflow-y-auto">
+
+      {/* ── Search textarea ─────────────────────────────────────────────────── */}
+      <div className={['p-2 border-b', isSearching ? 'bg-teal-50 border-teal-200' : 'border-slate-100'].join(' ')}>
+        <textarea
+          rows={2}
+          className="w-full px-2 py-1.5 text-xs text-slate-800 bg-white border border-slate-200 rounded resize-none focus:outline-none focus:border-teal-400 placeholder:text-slate-400 leading-relaxed"
+          placeholder={'Type any keywords — e.g. "sybase ase migration aix to rhel"\nSearches catalog + live EOL API + AI in parallel after 600ms'}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+        {isSearching && (
+          <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+            <span className="text-teal-600 font-medium">{catalogCount} catalog</span>
+            {(eolLoading) && <span className="text-blue-500 animate-pulse">· fetching EOL API…</span>}
+            {(!eolLoading && eolData.length > 0) && <span className="text-blue-600">· {eolData.length} EOL product{eolData.length !== 1 ? 's' : ''}</span>}
+            {(GROQ_CONFIGURED && aiLoading) && <span className="text-amber-500 animate-pulse">· AI generating…</span>}
+            {(GROQ_CONFIGURED && !aiLoading && aiData.length > 0) && <span className="text-amber-600">· {aiData.length} AI ops</span>}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section 2: Live EOL API ─────────────────────────────────────────── */}
+      {searched && (eolLoading || eolData.length > 0) && (
+        <div className="border-b border-blue-200">
+          <div className="px-3 py-1 text-xs font-bold text-blue-700 bg-blue-100 flex items-center gap-2">
+            Live EOL API — endoflife.date
+            {eolLoading && <span className="font-normal text-blue-500 animate-pulse">fetching…</span>}
+          </div>
+          <div className="max-h-36 overflow-y-auto">
+            {eolData.map(eol => (
+              <div key={eol.slug} className="px-3 py-2 border-b border-blue-50 flex items-start gap-2 hover:bg-blue-50">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                    <span className="text-xs font-semibold text-slate-700 capitalize">{eol.name}</span>
+                    <EolBadge status={eol.status} />
+                    {eol.cycle && (
+                      <span className="text-xs text-slate-400">
+                        latest {eol.cycle.cycle} · EOL {formatEolDate(eol.cycle.eol)}
+                      </span>
+                    )}
+                  </div>
+                  {eol.allCycles?.length > 1 && (
+                    <div className="flex gap-1 flex-wrap mt-0.5">
+                      {eol.allCycles.slice(1).map(c => (
+                        <span key={c.cycle} className="text-xs text-slate-400 bg-slate-50 border border-slate-100 rounded px-1">
+                          {c.cycle}: {formatEolDate(c.eol)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {onAiAdd && (
+                  <button
+                    onClick={() => onAiAdd({
+                      short: `${eol.name.toUpperCase()} lifecycle management`,
+                      description: `Plan and execute EOL upgrade/migration for ${eol.name}. Latest cycle: ${eol.cycle?.cycle || 'n/a'}, EOL: ${formatEolDate(eol.cycle?.eol)}. Status: ${eol.status.label}.`,
+                      type: eol.status.status === 'eol' ? 'migration' : 'upgrade',
+                      layer: detectPrimaryLayerFromText(eol.name),
+                      grp: 'EOL/Lifecycle Operations',
+                    })}
+                    className="flex-shrink-0 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded px-2 py-0.5 mt-0.5 whitespace-nowrap"
+                  >+ Add</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 3: AI-Generated Operations (Groq) ──────────────────────── */}
+      {GROQ_CONFIGURED && searched && (aiLoading || aiData.length > 0) && (
+        <div className="border-b border-amber-200">
+          <div className="px-3 py-1 text-xs font-bold text-amber-700 bg-amber-100 flex items-center gap-2">
+            ✦ AI-Generated Operations
+            {aiLoading && <span className="font-normal text-amber-500 animate-pulse">generating…</span>}
+          </div>
+          <div className="max-h-40 overflow-y-auto">
+            {aiData.map((r, i) => (
+              <div key={i} className="px-3 py-2 border-b border-amber-50 flex items-start gap-2 hover:bg-amber-50">
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-slate-700">{r.short}</div>
+                  <div className="text-xs text-slate-500 leading-snug">{r.description}</div>
+                  <div className="text-xs text-amber-600 mt-0.5">{r.type} · {r.layer}</div>
+                </div>
+                {onAiAdd && (
+                  <button
+                    onClick={() => onAiAdd(r)}
+                    className="flex-shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded px-2 py-0.5 mt-0.5"
+                  >+ Add</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section 1: Catalog Matches ─────────────────────────────────────── */}
+      <div className="max-h-48 overflow-y-auto">
         {Object.entries(byGroup).map(([grp, grpItems]) => (
           <div key={grp}>
             <div className="sticky top-0 bg-slate-800 text-slate-400 text-xs font-bold uppercase tracking-wider px-3 py-1 flex justify-between items-center">
               <span>{grp}</span>
-              <span
-                className="text-sky-400 text-xs cursor-pointer border border-sky-600 px-1.5 rounded hover:text-white"
-                onClick={() => grpItems.forEach(i => !selected.includes(i.code) && onToggle(i.code))}
-              >All</span>
+              <span className="text-sky-400 text-xs cursor-pointer border border-sky-600 px-1.5 rounded hover:text-white"
+                onClick={() => grpItems.forEach(i => !selected.includes(i.code) && onToggle(i.code))}>All</span>
             </div>
             {grpItems.map(item => {
               const sel = selected.includes(item.code);
+              const eolBadge = catalogEolBadge(item);
+              const showScore = isSearching && item._score > 1;
               return (
-                <div key={item.code} onClick={() => onToggle(item.code)} className={['item-row', sel ? colorClass : ''].join(' ')}>
-                  <span className={['flex-shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-xs font-bold mt-0.5', sel ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'].join(' ')}>
-                    {sel ? '✓' : ''}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium text-slate-700 leading-snug">{item.short}</div>
-                    <div className="text-xs text-slate-400 truncate">{item.txt.substring(item.short.length + 2)}</div>
+                <div key={item.code} className={['item-row flex items-start gap-2', sel ? colorClass : ''].join(' ')}>
+                  {/* Toggle checkbox — clicking whole row or this */}
+                  <span
+                    onClick={() => onToggle(item.code)}
+                    className={['flex-shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-xs font-bold mt-0.5 cursor-pointer', sel ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'].join(' ')}
+                  >{sel ? '✓' : ''}</span>
+                  <div className="min-w-0 flex-1" onClick={() => onToggle(item.code)} style={{ cursor: 'pointer' }}>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-xs font-medium text-slate-700 leading-snug">{item.short}</span>
+                      {showScore && <span className="text-xs text-teal-600 font-semibold">{item._score}↑</span>}
+                      {eolBadge && <EolBadge status={eolBadge} />}
+                    </div>
+                    <div className="text-xs text-slate-400 leading-snug" style={{ whiteSpace: 'normal' }}>
+                      {item.txt.substring(item.short.length + 2)}
+                    </div>
                   </div>
+                  {/* Explicit + Add button */}
+                  <button
+                    onClick={e => { e.stopPropagation(); onToggle(item.code); }}
+                    className={['flex-shrink-0 text-xs rounded px-1.5 py-0.5 mt-0.5 border transition-colors', sel ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-teal-100 hover:text-teal-700 hover:border-teal-300'].join(' ')}
+                  >{sel ? '✓' : '+'}</button>
                 </div>
               );
             })}
           </div>
         ))}
-        {filtered.length === 0 && <div className="px-3 py-4 text-xs text-slate-400 text-center">No results</div>}
+        {scored.length === 0 && (
+          <div className="px-3 py-4 text-center">
+            <div className="text-xs text-slate-400 mb-1">No catalog matches for "{query}"</div>
+            <div className="text-xs text-slate-400">
+              {GROQ_CONFIGURED ? 'AI search is running above — or use "Add Custom UUM" below.' : 'Use "Add Custom UUM / Operation" below to add it.'}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -483,7 +696,7 @@ function ScanModal({ onClose, onComplete }) {
 
 export default function PhasePanel() {
   const s = useStore();
-  const { authUser, setAuthUser, setShowAuthModal } = useAuth();
+  const { authUser, setAuthUser, openAuthModal } = useAuth();
   const [showScan, setShowScan] = useState(false);
   const [activePhase, setActivePhase] = useState(null);
   const [hwCustom, setHwCustom] = useState('');
@@ -497,10 +710,12 @@ export default function PhasePanel() {
   const [reqOpen, setReqOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [customIncOpen, setCustomIncOpen] = useState(false);
+  const [customUUMOpen, setCustomUUMOpen] = useState(false);
   const [buildsOpen, setBuildsOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
   const { builds: savedBuilds, saveBuild, deleteBuild: deleteBuildDb, shareToTeam, org, setOrg, syncing, syncError, cloudEnabled, teamEnabled } = useBuildsDb(authUser);
   const [newCustomInc, setNewCustomInc] = useState({ title: '', desc: '', sev: 'HIGH', owner: '' });
+  const [newCustomUUM, setNewCustomUUM] = useState({ title: '', desc: '', layer: 'os', type: 'upgrade' });
   const [newChange, setNewChange] = useState({ type: 'Emergency', title: '', datetime: '', desc: '', impact: 'High', owner: '' });
   const [aiSuggestBanner, setAiSuggestBanner] = useState(null); // { inc: [], uum: [] }
 
@@ -546,8 +761,9 @@ export default function PhasePanel() {
     const db = dbCustom || (dbSel !== '' && dbSel !== '__custom' ? dbSel : dbCustom);
     const app = appCustom || (appSel !== '' && appSel !== '__custom' ? appSel : appCustom);
     if (!hw || !os || !db || !app) return;
-    if (buildLimitReached(authUser)) {
-      setShowAuthModal(true);
+    // Only block signed-in users who've hit their plan's build limit
+    if (authUser && buildLimitReached(authUser)) {
+      openAuthModal('build_limit');
       return;
     }
     s.build({ hw, os, db, app });
@@ -579,19 +795,59 @@ export default function PhasePanel() {
 
   function handleRtmSignoff() {
     if (!s.phase2Active) return;
-    // Navigate to RTM tab — user must manually review and sign off there
+
+    // If live and RTM is stale — post-live change, rollback may be needed first
+    if (s.promoted && s.rtmStale) {
+      if (!window.confirm(
+        'SYSTEM IS LIVE and RTM has become stale — new changes were detected after go-live.\n\n' +
+        'If service quality has degraded or acceptance criteria are no longer met, execute your ROLLBACK PLAN first.\n\n' +
+        'Proceed to RTM review anyway?'
+      )) return;
+    }
+
+    // Gantt tasks stale before RTM sign-off
+    if (!s.rtmSigned && s.tasksStaleReason) {
+      if (!window.confirm(
+        'Gantt tasks have changed since the implementation plan was generated.\n\n' +
+        'Reason: ' + s.tasksStaleReason + '\n\n' +
+        'Recommended: Open Gantt tab and regenerate tasks first to ensure all work is captured.\n\n' +
+        'Continue to RTM review anyway?'
+      )) return;
+    }
+
+    // Navigate to RTM tab — user reviews rows manually before signing
     s.setActiveTab('rtm');
   }
 
   function handleCutover() {
     if (!s.cabApproved || !s.rtmSigned) return;
+
+    // RTM stale since signing — implementation scope may have drifted
+    if (s.rtmStale) {
+      if (!window.confirm(
+        'RTM has changed since sign-off — the implementation scope may have drifted from what was accepted.\n\n' +
+        'Recommended: Re-verify RTM rows before going live.\n\n' +
+        'Proceed to production cutover anyway?'
+      )) return;
+    }
+
+    // FAIL or BLOCKED rows — known acceptance gaps
+    const failCount = Object.values(s.rtmRows || {}).filter(v => v === 'FAIL' || v === 'BLOCKED').length;
+    if (failCount > 0) {
+      if (!window.confirm(
+        failCount + ' RTM row(s) are marked FAIL or BLOCKED.\n\n' +
+        'Proceeding to cutover with known failures must be documented as accepted risk and approved by the PM.\n\n' +
+        'Execute production cutover with accepted failures?'
+      )) return;
+    }
+
     s.promote();
     s.setActiveTab('closure');
   }
 
   function handleExport() {
     if (!canUseFeature(authUser, 'excel_export')) {
-      setShowAuthModal(true);
+      openAuthModal('export');
       return;
     }
     try {
@@ -707,11 +963,11 @@ export default function PhasePanel() {
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-6">
 
         {/* Phase 1 */}
         <div>
-          <div className="section-hdr">Phase 1 — Platform Topology</div>
+          <div className="section-hdr">1 · Phase 1 — Platform Topology</div>
 
           {/* Requirements */}
           <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white mb-1.5 flex items-center gap-1.5">
@@ -903,23 +1159,23 @@ export default function PhasePanel() {
         </div>
 
         {/* AI Scan */}
-        {s.isBuilt && (
-          <div>
-            <div className="section-hdr">AI Smart Scan</div>
-            {!s.scanComplete ? (
-              <div>
-                <div className="text-xs text-white/82 mb-2 leading-relaxed">
-                  Standalone scan — no API key required. Checks EOL status, known CVEs, and security posture for your stack.
-                </div>
-                <button className="btn-primary" onClick={() => setShowScan(true)}>Run AI Smart Scan</button>
+        <div>
+          <div className="section-hdr">2 · AI Smart Scan</div>
+          {!s.isBuilt ? (
+            <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Build environment first</div>
+          ) : !s.scanComplete ? (
+            <div>
+              <div className="text-xs text-white/82 mb-2 leading-relaxed">
+                Standalone scan — no API key required. Checks EOL status, known CVEs, and security posture for your stack.
               </div>
-            ) : (
-              <div className="text-xs text-green-400 bg-green-900/20 border border-green-800 rounded p-2">
-                Scan complete — System Design unlocked ({s.scanResults?.length || 0} findings)
-              </div>
-            )}
-          </div>
-        )}
+              <button className="btn-primary" onClick={() => setShowScan(true)}>Run AI Smart Scan</button>
+            </div>
+          ) : (
+            <div className="text-xs text-green-400 bg-green-900/20 border border-green-800 rounded p-2">
+              Scan complete — System Design unlocked ({s.scanResults?.length || 0} findings)
+            </div>
+          )}
+        </div>
 
         {/* AI suggestion acceptance banner */}
         {aiSuggestBanner && (
@@ -944,10 +1200,12 @@ export default function PhasePanel() {
         )}
 
         {/* Phase 2 */}
-        {s.isBuilt && (
-          <div>
-            <div className="section-hdr text-red-400 border-red-500 bg-red-500/5">Phase 2 — Incidents + UUM</div>
-
+        <div>
+          <div className="section-hdr text-red-400 border-red-500 bg-red-500/5">3 · Phase 2 — Incidents + UUM</div>
+          {!s.isBuilt ? (
+            <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Build environment first</div>
+          ) : (
+          <>
             {s.scanComplete && !s.phase2Active && (
               <div className="text-xs text-green-300 bg-green-900/20 border border-green-800 rounded p-2 mb-2">
                 System Design is now open. Start Phase 2 after design sign-off.
@@ -983,47 +1241,80 @@ export default function PhasePanel() {
             >
               <span className="text-white/62">{customIncOpen ? '▾' : '▸'}</span> Add Custom Incident / Ticket
             </button>
-            {customIncOpen && (
-              <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
-                <div>
-                  <label className="text-xs text-white/82 block mb-0.5">Title / Short Description</label>
-                  <SuggestInput fieldId="title" value={newCustomInc.title} onChange={v => setNewCustomInc(p => ({ ...p, title: v }))} placeholder="e.g. SSL cert expiry on app server" />
-                </div>
-                <div>
-                  <label className="text-xs text-white/82 block mb-0.5">Full Description</label>
-                  <SuggestInput fieldId="desc" value={newCustomInc.desc} onChange={v => setNewCustomInc(p => ({ ...p, desc: v }))} placeholder="Detail the issue or ticket scope" />
-                </div>
-                <div>
-                  <label className="text-xs text-white/82 block mb-0.5">Severity</label>
-                  <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
-                    value={newCustomInc.sev} onChange={e => setNewCustomInc(p => ({ ...p, sev: e.target.value }))}>
-                    {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-white/82 block mb-0.5">Assigned Owner</label>
-                  <SuggestInput fieldId="owner" value={newCustomInc.owner} onChange={v => setNewCustomInc(p => ({ ...p, owner: v }))} placeholder="Team or person responsible" />
-                </div>
-                <button
-                  className="btn-amber w-full mt-1"
-                  onClick={() => {
-                    if (!newCustomInc.title.trim()) return;
-                    const id = `custom_${Date.now()}`;
-                    s.addCustomInc({
-                      id, code: id,
-                      short: newCustomInc.title.substring(0, 60),
-                      txt: `${newCustomInc.title}: ${newCustomInc.desc}`,
-                      grp: 'Custom Entries',
-                      sev: newCustomInc.sev,
-                      owner: newCustomInc.owner,
-                    });
-                    s.toggleInc(id);
-                    setNewCustomInc({ title: '', desc: '', sev: 'HIGH', owner: '' });
-                    setCustomIncOpen(false);
-                  }}
-                >Add & Select</button>
-              </div>
-            )}
+            {customIncOpen && (() => {
+                const incText = newCustomInc.title + ' ' + newCustomInc.desc;
+                const detectedSev = newCustomInc.title.length >= 3 ? detectSeverityFromText(incText) : null;
+                const detectedGrp = newCustomInc.title.length >= 3 ? detectIncidentGroupFromText(incText) : null;
+                const detectedLayers = newCustomInc.title.length >= 3 ? detectLayersFromText(incText) : [];
+                return (
+                  <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
+                    <div>
+                      <label className="text-xs text-white/82 block mb-0.5">Title / Incident Description</label>
+                      <SuggestInput fieldId="title" value={newCustomInc.title}
+                        onChange={v => setNewCustomInc(p => ({ ...p, title: v }))}
+                        placeholder="e.g. Oracle DB alert log showing ORA-04031 shared pool exhausted" />
+                    </div>
+                    {/* Smart inference preview */}
+                    {newCustomInc.title.length >= 4 && (
+                      <div className="bg-teal-900/30 border border-teal-600/30 rounded px-2 py-1.5 text-xs">
+                        <div className="text-teal-300 font-semibold mb-0.5">Detected from your description:</div>
+                        <div className="flex flex-wrap gap-1">
+                          {detectedLayers.map(l => <span key={l} className="bg-teal-700/40 text-teal-200 rounded px-1.5 py-0.5">{l.toUpperCase()}</span>)}
+                          {detectedSev && <span className={['rounded px-1.5 py-0.5 font-bold', detectedSev === 'CRITICAL' ? 'bg-red-800/60 text-red-200' : detectedSev === 'HIGH' ? 'bg-amber-700/60 text-amber-200' : 'bg-slate-700/60 text-slate-200'].join(' ')}>{detectedSev}</span>}
+                          {detectedGrp && <span className="bg-slate-700/60 text-slate-300 rounded px-1.5 py-0.5">{detectedGrp}</span>}
+                        </div>
+                        <div className="text-white/50 mt-0.5">Fix runbook tasks will match detected layers — override below if needed</div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="text-xs text-white/82 block mb-0.5">Full Description / Ticket Scope</label>
+                      <SuggestInput fieldId="desc" value={newCustomInc.desc}
+                        onChange={v => setNewCustomInc(p => ({ ...p, desc: v }))}
+                        placeholder="Which system, database, version, error code, or service is affected?" />
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs text-white/82 block mb-0.5">Severity
+                          {detectedSev && <span className="ml-1 text-teal-400">(auto-detected)</span>}
+                        </label>
+                        <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
+                          value={newCustomInc.sev || detectedSev || 'HIGH'}
+                          onChange={e => setNewCustomInc(p => ({ ...p, sev: e.target.value }))}>
+                          {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-white/82 block mb-0.5">Assigned Owner</label>
+                        <SuggestInput fieldId="owner" value={newCustomInc.owner}
+                          onChange={v => setNewCustomInc(p => ({ ...p, owner: v }))}
+                          placeholder="Team or person" />
+                      </div>
+                    </div>
+                    <button
+                      className="btn-amber w-full mt-1"
+                      onClick={() => {
+                        if (!newCustomInc.title.trim()) return;
+                        const id = `custom_${Date.now()}`;
+                        const layers = detectLayersFromText(newCustomInc.title + ' ' + newCustomInc.desc);
+                        const sev = newCustomInc.sev || detectSeverityFromText(newCustomInc.title + ' ' + newCustomInc.desc);
+                        const grp = detectIncidentGroupFromText(newCustomInc.title + ' ' + newCustomInc.desc);
+                        s.addCustomInc({
+                          id, code: id,
+                          short: newCustomInc.title.substring(0, 60),
+                          txt: `${newCustomInc.title}${newCustomInc.desc ? ': ' + newCustomInc.desc : ''}`,
+                          grp,
+                          sev,
+                          owner: newCustomInc.owner,
+                          layers,
+                        });
+                        s.toggleInc(id);
+                        setNewCustomInc({ title: '', desc: '', sev: 'HIGH', owner: '' });
+                        setCustomIncOpen(false);
+                      }}
+                    >Add & Select</button>
+                  </div>
+                );
+              })()}
 
             {/* Custom incidents display */}
             {s.customInc?.length > 0 && (
@@ -1048,7 +1339,190 @@ export default function PhasePanel() {
 
             <div className="text-xs font-semibold text-white/85 mt-4 mb-1">Schedule UUM Items</div>
             <div className="text-xs text-white/75 mb-1.5">{s.selUUM.length} selected</div>
-            <ItemList items={ALL_UUM} selected={s.selUUM} onToggle={s.toggleUUM} colorClass="bg-amber-900/30 border-l-2 border-amber-500" />
+
+            {/* Custom UUM entries display */}
+            {(s.customUUM?.length > 0) && (
+              <div className="mb-2">
+                <div className="text-xs text-white/82 mb-1">Custom UUM Entries ({s.customUUM.length})</div>
+                {s.customUUM.map(cu => {
+                  const sel = s.selUUM.includes(cu.id);
+                  return (
+                    <div key={cu.id} className={['text-xs rounded p-1.5 mb-1 cursor-pointer border flex items-start gap-2', sel ? 'bg-amber-900/30 border-amber-700 text-amber-200' : 'bg-white/5 border-white/10 text-white/78'].join(' ')}
+                      onClick={() => s.toggleUUM(cu.id)}>
+                      <span className={['flex-shrink-0 w-3 h-3 rounded border flex items-center justify-center text-xs font-bold mt-0.5', sel ? 'bg-amber-500 border-amber-500 text-white' : 'border-white/30'].join(' ')}>{sel ? '✓' : ''}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">{cu.short}</div>
+                        <div className="text-white/58 text-xs">
+                          {cu.type} — {cu.layer}
+                          {cu.enriching && <span className="ml-1 text-teal-400 animate-pulse">✦ enriching…</span>}
+                          {cu.enriched && cu.aiTasks?.length > 0 && <span className="ml-1 text-teal-300">✦ {cu.aiTasks.length} tasks</span>}
+                        </div>
+                      </div>
+                      <button className="ml-auto text-white/52 hover:text-red-400 text-xs flex-shrink-0" onClick={e => { e.stopPropagation(); s.removeCustomUUM(cu.id); }}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <ItemList
+              items={ALL_UUM}
+              selected={s.selUUM}
+              onToggle={s.toggleUUM}
+              colorClass="bg-amber-900/30 border-l-2 border-amber-500"
+              onAiAdd={(r) => {
+                const id = `custom_uum_${Date.now()}`;
+                const layers = detectLayersFromText((r.short || '') + ' ' + (r.description || '') + ' ' + (r.grp || ''));
+                const layer  = r.layer || detectPrimaryLayerFromText((r.short || '') + ' ' + (r.description || ''));
+                const type   = r.type || detectTypeFromText((r.short || '') + ' ' + (r.description || ''));
+                const grp    = r.grp || buildUUMGroup(layers, type);
+                const txt    = buildUUMDescription(r.short, r.description, layers, type);
+                s.addCustomUUM({ id, short: r.short?.substring(0, 60), txt, grp, layer, type, layers, enriching: GROQ_CONFIGURED });
+                s.toggleUUM(id);
+                if (GROQ_CONFIGURED) {
+                  enrichCustomUUMWithGroq(r.short, r.description, layer, type)
+                    .then(({ enriched }) => s.updateCustomUUM(id, { txt: enriched.description || txt, aiTasks: enriched.tasks || [], risks: enriched.risks || [], prerequisites: enriched.prerequisites || [], enriching: false, enriched: true }))
+                    .catch(() => s.updateCustomUUM(id, { enriching: false }));
+                }
+              }}
+            />
+
+            {/* Add Custom UUM form */}
+            <button
+              onClick={() => setCustomUUMOpen(o => !o)}
+              className="w-full text-left text-xs font-medium text-white/82 hover:text-white flex items-center gap-1.5 mt-1 mb-1.5"
+            >
+              <span className="text-white/62">{customUUMOpen ? '▾' : '▸'}</span> Add Custom UUM / Operation
+            </button>
+            {customUUMOpen && (() => {
+              const uumText = newCustomUUM.title + ' ' + newCustomUUM.desc;
+              // Auto-detect layers and type from what the user typed
+              const autoLayers = newCustomUUM.title.length >= 3 ? detectLayersFromText(uumText) : [];
+              const autoType   = newCustomUUM.title.length >= 3 ? detectTypeFromText(uumText) : null;
+              const autoPrimary = autoLayers.length ? detectPrimaryLayerFromText(uumText) : null;
+              // Smart catalog match: find catalog items with 2+ keyword hits
+              const tokens = newCustomUUM.title.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+              const similar = tokens.length >= 2 ? ALL_UUM.filter(u => {
+                const hay = (u.txt + ' ' + u.short).toLowerCase();
+                return tokens.filter(t => hay.includes(t)).length >= 2;
+              }).slice(0, 3) : [];
+              const effectiveLayer = newCustomUUM.layer !== 'os' ? newCustomUUM.layer : (autoPrimary || 'os');
+              const effectiveType  = newCustomUUM.type  !== 'upgrade' ? newCustomUUM.type  : (autoType  || 'upgrade');
+              return (
+                <div className="bg-white/5 rounded-lg p-2 mb-2 space-y-1.5 fade-in">
+                  {/* Similar catalog items */}
+                  {similar.length > 0 && (
+                    <div className="bg-amber-900/40 border border-amber-600 rounded p-1.5">
+                      <div className="text-xs text-amber-300 font-semibold mb-1">Similar operations already in catalog — click to select:</div>
+                      {similar.map(u => (
+                        <div key={u.code} className="text-xs text-amber-200 flex items-center gap-1.5 mb-0.5 cursor-pointer hover:text-white"
+                          onClick={() => { if (!s.selUUM.includes(u.code)) s.toggleUUM(u.code); setCustomUUMOpen(false); setNewCustomUUM({ title: '', desc: '', layer: 'os', type: 'upgrade' }); }}>
+                          <span className="text-amber-400">↩</span> <strong>{u.short}</strong>: {u.txt.substring(u.short.length + 2, u.short.length + 70)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-xs text-white/82 block mb-0.5">Operation Title</label>
+                    <input
+                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1.5 focus:outline-none focus:border-teal-400 placeholder:text-white/40"
+                      placeholder="e.g. Sybase ASE 15.7 migration from AIX 7.2 to RHEL 9.4"
+                      value={newCustomUUM.title}
+                      onChange={e => setNewCustomUUM(p => ({ ...p, title: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-white/82 block mb-0.5">Scope / Version Details</label>
+                    <input
+                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1.5 focus:outline-none focus:border-teal-400 placeholder:text-white/40"
+                      placeholder="Source system, target, versions, data size, estimated downtime"
+                      value={newCustomUUM.desc}
+                      onChange={e => setNewCustomUUM(p => ({ ...p, desc: e.target.value }))}
+                    />
+                  </div>
+                  {/* Smart inference preview */}
+                  {newCustomUUM.title.length >= 4 && (
+                    <div className="bg-teal-900/30 border border-teal-600/30 rounded px-2 py-1.5 text-xs">
+                      <div className="text-teal-300 font-semibold mb-1">Detected from your description — override below if needed:</div>
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {autoLayers.map(l => <span key={l} className="bg-teal-700/40 text-teal-200 rounded px-1.5 py-0.5">{l.toUpperCase()}</span>)}
+                        {autoType && <span className="bg-indigo-700/50 text-indigo-200 rounded px-1.5 py-0.5">{autoType}</span>}
+                      </div>
+                      <div className="text-white/50">Gantt tasks will be generated for: {autoLayers.join(', ')} · {autoType}</div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-white/82 block mb-0.5">Primary Layer
+                        {autoPrimary && autoPrimary !== newCustomUUM.layer && <span className="ml-1 text-teal-400">(auto)</span>}
+                      </label>
+                      <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
+                        value={effectiveLayer}
+                        onChange={e => setNewCustomUUM(p => ({ ...p, layer: e.target.value }))}>
+                        {['os','db','app','web','security','storage','hardware','network','backup'].map(l => (
+                          <option key={l} value={l}>{l.toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-white/82 block mb-0.5">Type
+                        {autoType && autoType !== newCustomUUM.type && <span className="ml-1 text-teal-400">(auto)</span>}
+                      </label>
+                      <select className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 focus:outline-none"
+                        value={effectiveType}
+                        onChange={e => setNewCustomUUM(p => ({ ...p, type: e.target.value }))}>
+                        {['upgrade','migration','update','patch'].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    className="btn-amber w-full mt-1"
+                    onClick={async () => {
+                      if (!newCustomUUM.title.trim()) return;
+                      const id = `custom_uum_${Date.now()}`;
+                      const uumTxt = newCustomUUM.title + ' ' + newCustomUUM.desc;
+                      const finalLayers = detectLayersFromText(uumTxt);
+                      const finalType   = detectTypeFromText(uumTxt);
+                      const finalLayer  = detectPrimaryLayerFromText(uumTxt);
+                      const finalGrp    = buildUUMGroup(finalLayers, finalType);
+                      const finalTxt    = buildUUMDescription(newCustomUUM.title, newCustomUUM.desc, finalLayers, finalType);
+                      const entry = {
+                        id,
+                        short: newCustomUUM.title.substring(0, 60),
+                        txt: finalTxt,
+                        grp: finalGrp,
+                        layer: finalLayer,
+                        type: finalType,
+                        layers: finalLayers,
+                        enriching: GROQ_CONFIGURED,
+                      };
+                      s.addCustomUUM(entry);
+                      s.toggleUUM(id);
+                      const saved = { title: newCustomUUM.title, desc: newCustomUUM.desc, layer: finalLayer, type: finalType };
+                      setNewCustomUUM({ title: '', desc: '', layer: 'os', type: 'upgrade' });
+                      setCustomUUMOpen(false);
+                      if (GROQ_CONFIGURED) {
+                        try {
+                          const { enriched } = await enrichCustomUUMWithGroq(saved.title, saved.desc, saved.layer, saved.type);
+                          s.updateCustomUUM(id, {
+                            txt: enriched.description || finalTxt,
+                            aiTasks: enriched.tasks || [],
+                            risks: enriched.risks || [],
+                            prerequisites: enriched.prerequisites || [],
+                            enriching: false,
+                            enriched: true,
+                          });
+                        } catch {
+                          s.updateCustomUUM(id, { enriching: false });
+                        }
+                      }
+                    }}
+                  >{GROQ_CONFIGURED ? 'Add & Enrich with AI' : 'Add & Generate Tasks'}</button>
+                </div>
+              );
+            })()}
 
             {/* Injection summary + confirm */}
             {!s.phase2Active && (s.selInc.length > 0 || s.selUUM.length > 0) && (
@@ -1062,13 +1536,17 @@ export default function PhasePanel() {
             <button className="btn-red mt-1" disabled={s.selInc.length === 0 || s.phase2Active} onClick={handleInjectIncidents}>
               {s.phase2Active ? 'Phase 2 Active' : `Inject to Build (${s.selInc.length} inc + ${s.selUUM.length} UUM)`}
             </button>
-          </div>
-        )}
+          </>
+          )}
+        </div>
 
         {/* CAB Gate */}
-        {s.phase2Active && (
-          <div>
-            <div className="section-hdr">CAB Gate</div>
+        <div>
+          <div className="section-hdr">4 · CAB Gate</div>
+          {!s.phase2Active ? (
+            <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Inject Phase 2 first</div>
+          ) : (
+          <>
             <div className={['rounded-lg border p-2', s.cabApproved ? 'border-green-600 bg-green-900/20' : s.cabDeclined ? 'border-red-500 bg-red-900/30' : 'border-red-600 bg-red-900/20'].join(' ')}>
               <label className="text-xs text-white/78 block mb-1">CAB Authorization</label>
               <select
@@ -1130,29 +1608,85 @@ export default function PhasePanel() {
                 >Resubmit to CAB</button>
               </div>
             )}
-          </div>
-        )}
+          </>
+          )}
+        </div>
 
         {/* RTM Sign-Off */}
-        {s.phase2Active && (
-          <div>
-            <div className="section-hdr">RTM Sign-Off</div>
+        <div>
+          <div className="section-hdr">5 · RTM Sign-Off</div>
+          {!s.phase2Active ? (
+            <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Inject Phase 2 first</div>
+          ) : (
+          <>
+            {/* Gantt stale — warn before sign-off */}
+            {!s.rtmSigned && s.tasksStaleReason && (
+              <div className="bg-amber-900/20 border border-amber-600/40 rounded-lg p-2 mb-2 text-xs fade-in">
+                <div className="text-amber-300 font-semibold mb-0.5">Gantt tasks have changed</div>
+                <div className="text-amber-200/70 leading-snug mb-1">{s.tasksStaleReason}</div>
+                <div className="text-amber-300/80 text-xs leading-snug">Regenerate tasks before signing RTM to ensure implementation scope is current and complete.</div>
+                <button className="btn-amber mt-1.5 text-xs py-0.5" onClick={() => s.setActiveTab('gantt')}>Open Gantt to Regenerate →</button>
+              </div>
+            )}
+
+            {/* RTM FAIL/BLOCKED rows pre-warning */}
+            {!s.rtmSigned && (() => {
+              const failCount = Object.values(s.rtmRows || {}).filter(v => v === 'FAIL' || v === 'BLOCKED').length;
+              return failCount > 0 ? (
+                <div className="bg-red-900/20 border border-red-600/30 rounded-lg p-2 mb-2 text-xs fade-in">
+                  <div className="text-red-300 font-semibold">{failCount} row{failCount > 1 ? 's' : ''} FAIL / BLOCKED in RTM</div>
+                  <div className="text-red-200/70 leading-snug">Resolve or document as accepted risk before signing off.</div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Post-live RTM stale — rollback warning */}
+            {s.promoted && s.rtmStale && (
+              <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-2 mb-2 text-xs fade-in">
+                <div className="text-red-300 font-bold mb-0.5">LIVE — RTM Has Become Stale</div>
+                <div className="text-red-200/70 leading-snug mb-1">Changes were made after go-live. If service quality has degraded or acceptance criteria are no longer met, execute rollback immediately.</div>
+                <button className="btn-red text-xs py-0.5" onClick={() => s.setActiveTab('closure')}>Assess Rollback in Closure →</button>
+              </div>
+            )}
+
             <button className={s.rtmSigned ? 'btn-teal' : 'btn-amber'} disabled={s.rtmSigned} onClick={handleRtmSignoff}>
-              {s.rtmSigned ? 'RTM Signed Off' : 'Sign Off RTM'}
+              {s.rtmSigned ? 'RTM Signed Off' : 'Review & Sign Off RTM'}
             </button>
-          </div>
-        )}
+          </>
+          )}
+        </div>
 
         {/* Cutover */}
-        {s.rtmSigned && (
-          <div>
-            <div className="section-hdr">Production Cutover</div>
+        <div>
+          <div className="section-hdr">6 · Production Cutover</div>
+          {!s.rtmSigned ? (
+            <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Complete RTM sign-off first</div>
+          ) : (
+          <>
+
+            {/* RTM stale since signing */}
+            {s.rtmStale && !s.promoted && (
+              <div className="bg-amber-900/20 border border-amber-600/40 rounded-lg p-2 mb-2 text-xs fade-in">
+                <div className="text-amber-300 font-semibold">RTM Changed Since Sign-Off</div>
+                <div className="text-amber-200/70 leading-snug">Re-verify RTM acceptance criteria before cutting over to production.</div>
+              </div>
+            )}
+
+            {/* Gantt stale + ready for cutover */}
+            {s.tasksStaleReason && !s.promoted && (
+              <div className="bg-amber-900/20 border border-amber-600/30 rounded-lg p-2 mb-2 text-xs fade-in">
+                <div className="text-amber-300 font-semibold">Gantt Tasks Stale</div>
+                <div className="text-amber-200/70 leading-snug">Verify all implementation tasks are complete before going live.</div>
+              </div>
+            )}
+
             <button className={s.promoted ? 'btn-green' : 'btn-primary'} disabled={s.promoted || !s.cabApproved} onClick={handleCutover}>
               {s.promoted ? 'Production STABLE' : 'Execute Production Cutover'}
             </button>
             {!s.cabApproved && <div className="text-xs text-red-400 mt-1">BLOCKED: CAB approval required first</div>}
-          </div>
-        )}
+          </>
+          )}
+        </div>
 
         {/* Emergency Changes */}
         {s.isBuilt && (
@@ -1272,7 +1806,16 @@ export default function PhasePanel() {
                 </div>
               )}
 
-              {s.isBuilt && (
+              {s.isBuilt && !authUser && (
+                <div className="bg-white/8 border border-white/15 rounded-lg p-2 text-center">
+                  <div className="text-xs text-white/70 mb-1.5">Sign in free to save this build</div>
+                  <button
+                    className="btn-teal w-full text-xs py-1"
+                    onClick={() => openAuthModal('save')}
+                  >Sign In — Free, no card</button>
+                </div>
+              )}
+              {s.isBuilt && authUser && (
                 <div className="flex gap-1">
                   <input
                     className="flex-1 text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/52 focus:outline-none"
@@ -1316,12 +1859,14 @@ export default function PhasePanel() {
         </div>
 
         {/* Export */}
-        {s.isBuilt && (
-          <div className="pb-4">
-            <div className="section-hdr">Export</div>
+        <div className="pb-4">
+          <div className="section-hdr">7 · Export</div>
+          {!s.isBuilt ? (
+            <div className="text-xs text-white/40 flex items-center gap-2 py-1">{LOCK_ICON} Build environment first</div>
+          ) : (
             <button className="btn-green" onClick={handleExport}>Export to Excel (12 Sheets)</button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Disclaimer */}

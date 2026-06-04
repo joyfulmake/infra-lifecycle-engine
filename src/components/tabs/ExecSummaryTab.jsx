@@ -120,12 +120,14 @@ export default function ExecSummaryTab() {
               ) : (
                 <div className="space-y-1">
                   {s.selUUM.map(code => {
-                    const uum = ALL_UUM.find(u => u.code === code);
+                    const uum = ALL_UUM.find(u => u.code === code)
+                             || (s.customUUM || []).find(u => u.id === code);
                     if (!uum) return null;
                     return (
                       <div key={code} className={['text-xs flex items-start gap-2 rounded px-2 py-1', s.promoted ? 'bg-purple-50 text-purple-700' : 'bg-amber-50 text-amber-700'].join(' ')}>
                         <span className="font-medium flex-shrink-0">{uum.short}</span>
                         <span className={['badge text-xs flex-shrink-0', uum.type === 'migration' ? 'badge-blue' : uum.type === 'upgrade' ? 'badge-amber' : 'badge-slate'].join(' ')}>{uum.type}</span>
+                        {!ALL_UUM.find(u => u.code === code) && <span className="badge badge-teal text-xs flex-shrink-0">Custom</span>}
                       </div>
                     );
                   })}
@@ -168,7 +170,7 @@ export default function ExecSummaryTab() {
                   </tr>
                 );
               })}
-              {[...new Set(s.selUUM.map(c => ALL_UUM.find(u => u.code === c)?.grp))].filter(Boolean).map(grp => (
+              {[...new Set(s.selUUM.map(c => (ALL_UUM.find(u => u.code === c) || (s.customUUM || []).find(u => u.id === c))?.grp))].filter(Boolean).map(grp => (
                 <tr key={grp} className="border-b border-slate-50">
                   <td className="py-1.5 pr-4 font-medium text-slate-700">{grp}</td>
                   <td className="py-1.5 pr-4 text-slate-500">Execute change items per approved maintenance plan</td>
