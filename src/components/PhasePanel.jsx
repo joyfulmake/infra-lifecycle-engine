@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore, DESIGN_SECTIONS, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS } from '../store/useStore.js';
 import { ALL_INC, FIXES } from '../lib/incidents.js';
@@ -8,6 +8,7 @@ import { exportExcel } from '../lib/exportExcel.js';
 import { runSmartScan } from '../lib/smartScan.js';
 import { matchSuggestKeys, buildContextSuggestions } from '../lib/suggestDb.js';
 import { getEolInfo } from '../lib/eolData.js';
+import { searchProducts, fetchProductCycles, cycleLiveStatus } from '../lib/eolApi.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { canUseFeature, buildLimitReached, incrementBuildCount } from '../lib/auth.js';
 import { useBuildsDb } from '../lib/useBuildsDb.js';
@@ -24,8 +25,9 @@ const SEV_COLOR = { CRITICAL: 'text-red-800 bg-red-50 border-red-300', HIGH: 'te
 const SEV_BADGE = { CRITICAL: 'bg-red-600 text-white', HIGH: 'bg-orange-500 text-white', MEDIUM: 'bg-amber-500 text-white', LOW: 'bg-green-600 text-white', INFO: 'bg-sky-500 text-white' };
 
 // Floating suggestion dropdown rendered via Portal — works outside overflow:hidden ancestors
-function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
+function SuggestDropdown({ suggestions, onSelect, anchorEl, activeIdx = -1 }) {
   const [pos, setPos] = useState(null);
+  const activeRef = useRef(null);
 
   useEffect(() => {
     if (!anchorEl) return;
@@ -42,12 +44,21 @@ function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
     };
   }, [anchorEl]);
 
+  useEffect(() => {
+    if (activeRef.current) activeRef.current.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx]);
+
   if (!suggestions.length || !pos) return null;
 
   return createPortal(
     <div className="suggest-dropdown" style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}>
       {suggestions.map((s, i) => (
-        <div key={i} className="suggest-item" onMouseDown={e => { e.preventDefault(); onSelect(s); }}>
+        <div
+          key={i}
+          ref={i === activeIdx ? activeRef : null}
+          className={`suggest-item${i === activeIdx ? ' bg-teal/20 !text-white font-semibold' : ''}`}
+          onMouseDown={e => { e.preventDefault(); onSelect(s); }}
+        >
           {s}
         </div>
       ))}
@@ -73,27 +84,87 @@ const HW_OS_COMPAT = {
   'Oracle Exadata X10M':   ['Oracle Linux 9', 'RHEL 8.x'],
 };
 
-// Option-filtered input — suggestions come from an options array, not suggestDb
+// Option-filtered input with keyboard nav + live endoflife.date API augmentation
 function FilteredSuggestInput({ options, value, onChange, placeholder, className }) {
   const [focused, setFocused] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [liveSugs, setLiveSugs] = useState([]); // [{label, slug, cycle, liveStatus}]
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [liveLoading, setLiveLoading] = useState(false);
   const inputRef = useRef(null);
+  const apiTimerRef = useRef(null);
 
-  function getSuggestions(val) {
+  const allSuggestions = [
+    ...suggestions,
+    ...liveSugs.map(l => l.label).filter(l => !suggestions.includes(l)),
+  ];
+
+  function getStaticSuggestions(val) {
     if (!val || val.trim().length < 2) return options.slice(0, 6);
     const lower = val.toLowerCase();
     return options.filter(o => o.toLowerCase().includes(lower)).slice(0, 6);
   }
 
+  async function fetchLiveSuggestions(val) {
+    if (val.trim().length < 3) { setLiveSugs([]); return; }
+    setLiveLoading(true);
+    try {
+      const slugs = await searchProducts(val.trim().toLowerCase());
+      const results = await Promise.all(
+        slugs.slice(0, 4).map(async slug => {
+          try {
+            const cycles = await fetchProductCycles(slug);
+            const best = cycles[0];
+            const ls = cycleLiveStatus(best);
+            const label = `${slug} ${best?.cycle || ''}`.trim();
+            return { label, slug, cycle: best, liveStatus: ls };
+          } catch { return null; }
+        })
+      );
+      setLiveSugs(results.filter(Boolean));
+    } catch { setLiveSugs([]); }
+    finally { setLiveLoading(false); }
+  }
+
   function handleChange(val) {
     onChange(val);
-    setSuggestions(getSuggestions(val));
+    const st = getStaticSuggestions(val);
+    setSuggestions(st);
+    setActiveIdx(-1);
+    clearTimeout(apiTimerRef.current);
+    if (val.trim().length >= 3) {
+      apiTimerRef.current = setTimeout(() => fetchLiveSuggestions(val), 500);
+    } else {
+      setLiveSugs([]);
+    }
   }
 
   function handleFocus() {
     setFocused(true);
-    setSuggestions(getSuggestions(value || ''));
+    setSuggestions(getStaticSuggestions(value || ''));
   }
+
+  function handleKeyDown(e) {
+    if (!allSuggestions.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, allSuggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter') {
+      const pick = activeIdx >= 0 ? allSuggestions[activeIdx] : allSuggestions[0];
+      if (pick) { e.preventDefault(); onChange(pick); setSuggestions([]); setLiveSugs([]); setActiveIdx(-1); }
+    } else if (e.key === 'Escape') {
+      setSuggestions([]); setLiveSugs([]); setActiveIdx(-1);
+    }
+  }
+
+  function selectItem(s) { onChange(s); setSuggestions([]); setLiveSugs([]); setActiveIdx(-1); }
+
+  const dropdownTop = (inputRef.current?.getBoundingClientRect().bottom ?? 0) + 4;
+  const dropdownLeft = inputRef.current?.getBoundingClientRect().left ?? 0;
+  const dropdownWidth = Math.max(inputRef.current?.getBoundingClientRect().width ?? 200, 320);
 
   return (
     <div className="relative">
@@ -105,27 +176,56 @@ function FilteredSuggestInput({ options, value, onChange, placeholder, className
         value={value || ''}
         onChange={e => handleChange(e.target.value)}
         onFocus={handleFocus}
-        onBlur={() => { setFocused(false); setTimeout(() => setSuggestions([]), 200); }}
+        onBlur={() => { setFocused(false); setTimeout(() => { setSuggestions([]); setLiveSugs([]); setActiveIdx(-1); }, 200); }}
+        onKeyDown={handleKeyDown}
       />
-      {focused && suggestions.length > 0 && (
-        createPortal(
-          <div className="suggest-dropdown" style={{ position: 'fixed', top: (inputRef.current?.getBoundingClientRect().bottom ?? 0) + 4, left: inputRef.current?.getBoundingClientRect().left ?? 0, width: Math.max(inputRef.current?.getBoundingClientRect().width ?? 200, 300), zIndex: 9999 }}>
-            {suggestions.map((s, i) => {
-              const info = getEolInfo(s);
-              return (
-                <div key={i} className="suggest-item flex items-center justify-between gap-2" onMouseDown={e => { e.preventDefault(); onChange(s); setSuggestions([]); }}>
-                  <span>{s}</span>
-                  {info && info.status !== 'active' && info.status !== 'unknown' && (
-                    <span className={`text-xs font-bold flex-shrink-0 ${info.status === 'eol' ? 'text-red-400' : 'text-amber-400'}`}>
-                      {info.status === 'eol' ? 'EOL' : 'EOS Soon'}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>,
-          document.body
-        )
+      {focused && allSuggestions.length > 0 && createPortal(
+        <div className="suggest-dropdown" style={{ position: 'fixed', top: dropdownTop, left: dropdownLeft, width: dropdownWidth, zIndex: 9999 }}>
+          {suggestions.length > 0 && (
+            <div className="px-2 py-1 text-xs text-white/40 uppercase tracking-wide border-b border-white/10">Catalog</div>
+          )}
+          {suggestions.map((s, i) => {
+            const info = getEolInfo(s);
+            const isActive = i === activeIdx;
+            return (
+              <div key={`s-${i}`} className={`suggest-item flex items-center justify-between gap-2${isActive ? ' bg-teal/20 !text-white font-semibold' : ''}`}
+                onMouseDown={e => { e.preventDefault(); selectItem(s); }}>
+                <span>{s}</span>
+                {info && info.status !== 'active' && info.status !== 'unknown' && (
+                  <span className={`text-xs font-bold flex-shrink-0 ${info.status === 'eol' ? 'text-red-400' : 'text-amber-400'}`}>
+                    {info.status === 'eol' ? 'EOL' : 'EOS Soon'}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          {liveSugs.length > 0 && (
+            <div className="px-2 py-1 text-xs text-teal/80 uppercase tracking-wide border-t border-white/10 border-b border-white/10">
+              Live API{liveLoading ? ' …' : ''}
+            </div>
+          )}
+          {liveSugs.map((item, i) => {
+            const globalIdx = suggestions.length + i;
+            const isActive = globalIdx === activeIdx;
+            const statusColor = { eol: 'text-red-400', eos_soon: 'text-amber-400', eos: 'text-amber-400', active: 'text-green-400' };
+            return (
+              <div key={`l-${i}`} className={`suggest-item flex items-center justify-between gap-2${isActive ? ' bg-teal/20 !text-white font-semibold' : ''}`}
+                onMouseDown={e => { e.preventDefault(); selectItem(item.label); }}>
+                <span className="flex-1 truncate">{item.label}</span>
+                <span className="text-xs text-teal/60 flex-shrink-0">API</span>
+                {item.liveStatus && (
+                  <span className={`text-xs font-bold flex-shrink-0 ${statusColor[item.liveStatus.status] || 'text-slate-400'}`}>
+                    {item.liveStatus.label}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          {liveLoading && liveSugs.length === 0 && (
+            <div className="px-3 py-2 text-xs text-teal/60 italic">Searching live API...</div>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -135,6 +235,7 @@ function FilteredSuggestInput({ options, value, onChange, placeholder, className
 function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', className = '' }) {
   const [focused, setFocused] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const inputRef = useRef(null);
   const { ctx, sysDesignData, scanResults } = useStore();
 
@@ -142,8 +243,19 @@ function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', cl
     return buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults);
   }
 
+  function handleKeyDown(e) {
+    if (!suggestions.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, -1)); }
+    else if (e.key === 'Enter') {
+      const pick = activeIdx >= 0 ? suggestions[activeIdx] : suggestions[0];
+      if (pick) { e.preventDefault(); onChange(pick); setSuggestions([]); setActiveIdx(-1); }
+    } else if (e.key === 'Escape') { setSuggestions([]); setActiveIdx(-1); }
+  }
+
   function handleChange(val) {
     onChange(val);
+    setActiveIdx(-1);
     setSuggestions(getSuggestions(val));
   }
 
@@ -163,13 +275,15 @@ function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', cl
         value={value || ''}
         onChange={e => handleChange(e.target.value)}
         onFocus={handleFocus}
-        onBlur={() => { setFocused(false); setTimeout(() => setSuggestions([]), 200); }}
+        onBlur={() => { setFocused(false); setTimeout(() => { setSuggestions([]); setActiveIdx(-1); }, 200); }}
+        onKeyDown={handleKeyDown}
       />
       {focused && suggestions.length > 0 && (
         <SuggestDropdown
           suggestions={suggestions}
-          onSelect={s => { onChange(s); setSuggestions([]); }}
+          onSelect={s => { onChange(s); setSuggestions([]); setActiveIdx(-1); }}
           anchorEl={inputRef.current}
+          activeIdx={activeIdx}
         />
       )}
     </div>

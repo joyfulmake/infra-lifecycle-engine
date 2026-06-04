@@ -13,6 +13,222 @@ import {
   EOL_SLUG_MAP,
 } from '../../lib/eolApi.js';
 
+// ── Lifecycle helpers ──────────────────────────────────────────────────────────
+
+function daysUntil(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const diff = Math.round((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
+  return diff;
+}
+
+function DaysChip({ days }) {
+  if (days === null) return null;
+  if (days < 0) return <span className="text-xs font-bold text-red-500">Expired</span>;
+  if (days < 90) return <span className="text-xs font-bold text-red-500">{days}d left</span>;
+  if (days < 365) return <span className="text-xs font-bold text-amber-500">{days}d left</span>;
+  return <span className="text-xs text-slate-400">{Math.round(days / 30)}mo left</span>;
+}
+
+// Security-only period: support has ended but EOL has not
+function securityOnlyStatus(cycle) {
+  if (!cycle) return false;
+  const today = new Date();
+  const eos = typeof cycle.support === 'string' ? new Date(cycle.support) : null;
+  const eol = typeof cycle.eol === 'string' ? new Date(cycle.eol) : null;
+  return eos && eol && eos < today && eol > today;
+}
+
+function ExtendedSupportChip({ cycle }) {
+  if (!cycle?.extendedSupport) return <span className="text-xs text-slate-300">—</span>;
+  if (typeof cycle.extendedSupport === 'boolean') {
+    return <span className="text-xs text-green-500">Available</span>;
+  }
+  const days = daysUntil(cycle.extendedSupport);
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-green-500">Until {cycle.extendedSupport}</span>
+      {days !== null && <DaysChip days={days} />}
+    </div>
+  );
+}
+
+function LtsBadge({ cycle }) {
+  if (!cycle?.lts) return <span className="text-xs text-slate-300">—</span>;
+  if (typeof cycle.lts === 'boolean') return <span className="badge badge-green text-xs">LTS</span>;
+  const days = daysUntil(cycle.lts);
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="badge badge-green text-xs">LTS</span>
+      {days !== null && days > 0 && <span className="text-xs text-slate-400">until {cycle.lts}</span>}
+    </div>
+  );
+}
+
+// ── UUM Keyword Matcher ────────────────────────────────────────────────────────
+
+function UumKeywordMatcher({ selUUM, toggleUUM }) {
+  const [query, setQuery] = useState('');
+  const [matches, setMatches] = useState([]);
+  const [apiResults, setApiResults] = useState([]); // live endoflife.date results
+  const [apiLoading, setApiLoading] = useState(false);
+  const timerRef = useRef(null);
+
+  function searchUUM(q) {
+    if (q.trim().length < 3) { setMatches([]); return; }
+    const lower = q.toLowerCase();
+    const scored = ALL_UUM
+      .map(u => {
+        const text = `${u.txt} ${u.grp} ${u.short}`.toLowerCase();
+        const wordScore = lower.split(/\s+/).filter(w => w.length > 2)
+          .reduce((n, w) => n + (text.includes(w) ? 1 : 0), 0);
+        return { uum: u, score: wordScore };
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(({ uum }) => uum);
+    setMatches(scored);
+  }
+
+  async function searchApi(q) {
+    if (q.trim().length < 3) { setApiResults([]); return; }
+    setApiLoading(true);
+    try {
+      const slugs = await searchProducts(q.trim().toLowerCase());
+      const results = await Promise.all(
+        slugs.slice(0, 4).map(async slug => {
+          try {
+            const cycles = await fetchProductCycles(slug);
+            const recent = cycles.slice(0, 2);
+            return { slug, cycles: recent };
+          } catch { return null; }
+        })
+      );
+      setApiResults(results.filter(Boolean));
+    } catch { setApiResults([]); }
+    finally { setApiLoading(false); }
+  }
+
+  function handleInput(e) {
+    const v = e.target.value;
+    setQuery(v);
+    searchUUM(v);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => searchApi(v), 600);
+  }
+
+  const typeColor = { upgrade: 'badge-blue', migration: 'badge-amber', update: 'badge-green' };
+  const statusColor = { eol: 'badge-red', eos_soon: 'badge-amber', eos: 'badge-amber', active: 'badge-green' };
+
+  return (
+    <div className="card overflow-hidden mb-4">
+      <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
+        <div className="text-xs font-bold text-slate-600 uppercase tracking-wide">Project Keywords to UUM Matcher</div>
+        <span className="text-xs text-slate-400">type any tech/project description to find relevant UUM items + live API context</span>
+      </div>
+      <div className="p-4">
+        <input
+          type="text"
+          value={query}
+          onChange={handleInput}
+          placeholder="e.g. oracle migration aix linux, tomcat upgrade java, rhel eol ..."
+          className="w-full text-sm border border-slate-200 rounded px-3 py-2 focus:outline-none focus:border-teal-400 mb-3"
+        />
+        {query.length >= 3 && matches.length === 0 && !apiLoading && (
+          <div className="text-xs text-slate-400 text-center py-2">No UUM items matched — try other keywords</div>
+        )}
+        {matches.length > 0 && (
+          <div className="mb-3">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              Matched UUM Items ({matches.length})
+            </div>
+            <div className="space-y-1.5">
+              {matches.map(uum => {
+                const added = selUUM.includes(uum.code);
+                return (
+                  <div key={uum.code} className={`flex items-center gap-2 p-2 rounded-lg border ${added ? 'border-teal-200 bg-teal-50' : 'border-slate-200 bg-white'} hover:bg-slate-50`}>
+                    <button
+                      onClick={() => toggleUUM(uum.code)}
+                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${added ? 'border-teal-500 bg-teal-500 text-white' : 'border-slate-300 hover:border-teal-400'}`}
+                      title={added ? 'Remove from selection' : 'Add to UUM list'}
+                    >
+                      {added ? (
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                      ) : (
+                        <svg className="w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+                      )}
+                    </button>
+                    <span className={`badge ${typeColor[uum.type] || 'badge-slate'} text-xs flex-shrink-0`}>{uum.type || 'update'}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-bold text-slate-600 mr-1">{uum.short}</span>
+                      <span className="text-xs text-slate-600">{uum.txt?.substring(uum.short.length + 2, 80)}</span>
+                    </div>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{uum.grp}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {(apiResults.length > 0 || apiLoading) && (
+          <div>
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-2">
+              Live API Context
+              {apiLoading && <span className="text-teal-500 italic font-normal">Fetching...</span>}
+            </div>
+            {apiResults.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left border-b border-slate-200">
+                      {['Product', 'Cycle', 'Latest', 'EOS', 'EOL', 'LTS', 'Ext Support', 'Status'].map(h => (
+                        <th key={h} className="pb-1.5 pr-4 font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apiResults.flatMap(({ slug, cycles }) =>
+                      cycles.map((cycle, i) => {
+                        const ls = cycleLiveStatus(cycle);
+                        const isSecOnly = securityOnlyStatus(cycle);
+                        return (
+                          <tr key={`${slug}-${i}`} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="py-2 pr-4 font-bold text-teal-700">{slug}</td>
+                            <td className="py-2 pr-4 font-semibold text-slate-700">{cycle.cycle}</td>
+                            <td className="py-2 pr-4 text-slate-600">{cycle.latest || '—'}</td>
+                            <td className="py-2 pr-4 text-slate-500">
+                              <div>{typeof cycle.support === 'string' ? cycle.support : (cycle.support === false ? 'Ended' : '—')}</div>
+                              {typeof cycle.support === 'string' && <DaysChip days={daysUntil(cycle.support)} />}
+                            </td>
+                            <td className="py-2 pr-4">
+                              <div className={typeof cycle.eol === 'string' && daysUntil(cycle.eol) < 0 ? 'font-bold text-red-600' : 'text-slate-600'}>
+                                {typeof cycle.eol === 'boolean' ? (cycle.eol ? 'Yes' : 'No') : (cycle.eol || '—')}
+                              </div>
+                              {typeof cycle.eol === 'string' && <DaysChip days={daysUntil(cycle.eol)} />}
+                            </td>
+                            <td className="py-2 pr-4"><LtsBadge cycle={cycle} /></td>
+                            <td className="py-2 pr-4"><ExtendedSupportChip cycle={cycle} /></td>
+                            <td className="py-2">
+                              <div className="flex flex-col gap-0.5">
+                                <span className={`badge ${statusColor[ls.status] || 'badge-slate'}`}>{ls.label}</span>
+                                {isSecOnly && <span className="badge badge-amber text-xs">Security Only</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const LAYER_CI = {
   hw: 'Hardware', unix: 'Operating System', os: 'Operating System',
   web: 'Web / HTTP', app: 'Application', db: 'Database',
@@ -213,33 +429,43 @@ function LiveApiSearch() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left border-b border-slate-200">
-                  <th className="pb-2 pr-4 font-semibold text-slate-500 uppercase tracking-wide">Product</th>
-                  <th className="pb-2 pr-4 font-semibold text-slate-500 uppercase tracking-wide">Cycle</th>
-                  <th className="pb-2 pr-4 font-semibold text-slate-500 uppercase tracking-wide">Latest</th>
-                  <th className="pb-2 pr-4 font-semibold text-slate-500 uppercase tracking-wide">Released</th>
-                  <th className="pb-2 pr-4 font-semibold text-slate-500 uppercase tracking-wide">End of Support</th>
-                  <th className="pb-2 pr-4 font-semibold text-slate-500 uppercase tracking-wide">End of Life</th>
-                  <th className="pb-2 font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                  {['Product', 'Cycle', 'Latest', 'Released', 'EOS', 'EOL', 'LTS', 'Ext Support', 'Sec Only?', 'Status'].map(h => (
+                    <th key={h} className="pb-2 pr-3 font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {results.flatMap(({ slug, cycles }) =>
                   cycles.map((cycle, i) => {
                     const ls = cycleLiveStatus(cycle);
+                    const isSecOnly = securityOnlyStatus(cycle);
                     return (
                       <tr key={`${slug}-${i}`} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="py-2 pr-4 font-bold text-teal-700 uppercase">{slug}</td>
-                        <td className="py-2 pr-4 font-semibold text-slate-700">{cycle.cycle}</td>
-                        <td className="py-2 pr-4 text-slate-600">{cycle.latest || 'N/A'}</td>
-                        <td className="py-2 pr-4 text-slate-500">{cycle.releaseDate || '—'}</td>
-                        <td className="py-2 pr-4 text-slate-500">
-                          {typeof cycle.support === 'boolean' ? (cycle.support ? 'Ongoing' : 'Ended') : (cycle.support || '—')}
+                        <td className="py-2 pr-3 font-bold text-teal-700 uppercase whitespace-nowrap">{slug}</td>
+                        <td className="py-2 pr-3 font-semibold text-slate-700">{cycle.cycle}</td>
+                        <td className="py-2 pr-3 text-slate-600 whitespace-nowrap">{cycle.latest || 'N/A'}</td>
+                        <td className="py-2 pr-3 text-slate-500 whitespace-nowrap">{cycle.releaseDate || '—'}</td>
+                        <td className="py-2 pr-3">
+                          <div className="text-slate-500 whitespace-nowrap">
+                            {typeof cycle.support === 'boolean' ? (cycle.support ? 'Ongoing' : 'Ended') : (cycle.support || '—')}
+                          </div>
+                          {typeof cycle.support === 'string' && <DaysChip days={daysUntil(cycle.support)} />}
                         </td>
-                        <td className={`py-2 pr-4 font-semibold ${ls.status === 'eol' ? 'text-red-600' : 'text-slate-600'}`}>
-                          {typeof cycle.eol === 'boolean' ? (cycle.eol ? 'Yes' : 'No') : (cycle.eol || '—')}
+                        <td className="py-2 pr-3">
+                          <div className={`font-semibold whitespace-nowrap ${ls.status === 'eol' ? 'text-red-600' : 'text-slate-600'}`}>
+                            {typeof cycle.eol === 'boolean' ? (cycle.eol ? 'Yes' : 'No') : (cycle.eol || '—')}
+                          </div>
+                          {typeof cycle.eol === 'string' && <DaysChip days={daysUntil(cycle.eol)} />}
+                        </td>
+                        <td className="py-2 pr-3"><LtsBadge cycle={cycle} /></td>
+                        <td className="py-2 pr-3"><ExtendedSupportChip cycle={cycle} /></td>
+                        <td className="py-2 pr-3">
+                          {isSecOnly
+                            ? <span className="badge badge-amber text-xs whitespace-nowrap">Sec Only</span>
+                            : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="py-2">
-                          <span className={`badge ${statusColor[ls.status] || 'badge-slate'}`}>{ls.label}</span>
+                          <span className={`badge ${statusColor[ls.status] || 'badge-slate'} whitespace-nowrap`}>{ls.label}</span>
                         </td>
                       </tr>
                     );
@@ -328,8 +554,8 @@ function StackLiveCheck({ stackComponents, liveEolData, setLiveEolData }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left border-b border-slate-200 bg-white">
-              {['Component', 'API Product', 'Cycle', 'Latest', 'Release', 'EOS', 'EOL', 'Live Status'].map(h => (
-                <th key={h} className="py-2 px-3 font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+              {['Component', 'API Product', 'Cycle', 'Latest', 'Release', 'EOS', 'EOL', 'LTS', 'Ext Support', 'Live Status'].map(h => (
+                <th key={h} className="py-2 px-3 font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
@@ -344,16 +570,24 @@ function StackLiveCheck({ stackComponents, liveEolData, setLiveEolData }) {
                   <td className="py-2.5 px-3 font-semibold text-slate-800 max-w-[160px]">
                     <div className="truncate">{component}</div>
                   </td>
-                  <td className="py-2.5 px-3 text-teal-700 font-mono">{entry.slug || EOL_SLUG_MAP[component]?.slug || '—'}</td>
+                  <td className="py-2.5 px-3 text-teal-700 font-mono whitespace-nowrap">{entry.slug || EOL_SLUG_MAP[component]?.slug || '—'}</td>
                   <td className="py-2.5 px-3 text-slate-600">{cycle?.cycle || entry.targetCycle || '—'}</td>
-                  <td className="py-2.5 px-3 text-slate-700 font-medium">{cycle?.latest || '—'}</td>
-                  <td className="py-2.5 px-3 text-slate-500">{cycle?.releaseDate || '—'}</td>
-                  <td className="py-2.5 px-3 text-slate-500">
-                    {cycle ? (typeof cycle.support === 'boolean' ? (cycle.support ? 'Ongoing' : 'Ended') : (cycle.support || '—')) : '—'}
+                  <td className="py-2.5 px-3 text-slate-700 font-medium whitespace-nowrap">{cycle?.latest || '—'}</td>
+                  <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">{cycle?.releaseDate || '—'}</td>
+                  <td className="py-2.5 px-3">
+                    <div className="text-slate-500 whitespace-nowrap">
+                      {cycle ? (typeof cycle.support === 'boolean' ? (cycle.support ? 'Ongoing' : 'Ended') : (cycle.support || '—')) : '—'}
+                    </div>
+                    {typeof cycle?.support === 'string' && <DaysChip days={daysUntil(cycle.support)} />}
                   </td>
-                  <td className={`py-2.5 px-3 font-semibold ${ls?.status === 'eol' ? 'text-red-600' : 'text-slate-600'}`}>
-                    {cycle ? (typeof cycle.eol === 'boolean' ? (cycle.eol ? 'Yes (EOL)' : 'No') : (cycle.eol || '—')) : '—'}
+                  <td className="py-2.5 px-3">
+                    <div className={`font-semibold whitespace-nowrap ${ls?.status === 'eol' ? 'text-red-600' : 'text-slate-600'}`}>
+                      {cycle ? (typeof cycle.eol === 'boolean' ? (cycle.eol ? 'Yes (EOL)' : 'No') : (cycle.eol || '—')) : '—'}
+                    </div>
+                    {typeof cycle?.eol === 'string' && <DaysChip days={daysUntil(cycle.eol)} />}
                   </td>
+                  <td className="py-2.5 px-3"><LtsBadge cycle={cycle} /></td>
+                  <td className="py-2.5 px-3"><ExtendedSupportChip cycle={cycle} /></td>
                   <td className="py-2.5 px-3">
                     {entry.loading ? (
                       <span className="text-slate-400 italic">Fetching...</span>
@@ -549,6 +783,9 @@ export default function CmdbTab() {
           </div>
         ))}
       </div>
+
+      {/* Project keywords → UUM matcher */}
+      <UumKeywordMatcher selUUM={s.selUUM} toggleUUM={s.toggleUUM} />
 
       {/* Stack live lifecycle check */}
       <StackLiveCheck

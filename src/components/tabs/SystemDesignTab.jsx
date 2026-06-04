@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore, DESIGN_SECTIONS, FIELD_LABELS } from '../../store/useStore.js';
 import { matchSuggestKeys } from '../../lib/suggestDb.js';
@@ -8,8 +8,9 @@ import { canUseFeature } from '../../lib/auth.js';
 import { getUserRolesForBuild, canEditDesignSection } from '../../lib/roleAccess.js';
 import AgentInsights from '../AgentInsights.jsx';
 
-function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
+function SuggestDropdown({ suggestions, onSelect, anchorEl, activeIdx = -1 }) {
   const [pos, setPos] = useState(null);
+  const activeRef = useRef(null);
 
   useEffect(() => {
     if (!anchorEl) return;
@@ -26,12 +27,21 @@ function SuggestDropdown({ suggestions, onSelect, anchorEl }) {
     };
   }, [anchorEl]);
 
+  useEffect(() => {
+    if (activeRef.current) activeRef.current.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx]);
+
   if (!suggestions.length || !pos) return null;
 
   return createPortal(
     <div className="suggest-dropdown" style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}>
       {suggestions.map((s, i) => (
-        <div key={i} className="suggest-item" onMouseDown={e => { e.preventDefault(); onSelect(s); }}>
+        <div
+          key={i}
+          ref={i === activeIdx ? activeRef : null}
+          className={`suggest-item${i === activeIdx ? ' bg-teal-50 text-teal-800 font-semibold' : ''}`}
+          onMouseDown={e => { e.preventDefault(); onSelect(s); }}
+        >
           {s}
         </div>
       ))}
@@ -44,6 +54,7 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
   const s = useStore();
   const [focused, setFocused] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const inputRef = useRef(null);
   const lockKey = `${sectionKey}.${fieldKey}`;
   const lockData = s.lockedDesignFields?.[lockKey];
@@ -51,12 +62,23 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
 
   function handleChange(val) {
     onChange(val);
+    setActiveIdx(-1);
     setSuggestions(matchSuggestKeys(val, fieldKey));
   }
 
   function handleFocus() {
     setFocused(true);
     setSuggestions(matchSuggestKeys(value || '', fieldKey));
+  }
+
+  function handleKeyDown(e) {
+    if (!suggestions.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, -1)); }
+    else if (e.key === 'Enter') {
+      const pick = activeIdx >= 0 ? suggestions[activeIdx] : suggestions[0];
+      if (pick) { e.preventDefault(); onChange(pick); setSuggestions([]); setActiveIdx(-1); }
+    } else if (e.key === 'Escape') { setSuggestions([]); setActiveIdx(-1); }
   }
 
   function toggleLock() {
@@ -114,14 +136,16 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
             value={value || ''}
             onChange={e => handleChange(e.target.value)}
             onFocus={handleFocus}
-            onBlur={() => { setFocused(false); setTimeout(() => setSuggestions([]), 200); }}
+            onBlur={() => { setFocused(false); setTimeout(() => { setSuggestions([]); setActiveIdx(-1); }, 200); }}
+            onKeyDown={handleKeyDown}
             placeholder={placeholder}
           />
           {focused && suggestions.length > 0 && (
             <SuggestDropdown
               suggestions={suggestions}
-              onSelect={v => { onChange(v); setSuggestions([]); }}
+              onSelect={v => { onChange(v); setSuggestions([]); setActiveIdx(-1); }}
               anchorEl={inputRef.current}
+              activeIdx={activeIdx}
             />
           )}
         </>
