@@ -187,7 +187,13 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** MSIX submitted to Microsoft Store — awaiting certification.
+**Current status:** MSIX v1.0.0.0 failed certification (crash at launch on Dell Latitude 5520, Windows 11 24H2 / build 26200). Fixed and resubmitted as v1.0.1.0.
+
+**Crash root causes fixed (v1.0.1.0):**
+- `MaxVersionTested` bumped `10.0.19041.0` → `10.0.26100.0` — old value triggered compatibility mode on Windows 11 24H2
+- `orientation: landscape` removed from `manifest.json` — MSIX host crashed on non-touch devices attempting orientation lock
+- CSP `connect-src` missing Firebase/googleapis domains — caused repeated CSP violations during Firebase auth init
+
 After approval, follow Part 5 of the guide (post-certification steps).
 
 **Microsoft Store URL:** _(pending certification — update here once live)_
@@ -248,8 +254,25 @@ Two AI layers — both use the CF Worker proxy pattern to keep API keys out of t
 
 Always keep the proxy pattern — never call `api.groq.com` directly from the frontend.
 
+### endoflife.date Live API (CMDB tab — always on, no key required)
+- **Module**: `src/lib/eolApi.js` — REST client for `https://endoflife.date/api`
+- **EOL_SLUG_MAP**: 60+ component-to-product-slug mappings (OS, DB, App/Middleware)
+- **Stack Live Check**: auto-fetches lifecycle data for current ctx (hw/os/db/app) on CMDB open; shows cycle, latest version, EOS, EOL, live status
+- **Search**: any of 500+ products by keyword via product index + cycle fetch
+- **Store**: `liveEolData: { [componentName]: { slug, matchedCycle, allCycles, fetchedAt } }` — non-persisted runtime state
+- **Coherence check 12**: `runCoherenceChecks` emits `live_eol_detected` (warn) / `live_eos_soon` (info) alerts when live API confirms EOL/EOS-soon stack components
+- **CSP**: `https://endoflife.date` added to `connect-src` in `netlify.toml`
+
 ### Tab sync via coherence engine
-All AI outputs feed into the Zustand store. `useCoherenceEngine` (mounted in PmTabs) runs 11 cross-tab checks on every state change and emits `coherenceAlerts` read by `AgentInsights` panels. The Matrix tab recomputes from `selInc`/`selUUM`/`designApplied` reactively — no manual sync needed.
+All AI outputs feed into the Zustand store. `useCoherenceEngine` (mounted in PmTabs) now watches 12 state slices including `liveEolData`, runs checks on every state change, and emits `coherenceAlerts` read by `AgentInsights` panels. The Matrix tab recomputes from `selInc`/`selUUM`/`designApplied` reactively — no manual sync needed.
+
+## Critical Path Method (Gantt tab)
+
+- `computeCPM(tasks, dates, overrides, hpd, blocked)` in `GanttTab.jsx` — pure JS, no deps
+- **Model**: sequential tasks = critical path (any delay propagates to project end); parallel tasks have float
+- **Slack for parallel tasks**: working-day gap between parallel task end and next sequential task start
+- **UI**: CP badge (red, `CP` label) on critical-path tasks; `+Nd` float indicator on parallel tasks; Gantt header shows "CP: N · Float: N" summary
+- The critical path logic is accurate for the OpsManifest scheduling model where tasks are sequential by default with optional parallelism
 
 ## Styling conventions
 
