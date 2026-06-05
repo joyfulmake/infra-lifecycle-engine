@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.0.0.0'
+        default: '1.2.0.0'
 
 jobs:
   build-msix:
@@ -104,13 +104,10 @@ jobs:
 
           $ns    = "http://schemas.microsoft.com/appx/manifest/foundation/windows10"
           $nsUap  = "http://schemas.microsoft.com/appx/manifest/uap/windows10"
-          $nsUap3 = "http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
 
           $w.WriteStartDocument()
           $w.WriteStartElement("Package", $ns)
-          $w.WriteAttributeString("xmlns", "uap",  $null, $nsUap)
-          $w.WriteAttributeString("xmlns", "uap3", $null, $nsUap3)
-          $w.WriteAttributeString("IgnorableNamespaces", "uap3")
+          $w.WriteAttributeString("xmlns", "uap", $null, $nsUap)
 
             # Identity
             $w.WriteStartElement("Identity", $ns)
@@ -133,7 +130,7 @@ jobs:
               $w.WriteStartElement("TargetDeviceFamily", $ns)
               $w.WriteAttributeString("Name",               "Windows.Universal")
               $w.WriteAttributeString("MinVersion",         "10.0.17763.0")
-              $w.WriteAttributeString("MaxVersionTested",   "10.0.26100.0")
+              $w.WriteAttributeString("MaxVersionTested",   "10.0.26200.0")
               $w.WriteEndElement()
             $w.WriteEndElement()
 
@@ -178,17 +175,6 @@ jobs:
                   $w.WriteEndElement()
 
                 $w.WriteEndElement() # VisualElements
-
-                $w.WriteStartElement("Extensions", $ns)
-                  $w.WriteStartElement("Extension", $nsUap3)
-                  $w.WriteAttributeString("Category", "windows.appUriHandler")
-                    $w.WriteStartElement("AppUriHandler", $nsUap3)
-                      $w.WriteStartElement("Host", $nsUap3)
-                      $w.WriteAttributeString("Name", "opsmanifest.netlify.app")
-                      $w.WriteEndElement()
-                    $w.WriteEndElement()
-                  $w.WriteEndElement()
-                $w.WriteEndElement() # Extensions
 
               $w.WriteEndElement() # Application
             $w.WriteEndElement() # Applications

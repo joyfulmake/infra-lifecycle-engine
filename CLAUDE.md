@@ -188,12 +188,15 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.1.0.0 built and submitted for certification (2026-06-04).
+**Current status:** v1.2.0.0 to be built and submitted — fixes crash on build 26200.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
 - v1.0.1.0 — crash fixes: `MaxVersionTested` bumped, `orientation` removed from manifest, Firebase CSP domains added
-- v1.1.0.0 — major feature release: guided sidebar roadmap (7-step numbered, always-visible), Gantt locked to `designApplied`, System Design PM edit override, CMDB live EOL API, coherence engine, DemoTour, batch job tasks, CSP workers.dev added, SW cache v2 + endoflife.date excluded from cache
+- v1.1.0.0 — major feature release: guided sidebar roadmap (7-step numbered, always-visible), Gantt locked to `designApplied`, System Design PM edit override, CMDB live EOL API, coherence engine, DemoTour, batch job tasks, CSP workers.dev added, SW cache v2 + endoflife.date excluded from cache; submitted 2026-06-04, failed (crash at launch on OS build 10.0.26200)
+- v1.2.0.0 — crash fix: `MaxVersionTested` bumped to `10.0.26200.0`; removed `uap3:AppUriHandler` extension (domain verification file absent, tighter validation on 26200 causes silent crash); workflow default version updated
+
+**Root cause of 26200 crash**: Two issues. (1) `MaxVersionTested` was `10.0.26100.0` — when OS > MaxVersionTested, Windows applies a compatibility shim that breaks hosted web apps. (2) The `uap3:AppUriHandler` extension referenced `opsmanifest.netlify.app` but no `.well-known/windows-app-web-link` file exists on that domain; Windows 26200 tightened domain verification, causing a silent crash on launch.
 
 After approval, follow Part 5 of the guide (post-certification steps).
 
