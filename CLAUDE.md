@@ -188,7 +188,7 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.2.0.0 to be built and submitted — fixes crash on build 26200.
+**Current status:** v1.2.0.0 submitted for certification (2026-06-05) — crash fix for OS build 26200.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
