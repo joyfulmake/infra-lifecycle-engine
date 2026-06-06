@@ -130,7 +130,7 @@ jobs:
               $w.WriteStartElement("TargetDeviceFamily", $ns)
               $w.WriteAttributeString("Name",               "Windows.Desktop")
               $w.WriteAttributeString("MinVersion",         "10.0.17763.0")
-              $w.WriteAttributeString("MaxVersionTested",   "10.0.99999.0")
+              $w.WriteAttributeString("MaxVersionTested",   "10.0.65535.65535")
               $w.WriteEndElement()
             $w.WriteEndElement()
 
