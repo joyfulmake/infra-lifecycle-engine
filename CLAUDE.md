@@ -188,15 +188,16 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.2.0.0 submitted for certification (2026-06-05) — crash fix for OS build 26200.
+**Current status:** v1.3.0.0 ready to submit — crash fix for OS build 26200 (all revisions).
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
 - v1.0.1.0 — crash fixes: `MaxVersionTested` bumped, `orientation` removed from manifest, Firebase CSP domains added
 - v1.1.0.0 — major feature release: guided sidebar roadmap (7-step numbered, always-visible), Gantt locked to `designApplied`, System Design PM edit override, CMDB live EOL API, coherence engine, DemoTour, batch job tasks, CSP workers.dev added, SW cache v2 + endoflife.date excluded from cache; submitted 2026-06-04, failed (crash at launch on OS build 10.0.26200)
-- v1.2.0.0 — crash fix: `MaxVersionTested` bumped to `10.0.26200.0`; removed `uap3:AppUriHandler` extension (domain verification file absent, tighter validation on 26200 causes silent crash); workflow default version updated
+- v1.2.0.0 — crash fix: `MaxVersionTested` bumped to `10.0.26200.0`; removed `uap3:AppUriHandler` extension; submitted 2026-06-05, failed (crash still on OS build 26200 — revision component mismatch)
+- v1.3.0.0 — crash fix: `MaxVersionTested` set to `10.0.99999.0` (covers all revisions of all builds); `Windows.Universal` → `Windows.Desktop` (correct device family for desktop PWA); added `ApplicationContentUriRules` for nav scope; removed `orientation` from `manifest.json` (was re-introduced after v1.0.1.0 fix)
 
-**Root cause of 26200 crash**: Two issues. (1) `MaxVersionTested` was `10.0.26100.0` — when OS > MaxVersionTested, Windows applies a compatibility shim that breaks hosted web apps. (2) The `uap3:AppUriHandler` extension referenced `opsmanifest.netlify.app` but no `.well-known/windows-app-web-link` file exists on that domain; Windows 26200 tightened domain verification, causing a silent crash on launch.
+**Root cause of 26200 crash**: Three layered issues. (1) `MaxVersionTested` was `10.0.26100.0` / `10.0.26200.0` — when OS version (including 4th revision component) exceeds MaxVersionTested, Windows applies a compatibility shim that breaks hosted web apps. Real devices run e.g. `10.0.26200.2630`, so `.0` revision is always exceeded. Fix: use `10.0.99999.0`. (2) The `uap3:AppUriHandler` extension referenced `opsmanifest.netlify.app` but no `.well-known/windows-app-web-link` file exists; Windows 26200 tightened domain verification (removed in v1.2.0.0). (3) `TargetDeviceFamily Name="Windows.Universal"` is the UWP multi-device family — desktop PWA Store apps should use `Windows.Desktop`.
 
 After approval, follow Part 5 of the guide (post-certification steps).
 

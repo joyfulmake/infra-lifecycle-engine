@@ -34,7 +34,7 @@ The MSIX is built entirely via GitHub Actions — no local Windows tooling requi
 | `package_name` | `Flourishing.opsmanifest` |
 | `publisher_id` | `CN=CF05ACFD-1A2C-4D3B-85CE-80828C73812E` |
 | `publisher_display_name` | `Flourishing` |
-| `app_version` | `1.0.0.0` |
+| `app_version` | `1.3.0.0` |
 
 **How to run:**
 1. Go to https://github.com/joyfulmake/infra-lifecycle-engine/actions

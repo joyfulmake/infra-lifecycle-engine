@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.2.0.0'
+        default: '1.3.0.0'
 
 jobs:
   build-msix:
@@ -128,9 +128,9 @@ jobs:
             # Dependencies
             $w.WriteStartElement("Dependencies", $ns)
               $w.WriteStartElement("TargetDeviceFamily", $ns)
-              $w.WriteAttributeString("Name",               "Windows.Universal")
+              $w.WriteAttributeString("Name",               "Windows.Desktop")
               $w.WriteAttributeString("MinVersion",         "10.0.17763.0")
-              $w.WriteAttributeString("MaxVersionTested",   "10.0.26200.0")
+              $w.WriteAttributeString("MaxVersionTested",   "10.0.99999.0")
               $w.WriteEndElement()
             $w.WriteEndElement()
 
@@ -175,6 +175,14 @@ jobs:
                   $w.WriteEndElement()
 
                 $w.WriteEndElement() # VisualElements
+
+                # ApplicationContentUriRules — declares the app's navigation scope to WebView2
+                $w.WriteStartElement("ApplicationContentUriRules", $nsUap)
+                  $w.WriteStartElement("Rule", $nsUap)
+                  $w.WriteAttributeString("Type",  "include")
+                  $w.WriteAttributeString("Match", "https://opsmanifest.netlify.app/*")
+                  $w.WriteEndElement()
+                $w.WriteEndElement()
 
               $w.WriteEndElement() # Application
             $w.WriteEndElement() # Applications
