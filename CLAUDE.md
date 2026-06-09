@@ -188,14 +188,15 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.3.0.0 submitted for certification (2026-06-07) — crash fix for OS build 26200 (all revisions); Partner Center package targets Windows 10 Desktop only (Xbox and other families unchecked).
+**Current status:** v1.4.0.0 submitted for certification (2026-06-09) — hosting migrated to Cloudflare Pages; blank screen fix.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
 - v1.0.1.0 — crash fixes: `MaxVersionTested` bumped, `orientation` removed from manifest, Firebase CSP domains added
 - v1.1.0.0 — major feature release: guided sidebar roadmap (7-step numbered, always-visible), Gantt locked to `designApplied`, System Design PM edit override, CMDB live EOL API, coherence engine, DemoTour, batch job tasks, CSP workers.dev added, SW cache v2 + endoflife.date excluded from cache; submitted 2026-06-04, failed (crash at launch on OS build 10.0.26200)
 - v1.2.0.0 — crash fix: `MaxVersionTested` bumped to `10.0.26200.0`; removed `uap3:AppUriHandler` extension; submitted 2026-06-05, failed (crash still on OS build 26200 — revision component mismatch)
-- v1.3.0.0 — crash fix: `MaxVersionTested` set to `10.0.65535.65535` (schema max — covers all revisions of all builds); `Windows.Universal` → `Windows.Desktop` (correct device family for desktop PWA); added `ApplicationContentUriRules` for nav scope; removed `orientation` from `manifest.json` (was re-introduced after v1.0.1.0 fix); Partner Center: only Windows 10 Desktop family checked; submitted 2026-06-07
+- v1.3.0.0 — crash fix: `MaxVersionTested` set to `10.0.65535.65535` (schema max — covers all revisions of all builds); `Windows.Universal` → `Windows.Desktop` (correct device family for desktop PWA); added `ApplicationContentUriRules` for nav scope; removed `orientation` from `manifest.json` (was re-introduced after v1.0.1.0 fix); Partner Center: only Windows 10 Desktop family checked; submitted 2026-06-07, failed (blank screen on 26100.3194 — Netlify credits exhausted, site unavailable)
+- v1.4.0.0 — hosting migrated from Netlify to Cloudflare Pages (`https://opsmanifest.pages.dev`); StartPage and ACUR rules updated; `_redirects` replaced with `404.html` copy (CF Pages SPA fallback); submitted 2026-06-09
 
 **Root cause of 26200 crash**: Three layered issues. (1) `MaxVersionTested` was `10.0.26100.0` / `10.0.26200.0` — when OS version (including 4th revision component) exceeds MaxVersionTested, Windows applies a compatibility shim that breaks hosted web apps. Real devices run e.g. `10.0.26200.2630`, so `.0` revision is always exceeded. Fix: use `10.0.65535.65535` (schema maximum — each component is capped at 65535). (2) The `uap3:AppUriHandler` extension referenced `opsmanifest.netlify.app` but no `.well-known/windows-app-web-link` file exists; Windows 26200 tightened domain verification (removed in v1.2.0.0). (3) `TargetDeviceFamily Name="Windows.Universal"` is the UWP multi-device family — desktop PWA Store apps should use `Windows.Desktop`.
 
