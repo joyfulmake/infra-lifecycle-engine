@@ -18,7 +18,11 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.3.0.0'
+        default: '1.4.0.0'
+      hosted_url:
+        description: 'Live hosted URL (no trailing slash) — update if hosting changes'
+        required: false
+        default: 'https://opsmanifest.pages.dev'
 
 jobs:
   build-msix:
@@ -33,8 +37,10 @@ jobs:
 
       - name: Download app icon
         shell: powershell
+        env:
+          HOSTED_URL: ${{ github.event.inputs.hosted_url }}
         run: |
-          Invoke-WebRequest -Uri "https://opsmanifest.netlify.app/icon-512.png" `
+          Invoke-WebRequest -Uri "$env:HOSTED_URL/icon-512.png" `
             -OutFile "msix\images\source.png"
 
       - name: Generate MSIX icon sizes + store listing images
@@ -86,12 +92,14 @@ jobs:
           PUBLISHER_ID:           ${{ github.event.inputs.publisher_id }}
           PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name }}
           APP_VERSION:            ${{ github.event.inputs.app_version }}
+          HOSTED_URL:             ${{ github.event.inputs.hosted_url }}
         run: |
           # Use XmlWriter so no encoding surprises — no BOM, no invisible chars
           $packageName          = $env:PACKAGE_NAME.Trim()
           $publisherId          = $env:PUBLISHER_ID.Trim()
           $publisherDisplayName = $env:PUBLISHER_DISPLAY_NAME.Trim()
           $appVersion           = $env:APP_VERSION.Trim()
+          $hostedUrl            = $env:HOSTED_URL.Trim()
 
           $outPath = (Resolve-Path "msix").Path + "\AppxManifest.xml"
           $settings = New-Object System.Xml.XmlWriterSettings
@@ -145,7 +153,7 @@ jobs:
             $w.WriteStartElement("Applications", $ns)
               $w.WriteStartElement("Application", $ns)
               $w.WriteAttributeString("Id",        "App")
-              $w.WriteAttributeString("StartPage", "https://opsmanifest.netlify.app")
+              $w.WriteAttributeString("StartPage", $hostedUrl)
 
                 $w.WriteStartElement("VisualElements", $nsUap)
                 $w.WriteAttributeString("DisplayName",         "OpsManifest")
@@ -180,7 +188,7 @@ jobs:
                 $w.WriteStartElement("ApplicationContentUriRules", $nsUap)
                   $w.WriteStartElement("Rule", $nsUap)
                   $w.WriteAttributeString("Type",  "include")
-                  $w.WriteAttributeString("Match", "https://opsmanifest.netlify.app/*")
+                  $w.WriteAttributeString("Match", "$hostedUrl/*")
                   $w.WriteEndElement()
                 $w.WriteEndElement()
 
