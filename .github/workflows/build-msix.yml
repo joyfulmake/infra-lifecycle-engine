@@ -29,19 +29,19 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Prepare folders
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path msix\images -Force | Out-Null
           New-Item -ItemType Directory -Path store-listing-images -Force | Out-Null
 
-      - name: Download app icon
+      - name: Copy app icon from repo
         shell: powershell
-        env:
-          HOSTED_URL: ${{ github.event.inputs.hosted_url }}
         run: |
-          Invoke-WebRequest -Uri "$env:HOSTED_URL/icon-512.png" `
-            -OutFile "msix\images\source.png"
+          Copy-Item "public\icon-512.png" "msix\images\source.png"
 
       - name: Generate MSIX icon sizes + store listing images
         shell: powershell
