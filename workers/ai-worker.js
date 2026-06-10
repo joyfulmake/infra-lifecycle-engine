@@ -216,6 +216,72 @@ Be specific: include real product names, version numbers, and migration paths de
   }
 }
 
+// ── /groq-mission-analysis — MissionHelp 4-section delivery/architecture report ─
+
+async function handleMissionAnalysis(req, env) {
+  const { ctx, customUUM, customInc, selInc, selUUM, sysDesignData, requirements, liveEolData } = await req.json();
+  if (!ctx) return err('ctx is required');
+
+  const stack = [ctx.hw, ctx.os, ctx.app, ctx.db].filter(Boolean).join(' → ') || 'not yet specified';
+  const customEntries = [
+    ...(customUUM || []).map(u => `${u.short || u.txt} [${u.type || 'update'}, ${(u.layers || []).join('+')}]`),
+    ...(customInc || []).map(i => `INCIDENT: ${i.short || i.code} [${i.grp || 'custom'}]`),
+  ].join('\n  ') || 'none';
+
+  const eolSummary = Object.entries(liveEolData || {}).map(([k, v]) => {
+    const c = v?.matchedCycle;
+    return c ? `${k}: EOL ${c.eol || 'unknown'}, EOS ${c.support || 'unknown'}` : null;
+  }).filter(Boolean).join('\n  ') || 'no live EOL data yet';
+
+  const designSnippet = Object.entries(sysDesignData || {}).flatMap(([sec, fields]) =>
+    Object.entries(fields || {}).filter(([, v]) => v).slice(0, 3).map(([k, v]) => `${sec}.${k}: ${v}`)
+  ).slice(0, 12).join('\n  ') || 'not filled';
+
+  const prompt = `You are a senior infrastructure delivery architect specialising in enterprise server provisioning, compliance, and lifecycle management. A project manager has entered the following context into a delivery tool:
+
+PROJECT: ${requirements?.projectName || 'unnamed project'}
+ENVIRONMENT: ${requirements?.envType || 'Production'}
+GO-LIVE: ${requirements?.goLiveDate || 'TBD'}
+SLA: ${requirements?.slaTarget || 'not set'}
+
+STACK: ${stack}
+ACTIVE INCIDENTS/UUM: ${selInc.length} incidents, ${selUUM.length} UUM changes
+CUSTOM ENTRIES:
+  ${customEntries}
+
+LIVE EOL/LIFECYCLE DATA:
+  ${eolSummary}
+
+SYSTEM DESIGN FIELDS (sample):
+  ${designSnippet}
+
+Using the MissionHelp delivery framework, produce a structured analysis in exactly this JSON format. Be specific, blunt, and infrastructure-first. Flag every compatibility or lifecycle risk you can see. Prefer pragmatic over fashionable patterns.
+
+Return ONLY valid JSON (no markdown, no code fences):
+{
+  "contextExtraction": "3–5 bullet points extracting the key business and technical signals from this input. Translate business language into delivery and infrastructure concepts. Call out assumptions clearly.",
+  "deliveryRTM": "A markdown table with columns: Raw Input | Functional Requirement | Technical/Platform Requirement | Business Value Metric. Map each meaningful input into one row.",
+  "architectureMap": {
+    "business": "2–3 sentences: business outcomes, cost/risk/compliance alignment, strategic value of this delivery.",
+    "functional": "3–5 sentences: user journey, process steps, integrations, approvals, notifications. What happens end-to-end at the function level.",
+    "technical": "4–6 sentences: systems, services, data flows, security, TLS/cipher specifics, backup path, failover. Name real protocols and ports where inferable. Flag any version-specific risks or hidden dependency chains."
+  },
+  "compatibilityRisks": "3–5 bullet points covering: EOL/EOS timeline risks, driver/kernel/library compatibility, TLS/cipher deprecation, backup agent version lock-in, certificate expiry windows, or operational ownership gaps. Be blunt and specific.",
+  "nextSteps": ["One targeted delivery question about timeline, owners, or dependencies", "One targeted question about security, compliance, or rollback scope"]
+}`;
+
+  try {
+    const groqRes = await groqChat(env, [{ role: 'user', content: prompt }], 2000);
+    const content = groqRes.choices?.[0]?.message?.content || '';
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in Groq response');
+    const analysis = JSON.parse(match[0]);
+    return json({ analysis, model: groqRes.model, usage: groqRes.usage });
+  } catch (e) {
+    return err(`Mission analysis failed: ${e.message}`, 500);
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
@@ -248,6 +314,10 @@ export default {
 
     if (req.method === 'POST' && url.pathname === '/groq-uum-enrich') {
       return handleUumEnrich(req, env);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/groq-mission-analysis') {
+      return handleMissionAnalysis(req, env);
     }
 
     return err('Not found', 404);

@@ -55,6 +55,25 @@ export async function enrichTaskWithGroq(task, ctx, existingMeta) {
 }
 
 /**
+ * Full MissionHelp 4-section analysis of the project context.
+ * Returns { analysis: { contextExtraction, deliveryRTM, architectureMap, compatibilityRisks, nextSteps }, model }
+ */
+export async function analyzeMissionContext(stateSnapshot) {
+  if (!GROQ_CONFIGURED) throw new Error('Groq not configured — see groqConfig.js');
+  const { ctx, customUUM, customInc, selInc, selUUM, sysDesignData, requirements, liveEolData } = stateSnapshot;
+  const res = await fetch(`${GROQ_WORKER_URL}/groq-mission-analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ctx, customUUM, customInc, selInc, selUUM, sysDesignData, requirements, liveEolData }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error || `Worker error ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Get stack-specific risk/incident suggestions from Groq.
  * Returns { suggestions: [{risk, severity, description, mitigation}], model }
  */

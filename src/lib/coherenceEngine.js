@@ -287,5 +287,68 @@ export function runCoherenceChecks(state) {
     }
   }
 
+  // ── Check 13: TLS cipher compatibility ──────────────────────────────────────
+  {
+    const tlsConf = (state.sysDesignData?.web?.ssl_protocols || '').toLowerCase();
+    const compliance = (state.sysDesignData?.security?.compliance_framework || '').toUpperCase();
+    const hasTls10 = tlsConf.includes('1.0') || tlsConf.includes('tls1') && !tlsConf.includes('1.2');
+    const hasTls11 = tlsConf.includes('1.1');
+    const missingTls12 = tlsConf && !tlsConf.includes('1.2') && !tlsConf.includes('1.3');
+    const pciScope = compliance.includes('PCI');
+
+    if (hasTls10 || hasTls11) {
+      alerts.push({
+        id: 'tls_deprecated',
+        severity: 'warn',
+        tabs: ['design', 'diagram', 'exec'],
+        message: `TLS 1.0/1.1 configured — deprecated by NIST (2024) and prohibited under PCI-DSS v4. Remove and enforce TLS 1.2+ only.`,
+        action: 'System Design → Web section',
+      });
+    } else if (pciScope && missingTls12) {
+      alerts.push({
+        id: 'tls_pci_gap',
+        severity: 'warn',
+        tabs: ['design', 'diagram'],
+        message: `PCI-DSS in scope but TLS protocol version not confirmed as 1.2+. Set ssl_protocols explicitly.`,
+        action: 'System Design → Web → TLS Protocols',
+      });
+    }
+  }
+
+  // ── Check 14: Custom entry compatibility signals ──────────────────────────
+  {
+    const customUUM = state.customUUM || [];
+    const liveEol   = state.liveEolData || {};
+    const customWithEolRisk = customUUM.filter(u => {
+      const name = (u.short || u.txt || '').toLowerCase();
+      return Object.entries(liveEol).some(([k, v]) => {
+        if (!v?.matchedCycle?.eol) return false;
+        const daysLeft = (new Date(v.matchedCycle.eol) - Date.now()) / 86400000;
+        return k.toLowerCase().split(' ').some(w => w.length > 3 && name.includes(w)) && daysLeft < 365;
+      });
+    });
+    if (customWithEolRisk.length > 0) {
+      alerts.push({
+        id: 'custom_entry_eol',
+        severity: 'warn',
+        tabs: ['diagram', 'cmdb'],
+        message: `Custom component "${customWithEolRisk[0].short || customWithEolRisk[0].txt}" matches a stack entry with EOL < 12 months — verify upgrade path before committing to this architecture.`,
+        action: 'Infra Diagram → Mission Intel for compatibility analysis',
+      });
+    }
+
+    // Flag migration-type custom entries that have no Phase 2 UUM equivalent
+    const migrationEntries = customUUM.filter(u => u.type === 'migration');
+    if (migrationEntries.length > 0 && !state.phase2Active) {
+      alerts.push({
+        id: 'custom_migration_no_phase2',
+        severity: 'info',
+        tabs: ['diagram'],
+        message: `${migrationEntries.length} custom migration task(s) defined — inject Phase 2 in the sidebar to add them to the Gantt, RTM, and Matrix.`,
+        action: 'Phase 2 injection in left sidebar',
+      });
+    }
+  }
+
   return alerts;
 }

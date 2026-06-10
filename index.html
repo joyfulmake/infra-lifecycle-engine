@@ -35,5 +35,15 @@
     </style>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // If the JS bundle never executes (network blocked, script load error),
+      // replace the infinite splash with an actionable error message after 12s.
+      window.__splashFallbackTimer = setTimeout(function() {
+        if (window.__appMounted) return;
+        var s = document.getElementById('splash');
+        if (!s) return;
+        s.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px;text-align:center"><img src="/icon-192.png" alt="OpsManifest" style="width:64px;height:64px;border-radius:12px"><div style="color:#f1f5f9;font-family:Inter,sans-serif;font-size:17px;font-weight:600">OpsManifest</div><div style="color:#94a3b8;font-family:Inter,sans-serif;font-size:13px">Unable to load. Please check your connection.</div><button onclick="location.reload()" style="margin-top:8px;background:#0d9488;color:#fff;border:none;padding:8px 24px;border-radius:6px;cursor:pointer;font-family:Inter,sans-serif;font-size:14px;font-weight:500">Retry</button></div>';
+      }, 12000);
+    </script>
   </body>
 </html>

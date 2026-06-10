@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.4.0.0'
+        default: '1.5.0.0'
       hosted_url:
         description: 'Live hosted URL (no trailing slash) — update if hosting changes'
         required: false
@@ -153,7 +153,7 @@ jobs:
             $w.WriteStartElement("Applications", $ns)
               $w.WriteStartElement("Application", $ns)
               $w.WriteAttributeString("Id",        "App")
-              $w.WriteAttributeString("StartPage", $hostedUrl)
+              $w.WriteAttributeString("StartPage", "$hostedUrl/")
 
                 $w.WriteStartElement("VisualElements", $nsUap)
                 $w.WriteAttributeString("DisplayName",         "OpsManifest")
@@ -185,7 +185,12 @@ jobs:
                 $w.WriteEndElement() # VisualElements
 
                 # ApplicationContentUriRules — declares the app's navigation scope to WebView2
+                # Include both the root URL and all sub-paths so the StartPage always matches
                 $w.WriteStartElement("ApplicationContentUriRules", $nsUap)
+                  $w.WriteStartElement("Rule", $nsUap)
+                  $w.WriteAttributeString("Type",  "include")
+                  $w.WriteAttributeString("Match", "$hostedUrl/")
+                  $w.WriteEndElement()
                   $w.WriteStartElement("Rule", $nsUap)
                   $w.WriteAttributeString("Type",  "include")
                   $w.WriteAttributeString("Match", "$hostedUrl/*")

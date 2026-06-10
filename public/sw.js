@@ -55,7 +55,21 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE).then(c => c.put(event.request, clone));
           return res;
         })
-        .catch(() => caches.match('/'))
+        .catch(async () => {
+          // Try cached version of this URL first, then root, then inline offline page
+          const cached = await caches.match(event.request) || await caches.match('/');
+          if (cached) return cached;
+          return new Response(
+            '<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpsManifest</title></head>' +
+            '<body style="margin:0;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;font-family:Inter,sans-serif;text-align:center;padding:24px">' +
+            '<img src="/icon-192.png" style="width:64px;height:64px;border-radius:12px" alt="">' +
+            '<div style="color:#f1f5f9;font-size:17px;font-weight:600">OpsManifest</div>' +
+            '<div style="color:#94a3b8;font-size:13px">Unable to connect. Please check your connection.</div>' +
+            '<button onclick="location.reload()" style="margin-top:8px;background:#0d9488;color:#fff;border:none;padding:8px 24px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500">Retry</button>' +
+            '</body></html>',
+            { headers: { 'Content-Type': 'text/html' } }
+          );
+        })
     );
     return;
   }
