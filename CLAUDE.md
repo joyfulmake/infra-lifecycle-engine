@@ -95,7 +95,8 @@ src/
     smartScan.js          — standalone CVE/EOL scan + auto-suggest incidents/UUM codes
     suggestDb.js          — suggestion engine: `matchSuggestKeys(val, fieldId, minChars=3)` (static DB) + `buildContextSuggestions(val, fieldId, ctx, sysDesignData, scanResults)` (context-aware, used by SuggestInput in PhasePanel)
     roleAccess.js         — email-match role-based access: `getUserRolesForBuild(authUser, roleAssignments)`, `canEditDesignSection(userRoles, sectionKey)`, `isQATeamLead(authUser, roleAssignments)`; `ROLE_SECTION_MAP` maps RACI roles to design section keys
-    coherenceEngine.js    — pure `runCoherenceChecks(stateSnapshot)` → `[{ id, severity, tabs, message, action }]`; no React, no deps; runs 12 cross-tab checks (compliance gap, DR/backup, security incidents, network incidents, SLA/monitoring, design sparseness, empty Phase 2, RTM fails, roles missing, RTM pending count, storage incidents, live EOL from liveEolData)
+    infraMap.js           — pure functions (no React, no deps): `buildStructuralMap(state)` → 80-char box-drawing ASCII architecture map; `buildFunctionalFlow(state)` → traffic/data flow diagram; `buildCompatibilityMatrix(state)` → markdown lifecycle/EOL table; `buildRuleBasedMissionIntel(state)` → 4-section MissionHelp analysis (signals, RTM note, business/functional/technical layers, next steps). All driven from Zustand state snapshot. Used by InfraDiagramTab ASCII Map and Mission Intel views.
+    coherenceEngine.js    — pure `runCoherenceChecks(stateSnapshot)` → `[{ id, severity, tabs, message, action }]`; no React, no deps; runs 14 cross-tab checks: 1–12 existing; 13: TLS 1.0/1.1 deprecated cipher detection + PCI-DSS cipher gap; 14: custom UUM entry EOL proximity warning + migration-without-Phase2 hint
     useCoherenceEngine.js — React hook; debounces 600ms; watches selInc/selUUM/sysDesignData/requirements/rtmRows/roleAssignments/liveEolData; calls `setCoherenceAlerts`; mounted in PmTabs
     eolApi.js             — endoflife.date REST client; `fetchProductCycles(slug)`, `searchProducts(query)`, `fetchComponentLiveData(componentName)`, `cycleLiveStatus(cycle)`; `EOL_SLUG_MAP` maps 60+ component names to API slugs; `daysUntil()`, `securityOnlyStatus()`, `LtsBadge`, `DaysChip`, `ExtendedSupportChip` helpers live in CmdbTab.jsx
     exportExcel.js        — 13-sheet styled Excel export using xlsx-js-style
@@ -106,6 +107,7 @@ src/
     auth.js               — local auth (signIn, signOut, PLANS, canUseFeature, trySilentFirebaseAuth)
     taskMetadata.js       — `enrichTask(task, ctx)` → 7-point FSM metadata (hwDimension, preCondition, execEngine, postValidation, blastRadius, downstream, fsmState); 30+ regex patterns; `FSM_STATE_STYLE`, `HW_DIM_ICON`
     groqConfig.js         — `GROQ_CONFIGURED` flag + `GROQ_WORKER_URL` (off by default)
+    groq.js               — (updated) `analyzeMissionContext(stateSnapshot)` → `/groq-mission-analysis` worker; returns `{ analysis: { contextExtraction, deliveryRTM, architectureMap: {business,functional,technical}, compatibilityRisks, nextSteps } }`
     groq.js               — `enrichTaskWithGroq(task, ctx, existingMeta)` + `suggestWithGroq(ctx, query)` — calls `workers/ai-worker.js`
     AuthContext.jsx        — auth React context + provider
 ```
@@ -188,7 +190,7 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.4.0.0 submitted for certification (2026-06-09) — hosting migrated to Cloudflare Pages; blank screen fix.
+**Current status:** v1.5.0.0 ready to submit (2026-06-11) — resilience fixes for blank screen + MissionHelp architecture intelligence added.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
@@ -196,7 +198,10 @@ Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 - v1.1.0.0 — major feature release: guided sidebar roadmap (7-step numbered, always-visible), Gantt locked to `designApplied`, System Design PM edit override, CMDB live EOL API, coherence engine, DemoTour, batch job tasks, CSP workers.dev added, SW cache v2 + endoflife.date excluded from cache; submitted 2026-06-04, failed (crash at launch on OS build 10.0.26200)
 - v1.2.0.0 — crash fix: `MaxVersionTested` bumped to `10.0.26200.0`; removed `uap3:AppUriHandler` extension; submitted 2026-06-05, failed (crash still on OS build 26200 — revision component mismatch)
 - v1.3.0.0 — crash fix: `MaxVersionTested` set to `10.0.65535.65535` (schema max — covers all revisions of all builds); `Windows.Universal` → `Windows.Desktop` (correct device family for desktop PWA); added `ApplicationContentUriRules` for nav scope; removed `orientation` from `manifest.json` (was re-introduced after v1.0.1.0 fix); Partner Center: only Windows 10 Desktop family checked; submitted 2026-06-07, failed (blank screen on 26100.3194 — Netlify credits exhausted, site unavailable)
-- v1.4.0.0 — hosting migrated from Netlify to Cloudflare Pages (`https://opsmanifest.pages.dev`); StartPage and ACUR rules updated; `_redirects` replaced with `404.html` copy (CF Pages SPA fallback); submitted 2026-06-09
+- v1.4.0.0 — hosting migrated from Netlify to Cloudflare Pages (`https://opsmanifest.pages.dev`); StartPage and ACUR rules updated; `_redirects` replaced with `404.html` copy (CF Pages SPA fallback); submitted 2026-06-09; failed (blank screen — same pattern as v1.3, `pages.dev` likely unreachable from Microsoft lab)
+- v1.5.0.0 — MSIX: StartPage gets trailing slash, explicit root ACUR rule added alongside wildcard; root React error boundary added (no blank screen on crash); 12s splash fallback shows retry instead of forever-spinner when JS bundle fails to load; service worker offline response returns branded error page; MissionHelp architecture intelligence added (ASCII Map + Mission Intel views in InfraDiagramTab); TLS/cipher and custom-entry compatibility coherence checks added; ready 2026-06-11
+
+**Root cause of blank screen (v1.3–v1.4)**: Microsoft's certification lab cannot reach `*.netlify.app` or `*.pages.dev` CDN subdomains — these are third-party hosting domains that can be on corporate firewall blocklists. The HTML loads but the JS bundle fetch from the same origin fails silently, leaving the splash spinner running forever. The tester describes this as "no content at launch." Fix: use a custom domain (e.g. `opsmanifest.app` pointed at Cloudflare Pages). Until then, v1.5.0.0 adds a 12s splash fallback that shows a "retry" message instead of an infinite spinner, and a root error boundary that prevents a blank white screen if React crashes.
 
 **Root cause of 26200 crash**: Three layered issues. (1) `MaxVersionTested` was `10.0.26100.0` / `10.0.26200.0` — when OS version (including 4th revision component) exceeds MaxVersionTested, Windows applies a compatibility shim that breaks hosted web apps. Real devices run e.g. `10.0.26200.2630`, so `.0` revision is always exceeded. Fix: use `10.0.65535.65535` (schema maximum — each component is capped at 65535). (2) The `uap3:AppUriHandler` extension referenced `opsmanifest.netlify.app` but no `.well-known/windows-app-web-link` file exists; Windows 26200 tightened domain verification (removed in v1.2.0.0). (3) `TargetDeviceFamily Name="Windows.Universal"` is the UWP multi-device family — desktop PWA Store apps should use `Windows.Desktop`.
 
