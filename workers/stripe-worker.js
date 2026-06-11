@@ -42,8 +42,8 @@ async function createCheckoutSession(req, env) {
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
     'customer_email': email,
-    success_url: successUrl || 'https://opsmanifest.netlify.app/?checkout=success',
-    cancel_url: cancelUrl  || 'https://opsmanifest.netlify.app/?checkout=cancel',
+    success_url: successUrl || 'https://opsmanifest.pages.dev/?checkout=success',
+    cancel_url: cancelUrl  || 'https://opsmanifest.pages.dev/?checkout=cancel',
     'subscription_data[trial_period_days]': '7',
     'subscription_data[metadata][email]': email,
   });
@@ -222,7 +222,7 @@ async function createPortalSession(req, env) {
 
   const params = new URLSearchParams({
     customer: customerId,
-    return_url: returnUrl || 'https://opsmanifest.netlify.app/',
+    return_url: returnUrl || 'https://opsmanifest.pages.dev/',
   });
   const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
     method: 'POST',
