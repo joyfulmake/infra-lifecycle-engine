@@ -255,8 +255,13 @@ Here is what happens from the moment you open the tool to the moment you export 
     → isDirty cleared, currentBuildId set
 
 12. Export
-    → exportExcel() builds 13-sheet workbook using xlsx-js-style
-    → Sheets: Summary, Design, Gantt, RTM, RAID, Roles, Matrix, CMDB, Incidents, UUM, Closure, CAB, Changelog
+    → exportExcel() builds 14-sheet workbook using xlsx-js-style
+    → Sheets: Executive Summary, Infrastructure Diagram, Platform Topology, Mission Intel,
+      CMDB Register, Incidents, UUM Items, RTM Checklist, Gantt Timeline, RAID Registry,
+      System Design, RACI Matrix, Emergency Changes, Closure Summary
+    → Mission Intel sheet renders the same rule-based architecture intelligence as the
+      InfraDiagramTab: context signals, RTM status, business/functional/technical layers,
+      next steps, plus the structural ASCII map and functional flow in monospace rows
     → File downloaded directly from browser, no server involved
 ```
 
@@ -298,7 +303,7 @@ src/
     taskMetadata.js          — 7-point FSM enrichment per task (30+ regex patterns)
     smartScan.js             — rule-based CVE/EOL scan against stack selection
     eolApi.js                — endoflife.date REST client + 60+ product slug mappings
-    exportExcel.js           — 13-sheet Excel export
+    exportExcel.js           — 14-sheet Excel export (incl. Mission Intel architecture sheet)
     db.js                    — IndexedDB wrapper (Dexie)
     firebase.js              — Firestore cloud sync
     auth.js                  — plan tiers, feature gates, seeded accounts

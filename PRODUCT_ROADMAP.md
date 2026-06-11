@@ -122,9 +122,10 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 
 | Requirement | Description | Status | Version |
 |---|---|---|---|
-| EX-01 | 13-sheet styled Excel export (xlsx-js-style) | SHIPPED | v1.0.0.0 |
+| EX-01 | 14-sheet styled Excel export (xlsx-js-style) | SHIPPED | v1.0.0.0 |
 | EX-02 | Presentation deck (slides.html, 10 slides) | SHIPPED | v1.1.0.0 |
 | EX-03 | DemoTour onboarding popup (first visit) | SHIPPED | v1.1.0.0 |
+| EX-04 | Mission Intel export sheet (signals, RTM status, architecture layers, ASCII maps) + custom UUM rows on UUM sheet | SHIPPED | v1.5.0.0 |
 
 ### Platform & Distribution
 
@@ -143,7 +144,9 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 
 ## Upcoming Release Plans
 
-### v1.3.0.0 — Payments & Feedback (post-Store approval)
+_(v1.3.0.0–v1.5.0.0 were consumed by Store certification fixes — see Version Summary. Planned feature releases renumbered accordingly.)_
+
+### v1.6.0.0 — Payments & Feedback (post-Store approval)
 
 **Trigger:** Microsoft Store certification approved.
 
@@ -153,7 +156,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 | 2 | **Web3Forms — enterprise inquiry** | "Contact us for Team pricing" form in sidebar or landing. No backend needed — Web3Forms handles delivery to email. |
 | 3 | **Web3Forms — in-app feedback** | Bug report / feedback link in sidebar footer next to Privacy link. One-click form, stays in-app. |
 
-### v1.4.0.0 — Store Expansion
+### v1.7.0.0 — Store Expansion
 
 | # | Feature | Detail |
 |---|---|---|
@@ -161,7 +164,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 | 2 | **Meta Quest** | PWABuilder → Meta Quest package. Already in CLAUDE.md. Landscape orientation already set in manifest. Target: ops teams in field / physical data centres. |
 | 3 | **Microsoft Store badge** | Add store badge to sidebar footer + slides.html once Store URL is confirmed. |
 
-### v1.5.0.0 — Collaboration & SSO
+### v1.8.0.0 — Collaboration & SSO
 
 | # | Feature | Detail |
 |---|---|---|
@@ -191,7 +194,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 | Channel | Audience | Status | Notes |
 |---|---|---|---|
 | **Netlify web (PWA)** | Any browser, any OS | Live | `https://opsmanifest.netlify.app` — install prompt on Chrome/Edge/Safari |
-| **Microsoft Store** | Windows IT admins, enterprise devices | In cert (v1.2.0.0) | Highest-value channel for the target persona |
+| **Microsoft Store** | Windows IT admins, enterprise devices | In cert (v1.5.0.0) | Highest-value channel for the target persona |
 
 ### Tier 2 — Next 60 days
 
@@ -207,7 +210,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 |---|---|---|---|
 | **Apple App Store** | iOS / iPad users | High | PWABuilder generates Xcode project. Apple dev account required. WKWebView + SW limitations on iOS. |
 | **Amazon Appstore** | FireOS tablets, AWS-adjacent teams | Low-Medium | APK from Google Play can be repackaged for Amazon with minor changes. |
-| **Product Hunt launch** | Tech / devops early adopters | Medium | Coordinate with feature release (v1.3.0.0). One-day launch window. |
+| **Product Hunt launch** | Tech / devops early adopters | Medium | Coordinate with feature release (v1.6.0.0). One-day launch window. |
 | **LinkedIn organic** | IT managers, infra PMs | Ongoing | Short demo video clips from slides.html deck. |
 | **Hacker News Show HN** | Developers, IT ops | Low | "Show HN: A structured pre-work guide for infra provisioning" — works best when the tool is polished and live on multiple stores. |
 | **r/sysadmin, r/ITManagers** | Direct target persona | Low | Genuine use-case post — not a promo. |
@@ -216,7 +219,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 
 | Channel | Detail |
 |---|---|
-| **Web3Forms enterprise inquiry** | "Contact us for Team pricing" form (v1.3.0.0) — captures inbound leads from organisations who find the tool and want multi-seat licences. |
+| **Web3Forms enterprise inquiry** | "Contact us for Team pricing" form (v1.6.0.0) — captures inbound leads from organisations who find the tool and want multi-seat licences. |
 | **LinkedIn outreach** | Target: IT Programme Managers, Infrastructure Architects, Change Management leads at mid-size enterprises. Demo deck is the leave-behind. |
 | **Microsoft Partner Network** | Once Store listed, eligible to appear in Microsoft solution catalogues used by IT procurement teams. |
 
@@ -229,4 +232,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 | v1.0.0.0 | 2026-05 | Failed cert — crash at launch (Windows 11 24H2) |
 | v1.0.1.0 | 2026-05 | MaxVersionTested fix, manifest cleanup — also failed |
 | v1.1.0.0 | 2026-06-04 | Major feature release — failed cert (crash on OS build 26200) |
-| v1.2.0.0 | 2026-06-05 | Crash fix: MaxVersionTested 26200, AppUriHandler removed — in cert |
+| v1.2.0.0 | 2026-06-05 | Crash fix: MaxVersionTested 26200, AppUriHandler removed — failed cert (revision component mismatch) |
+| v1.3.0.0 | 2026-06-07 | MaxVersionTested 10.0.65535.65535, Windows.Desktop family, ACUR rules — failed cert (blank screen, Netlify credits exhausted) |
+| v1.4.0.0 | 2026-06-09 | Hosting migrated Netlify → Cloudflare Pages — failed cert (blank screen, pages.dev unreachable from MS lab) |
+| v1.5.0.0 | 2026-06-11 | Root error boundary, 12s splash fallback, MissionHelp architecture intelligence, Mission Intel Excel sheet — submitted, in cert |

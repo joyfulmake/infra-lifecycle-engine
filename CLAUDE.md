@@ -190,7 +190,7 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.5.0.0 ready to submit (2026-06-11) — resilience fixes for blank screen + MissionHelp architecture intelligence added.
+**Current status:** v1.5.0.0 submitted 2026-06-11, in certification — resilience fixes for blank screen + MissionHelp architecture intelligence added.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
@@ -199,7 +199,7 @@ Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 - v1.2.0.0 — crash fix: `MaxVersionTested` bumped to `10.0.26200.0`; removed `uap3:AppUriHandler` extension; submitted 2026-06-05, failed (crash still on OS build 26200 — revision component mismatch)
 - v1.3.0.0 — crash fix: `MaxVersionTested` set to `10.0.65535.65535` (schema max — covers all revisions of all builds); `Windows.Universal` → `Windows.Desktop` (correct device family for desktop PWA); added `ApplicationContentUriRules` for nav scope; removed `orientation` from `manifest.json` (was re-introduced after v1.0.1.0 fix); Partner Center: only Windows 10 Desktop family checked; submitted 2026-06-07, failed (blank screen on 26100.3194 — Netlify credits exhausted, site unavailable)
 - v1.4.0.0 — hosting migrated from Netlify to Cloudflare Pages (`https://opsmanifest.pages.dev`); StartPage and ACUR rules updated; `_redirects` replaced with `404.html` copy (CF Pages SPA fallback); submitted 2026-06-09; failed (blank screen — same pattern as v1.3, `pages.dev` likely unreachable from Microsoft lab)
-- v1.5.0.0 — MSIX: StartPage gets trailing slash, explicit root ACUR rule added alongside wildcard; root React error boundary added (no blank screen on crash); 12s splash fallback shows retry instead of forever-spinner when JS bundle fails to load; service worker offline response returns branded error page; MissionHelp architecture intelligence added (ASCII Map + Mission Intel views in InfraDiagramTab); TLS/cipher and custom-entry compatibility coherence checks added; Excel export gains Mission Intel sheet (signals/RTM/layers/next steps + ASCII maps) and custom UUM rows; ready 2026-06-11
+- v1.5.0.0 — MSIX: StartPage gets trailing slash, explicit root ACUR rule added alongside wildcard; root React error boundary added (no blank screen on crash); 12s splash fallback shows retry instead of forever-spinner when JS bundle fails to load; service worker offline response returns branded error page; MissionHelp architecture intelligence added (ASCII Map + Mission Intel views in InfraDiagramTab); TLS/cipher and custom-entry compatibility coherence checks added; Excel export gains Mission Intel sheet (signals/RTM/layers/next steps + ASCII maps) and custom UUM rows; submitted 2026-06-11
 
 **Root cause of blank screen (v1.3–v1.4)**: Microsoft's certification lab cannot reach `*.netlify.app` or `*.pages.dev` CDN subdomains — these are third-party hosting domains that can be on corporate firewall blocklists. The HTML loads but the JS bundle fetch from the same origin fails silently, leaving the splash spinner running forever. The tester describes this as "no content at launch." Fix: use a custom domain (e.g. `opsmanifest.app` pointed at Cloudflare Pages). Until then, v1.5.0.0 adds a 12s splash fallback that shows a "retry" message instead of an infinite spinner, and a root error boundary that prevents a blank white screen if React crashes.
 
@@ -306,19 +306,17 @@ Cloudflare Pages config (via `public/_redirects` and `public/_headers`):
 - Security headers + CSP: `_headers` → applied to `/*`
 - Note: `/slides.html` is a static file in `public/`, served directly by Cloudflare without needing the SPA redirect
 
-**After every code change, deploy by pushing to main:**
-```bash
-git push origin main
-```
+**⚠ 2026-06-11 incident — Pages project vanished:** `opsmanifest.pages.dev` went NXDOMAIN (the `opsmanifest` Pages project no longer existed in the Cloudflare account — likely the cause of the v1.4 "blank screen" cert failure, not just MS lab firewalls). Project was recreated the same day via `wrangler pages project create opsmanifest --production-branch main` and redeployed. **The recreated project is NOT connected to GitHub — `git push origin main` no longer auto-deploys.** To restore push-to-deploy, reconnect the repo in CF dashboard → Pages → opsmanifest → Settings → Builds & deployments.
 
-GitHub repo is connected to Cloudflare Pages for auto-deploy on push to `main`. No CLI credits needed.
-
-**To deploy locally (if needed):**
+**After every code change, deploy with wrangler (push alone does NOT deploy):**
 ```bash
 export NVM_DIR="$HOME/.config/nvm" && . "$NVM_DIR/nvm.sh"
 npm run build
-npx wrangler pages deploy dist --project-name opsmanifest
+npx wrangler pages deploy dist --project-name opsmanifest --branch main
+git push origin main   # keep repo in sync (does not trigger deploy)
 ```
+
+**Verify after deploy:** `curl -s https://opsmanifest.pages.dev/ | grep -o 'assets/index-[^"]*\.js'` must match the hash in `dist/index.html`, and DNS must resolve (`dig +short opsmanifest.pages.dev @1.1.1.1`). Given the project vanished once, check DNS resolution before every Store submission.
 
 _(Netlify was migrated away from on 2026-06-09 due to exhausted account credits. `netlify.toml` kept for reference but not active.)_
 
