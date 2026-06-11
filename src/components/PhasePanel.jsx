@@ -856,7 +856,10 @@ export default function PhasePanel() {
         promoted: s.promoted, cabApproved: s.cabApproved, rtmSigned: s.rtmSigned,
         sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,
         requirements: s.requirements, emergencyChanges: s.emergencyChanges,
-        customInc: s.customInc, rtmRows: s.rtmRows,
+        customInc: s.customInc, customUUM: s.customUUM,
+        rtmRows: s.rtmRows, liveEolData: s.liveEolData,
+        isBuilt: s.isBuilt, phase2Active: s.phase2Active,
+        cabDeclined: s.cabDeclined, rtmStale: s.rtmStale,
         selRegions: s.selRegions,
         fullExport: canUseFeature(authUser, 'excel_full'),
       });

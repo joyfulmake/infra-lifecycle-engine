@@ -6,6 +6,7 @@ import { getIncidentFixTasks } from './incidentFixTasks.js';
 import { buildDesignTasks } from './designTasks.js';
 import { DESIGN_SECTIONS, FIELD_LABELS } from '../store/useStore.js';
 import { getEolInfo } from './eolData.js';
+import { buildStructuralMap, buildFunctionalFlow, buildRuleBasedMissionIntel } from './infraMap.js';
 
 // ── Colour palette ─────────────────────────────────────────────────────────
 const C = {
@@ -166,7 +167,11 @@ function excelCalcDates(tasks, startDateStr, hpd = 8, durKey = 'duration_hours')
 export function exportExcel(state) {
   const {
     ctx, selInc, selUUM, selFix, promoted, cabApproved, rtmSigned,
-    sysDesignData, sdAiTasks, requirements, emergencyChanges, customInc,
+    sysDesignData, sdAiTasks, requirements, emergencyChanges,
+    customInc = [], customUUM = [],
+    rtmRows = {}, liveEolData = {},
+    isBuilt = true, phase2Active = false,
+    cabDeclined = false, rtmStale = false,
     selRegions,
     fullExport = false,  // Pro+ gets CMDB, Gantt, System Design, Closure Summary
   } = state;
@@ -319,7 +324,75 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 4: CMDB Register
+  // SHEET 4: Mission Intel — Architecture Map
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    const intelState = {
+      ctx, sysDesignData, selInc, selUUM, customUUM, customInc, liveEolData,
+      requirements, isBuilt, promoted, cabApproved, cabDeclined, phase2Active, rtmSigned,
+    };
+    const intel = buildRuleBasedMissionIntel(intelState);
+    // Terminal-style monospace rows for the ASCII box-drawing maps
+    const MONO = {
+      font: { name: 'Consolas', sz: 9, color: { rgb: 'FFA5F3FC' } },
+      fill: { patternType: 'solid', fgColor: { rgb: 'FF0F172A' } },
+      alignment: { vertical: 'center' },
+    };
+
+    const sb = sheetBuilder([{ width: 16 }, { width: 105 }]);
+    sb.headerRow(projName + ' — Mission Intel & Architecture Map', ST.H1, 2);
+    sb.row(['', '']);
+
+    sb.headerRow('CONTEXT & SIGNAL EXTRACTION', ST.H2, 2);
+    if (intel.signals.length === 0) {
+      sb.row([c('Signals', ST.LABEL), c('No signals yet — complete Phase 1 stack selection', ST.BODY)]);
+    } else {
+      intel.signals.forEach((sig, i) => {
+        sb.row([c(i === 0 ? 'Signals' : '', ST.LABEL), c(sig, i % 2 === 0 ? ST.BODY : ST.BODY_A)]);
+      });
+    }
+
+    sb.row(['', '']);
+    sb.headerRow('DELIVERY / RTM', ST.BLUE_H, 2);
+    sb.row([c('RTM note', ST.LABEL), c(intel.rtmNote, ST.BODY)]);
+    const rtmVals = Object.values(rtmRows);
+    if (rtmVals.length > 0) {
+      const count = st => rtmVals.filter(v => v === st).length;
+      const failing = count('FAIL') + count('BLOCKED');
+      sb.row([c('RTM status', ST.LABEL), c(
+        'PASS: ' + count('PASS') + ' · FAIL: ' + count('FAIL') + ' · BLOCKED: ' + count('BLOCKED') +
+        ' · PENDING: ' + count('PENDING') + ' · N/A: ' + count('NA') + (rtmSigned ? '  —  SIGNED OFF' : ''),
+        failing > 0 ? ST.AMBER_V : ST.BODY)]);
+    }
+    if (rtmStale) {
+      sb.row([c('Advisory', ST.LABEL), c('RTM is stale — scope changed after sign-off. Re-verify before cutover.', ST.AMBER_V)]);
+    }
+
+    sb.row(['', '']);
+    sb.headerRow('ARCHITECTURE LAYERS', ST.H2, 2);
+    sb.row([c('Business', ST.LABEL), c(intel.business, ST.BODY)]);
+    sb.row([c('Functional', ST.LABEL), c(intel.functional, ST.BODY_A)]);
+    sb.row([c('Technical', ST.LABEL), c(intel.technical, ST.BODY)]);
+
+    sb.row(['', '']);
+    sb.headerRow('NEXT STEPS', ST.AMBER_H, 2);
+    intel.nextSteps.forEach((step, i) => {
+      sb.row([c(String(i + 1), ctd(ST.BOLD_L)), c(step, i % 2 === 0 ? ST.BODY : ST.BODY_A)]);
+    });
+
+    sb.row(['', '']);
+    sb.headerRow('STRUCTURAL MAP', ST.H2, 2);
+    buildStructuralMap(intelState).split('\n').forEach(line => sb.headerRow(line, MONO, 2));
+
+    sb.row(['', '']);
+    sb.headerRow('FUNCTIONAL FLOW', ST.H2, 2);
+    buildFunctionalFlow(intelState).split('\n').forEach(line => sb.headerRow(line, MONO, 2));
+
+    XLSX.utils.book_append_sheet(wb, sb.build(), 'Mission Intel');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 5: CMDB Register
   // ══════════════════════════════════════════════════════════════════════════
   {
     // Layer key → which inc.layers / uum.layers values map to it
@@ -437,7 +510,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 5: Incidents Register
+  // SHEET 6: Incidents Register
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
@@ -472,41 +545,60 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 5: UUM Items
+  // SHEET 7: UUM Items
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
       [c('UUM (Unix / User / Middleware) Items Register', ST.H1), '', '', '', '', '', ''],
       [c('ID', ST.AMBER_H), c('Description', ST.AMBER_H), c('Type', ST.AMBER_H), c('Layers', ST.AMBER_H), c('Status', ST.AMBER_H), c('Task 1', ST.AMBER_H), c('Task 2', ST.AMBER_H)],
     ];
-    if (selUUM.length === 0) {
+    const allSelUUM = selUUM.length === 0 ? [] : selUUM;
+    if (allSelUUM.length === 0 && customUUM.length === 0) {
       rows.push([c('No UUM items selected', ST.BODY), '', '', '', '', '', '']);
     } else {
-      selUUM.forEach((code, i) => {
-        const uum = ALL_UUM.find(u => u.code === code);
+      allSelUUM.forEach((code, i) => {
+        const uum = ALL_UUM.find(u => u.code === code) || customUUM.find(u => u.id === code);
         if (!uum) return;
         const tasks = getRealTasks(uum, ctx);
         const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+        const uumType = (uum.type || 'update').toUpperCase();
+        const typeStyle = uum.type === 'migration' ? ST.BLUE_H : uum.type === 'upgrade' ? ST.AMBER_V : ST.BODY;
+        const label = uum.short || uum.id || code;
+        const desc = uum.txt ? uum.txt.substring((uum.short || '').length + 2, 90) : (uum.txt || '—');
+        rows.push([
+          c(label, ctd(ST.BOLD_L)),
+          c(desc, bg),
+          c(uumType, ctd(typeStyle)),
+          c((uum.layers || []).join(', ') || '—', bg),
+          c(promoted ? 'COMPLETED' : 'SCHEDULED', ctd(promoted ? ST.PASS : ST.AMBER_V)),
+          c(tasks[0] ? '[' + tasks[0].role + '] ' + tasks[0].name : '—', bg),
+          c(tasks[1] ? '[' + tasks[1].role + '] ' + tasks[1].name : '—', bg),
+        ]);
+      });
+      // Custom UUM entries not already in selUUM
+      customUUM.filter(u => !selUUM.includes(u.id)).forEach((uum, i) => {
+        const tasks = getRealTasks({ ...uum, code: uum.id }, ctx);
+        const bg = (allSelUUM.length + i) % 2 === 0 ? ST.BODY : ST.BODY_A;
         const typeStyle = uum.type === 'migration' ? ST.BLUE_H : uum.type === 'upgrade' ? ST.AMBER_V : ST.BODY;
         rows.push([
-          c(uum.short, ctd(ST.BOLD_L)),
-          c(uum.txt.substring(uum.short.length + 2, 90), bg),
-          c(uum.type.toUpperCase(), ctd(typeStyle)),
-          c(uum.layers.join(', '), bg),
-          c(promoted ? 'COMPLETED' : 'SCHEDULED', ctd(promoted ? ST.PASS : ST.AMBER_V)),
+          c((uum.short || uum.id) + ' ✦', ctd(ST.BOLD_L)),
+          c(uum.txt || '—', bg),
+          c((uum.type || 'update').toUpperCase(), ctd(typeStyle)),
+          c((uum.layers || []).join(', ') || '—', bg),
+          c('CUSTOM', ctd(ST.AMBER_V)),
           c(tasks[0] ? '[' + tasks[0].role + '] ' + tasks[0].name : '—', bg),
           c(tasks[1] ? '[' + tasks[1].role + '] ' + tasks[1].name : '—', bg),
         ]);
       });
     }
     const ws = buildSheet(rows);
-    ws['!cols'] = [{ width: 12 }, { width: 65 }, { width: 14 }, { width: 35 }, { width: 14 }, { width: 55 }, { width: 55 }];
+    ws['!cols'] = [{ width: 14 }, { width: 65 }, { width: 14 }, { width: 35 }, { width: 14 }, { width: 55 }, { width: 55 }];
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'UUM Items');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 6: RTM Checklist
+  // SHEET 8: RTM Checklist
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 22 }, { width: 75 }, { width: 40 }, { width: 16 }]);
@@ -560,7 +652,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 8: Gantt Timeline
+  // SHEET 9: Gantt Timeline
   // ══════════════════════════════════════════════════════════════════════════
   {
     const ganttTasks = sdAiTasks.length > 0 ? sdAiTasks : buildDesignTasks(sysDesignData);
@@ -648,7 +740,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 8: RAID Registry
+  // SHEET 10: RAID Registry
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
@@ -709,7 +801,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 9: System Design
+  // SHEET 11: System Design
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sectionColors = [ST.H2, ST.AMBER_H, ST.RED_H, ST.GREEN_H, ST.BLUE_H, ST.H2, ST.AMBER_H, ST.RED_H];
@@ -734,7 +826,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 10: RACI Matrix (20 roles)
+  // SHEET 12: RACI Matrix (20 roles)
   // ══════════════════════════════════════════════════════════════════════════
   {
     // PM, Change Manager, Tech Manager, then each function admin + lead pair
@@ -792,7 +884,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 11: Emergency Changes
+  // SHEET 13: Emergency Changes
   // ══════════════════════════════════════════════════════════════════════════
   if (emergencyChanges && emergencyChanges.length > 0) {
     const rows = [
@@ -818,7 +910,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 13: Closure Summary
+  // SHEET 14: Closure Summary
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 6 }, { width: 95 }, { width: 22 }]);
