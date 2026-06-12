@@ -36,13 +36,23 @@ async function fetchAudio(line) {
 // Web Speech API fallback — works in all modern browsers, no API key needed.
 function speakWebSpeech(text, signal) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
+  // Cancel any lingering utterance from a previous call
+  speechSynthesis.cancel();
   return new Promise(resolve => {
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate  = 0.92;
-    utt.pitch = 1.05;
-    utt.onend   = resolve;
-    utt.onerror = resolve;
+    const utt    = new SpeechSynthesisUtterance(text);
+    utt.rate     = 0.9;
+    utt.pitch    = 1.05;
+    utt.volume   = 1;
+    utt.lang     = 'en-US';
+    utt.onend    = resolve;
+    utt.onerror  = resolve;
     signal?.addEventListener('abort', () => { speechSynthesis.cancel(); resolve(); }, { once: true });
+    // Chrome bug: speechSynthesis stops if page is not in focus; resume if needed
+    const keepAlive = setInterval(() => {
+      if (speechSynthesis.paused) speechSynthesis.resume();
+    }, 5000);
+    utt.onend   = () => { clearInterval(keepAlive); resolve(); };
+    utt.onerror = () => { clearInterval(keepAlive); resolve(); };
     speechSynthesis.speak(utt);
   });
 }

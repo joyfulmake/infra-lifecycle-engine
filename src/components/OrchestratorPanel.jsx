@@ -127,18 +127,21 @@ export default function OrchestratorPanel() {
     sysDesignData:       store.sysDesignData,
   };
 
-  const [open,     setOpen]     = useState(false);
-  const [messages, setMessages] = useState([]);   // { id, role, text, actions?, onConfirm?, onCancel? }
-  const [input,    setInput]    = useState('');
-  const [thinking, setThinking] = useState(false);
-  const [playing,  setPlaying]  = useState(false);
-  const [lineIdx,  setLineIdx]  = useState(0);
+  const [open,        setOpen]        = useState(false);
+  const [messages,    setMessages]    = useState([]);
+  const [input,       setInput]       = useState('');
+  const [thinking,    setThinking]    = useState(false);
+  const [playing,     setPlaying]     = useState(false);
+  const [lineIdx,     setLineIdx]     = useState(0);
+  const [recording,   setRecording]   = useState(false);
+  const [recStatus,   setRecStatus]   = useState('');  // 'listening' | 'processing' | ''
 
-  const abortRef   = useRef(null);
-  const inputRef   = useRef(null);
-  const bottomRef  = useRef(null);
-  const msgId      = useRef(0);
+  const abortRef        = useRef(null);
+  const inputRef        = useRef(null);
+  const bottomRef       = useRef(null);
+  const msgId           = useRef(0);
   const pendingConfirmRef = useRef(null);
+  const recognitionRef  = useRef(null);
 
   const script    = generateScript(s);
   const checklist = getWorkflowChecklist(s);
@@ -261,6 +264,43 @@ export default function OrchestratorPanel() {
     setMessages(m => m.filter(msg => msg.role !== 'confirm'));
     pendingConfirmRef.current = null;
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Cancelled — no changes made.' }]);
+  }
+
+  // ── Mic / voice input ────────────────────────────────────────────────────
+
+  function handleMic() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Voice input is not supported in this browser. Try Chrome or Edge.' }]);
+      return;
+    }
+
+    if (recording) {
+      recognitionRef.current?.stop();
+      setRecording(false);
+      setRecStatus('');
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onstart  = () => { setRecording(true); setRecStatus('listening'); };
+    rec.onspeechend = () => setRecStatus('processing');
+    rec.onresult = e => {
+      const transcript = e.results[0][0].transcript;
+      setInput(transcript);
+      setRecStatus('');
+      setRecording(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    };
+    rec.onerror = () => { setRecording(false); setRecStatus(''); };
+    rec.onend   = () => { setRecording(false); setRecStatus(''); };
+
+    recognitionRef.current = rec;
+    rec.start();
   }
 
   // ── Send message ─────────────────────────────────────────────────────────
@@ -430,6 +470,14 @@ export default function OrchestratorPanel() {
             </div>
           )}
 
+          {/* Voice recording status */}
+          {recStatus && (
+            <div className="px-4 pb-1 flex items-center gap-2 flex-shrink-0">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs text-slate-500">{recStatus === 'listening' ? 'Listening…' : 'Processing…'}</span>
+            </div>
+          )}
+
           {/* Input */}
           <div className="orch-input-area flex gap-2 px-4 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
             <textarea
@@ -437,12 +485,27 @@ export default function OrchestratorPanel() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything or type a command…"
+              placeholder="Ask anything or speak with the mic…"
               disabled={thinking}
               rows={1}
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
+            {/* Mic button */}
+            <button
+              onClick={handleMic}
+              disabled={thinking}
+              title={recording ? 'Stop recording' : 'Speak to type'}
+              className={[
+                'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all text-base',
+                recording
+                  ? 'bg-red-500 text-white animate-pulse shadow-lg'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
+              ].join(' ')}
+            >
+              🎤
+            </button>
+            {/* Send button */}
             <button
               onClick={handleSend}
               disabled={!input.trim() || thinking}

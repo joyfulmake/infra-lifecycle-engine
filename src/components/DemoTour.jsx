@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const TOUR_KEY = 'opsmanifest_tour_v3';
+const TOUR_KEY = 'opsmanifest_tour_v4';
 
 const SLIDES = [
   {
