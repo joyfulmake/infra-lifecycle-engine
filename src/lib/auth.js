@@ -81,25 +81,79 @@ export const PLANS = {
 };
 
 // Private promo codes — NOT displayed in the UI.
-// Users must contact hello@opsmanifest.app to request a demo access code.
-// Each code grants the mapped plan for PROMO_VALIDITY_DAYS days from first use.
+// Each entry: { plan, days } — days is the access window from first use.
+// String values are accepted for backward compat (treated as { plan, days: PROMO_VALIDITY_DAYS }).
 export const PROMO_CODES = {
-  OPSPRO:       'professional',
-  PROKEY2026:   'professional',
-  OPSTEAM:      'team',
-  OPSADMIN:     'enterprise',
-  ADMINKEY:     'enterprise',
-  OPSTARTER:    'starter',
+  OPSPRO:       { plan: 'professional', days: 14 },
+  PROKEY2026:   { plan: 'professional', days: 14 },
+  OPSTEAM:      { plan: 'team',         days: 14 },
+  OPSADMIN:     { plan: 'enterprise',   days: 14 },
+  ADMINKEY:     { plan: 'enterprise',   days: 14 },
+  OPSTARTER:    { plan: 'starter',      days: 14 },
+  // Short demo codes for live demos (1 / 3 / 7 day windows)
+  DEMO1D:       { plan: 'professional', days: 1  },
+  DEMO3D:       { plan: 'professional', days: 3  },
+  DEMO7D:       { plan: 'professional', days: 7  },
+  // Enterprise trial codes (admin-issued; 30 / 60 / 180 day windows)
+  ENT30:        { plan: 'enterprise',   days: 30  },
+  ENT60:        { plan: 'enterprise',   days: 60  },
+  ENT180:       { plan: 'enterprise',   days: 180 },
 };
 
 export const PROMO_VALIDITY_DAYS = 14;
 
-// Seeded accounts — permanent plan grant, never expires, never shown in promo hints.
+// Seeded accounts — permanent plan grant, never expires, isAdmin flag gives admin UI.
+// Shape: { plan: string, isAdmin?: boolean }
 export const SEEDED_ACCOUNTS = {
-  'sriram.c76@gmail.com': 'professional',
+  'sriram.c76@gmail.com': { plan: 'enterprise', isAdmin: true },
 };
 
 const AUTH_KEY = 'opsmanifest_auth';
+
+// Admin-generated invite codes stored in localStorage
+const INVITE_KEY = 'opsmanifest_invites';
+
+function _getInvites() {
+  try { return JSON.parse(localStorage.getItem(INVITE_KEY) || '{}'); } catch { return {}; }
+}
+
+/** Generate a time-limited invite code for a specific email address. Admin only. */
+export function generateInviteCode(targetEmail, plan, days) {
+  const code = 'INV' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+  const invites = _getInvites();
+  invites[code] = {
+    targetEmail: targetEmail.toLowerCase(),
+    plan,
+    days,
+    createdAt: Date.now(),
+    // The invite link itself is valid for 60 days (separate from access duration)
+    linkExpiresAt: Date.now() + 60 * 24 * 60 * 60 * 1000,
+    used: false,
+  };
+  localStorage.setItem(INVITE_KEY, JSON.stringify(invites));
+  return code;
+}
+
+/** Returns all admin-generated invites (for admin panel display). */
+export function getAllInvites() {
+  return _getInvites();
+}
+
+/** Validates and marks an invite code as used. Returns { plan, days } or null. */
+export function resolveInviteCode(code, email) {
+  if (!code || !email) return null;
+  const upper = code.trim().toUpperCase();
+  const invites = _getInvites();
+  const invite = invites[upper];
+  if (!invite) return null;
+  if (invite.used) return null;
+  if (invite.linkExpiresAt && Date.now() > invite.linkExpiresAt) return null;
+  if (invite.targetEmail && invite.targetEmail !== email.toLowerCase()) return null;
+  // Mark as used
+  invites[upper] = { ...invite, used: true, usedAt: Date.now(), usedBy: email.toLowerCase() };
+  localStorage.setItem(INVITE_KEY, JSON.stringify(invites));
+  return { plan: invite.plan, days: invite.days };
+}
 
 /** Returns days remaining on a promo grant, or null if not promo-based. */
 export function promoDaysRemaining(user) {
@@ -115,11 +169,13 @@ export function getAuthUser() {
     if (!raw) return null;
     const user = JSON.parse(raw);
 
-    // Seeded accounts: always return seeded plan, never expire
-    const seededPlan = SEEDED_ACCOUNTS[user?.email];
-    if (seededPlan) {
-      if (user.plan !== seededPlan) {
-        const upgraded = { ...user, plan: seededPlan, promoExpiresAt: null, promoExpired: false };
+    // Seeded accounts: always return seeded plan + isAdmin flag, never expire
+    const seeded = SEEDED_ACCOUNTS[user?.email];
+    if (seeded) {
+      const seededPlan = seeded?.plan || seeded; // backward compat for string format
+      const isAdmin = seeded?.isAdmin || false;
+      if (user.plan !== seededPlan || user.isAdmin !== isAdmin) {
+        const upgraded = { ...user, plan: seededPlan, isAdmin, promoExpiresAt: null, promoExpired: false };
         localStorage.setItem(AUTH_KEY, JSON.stringify(upgraded));
         return upgraded;
       }
@@ -145,27 +201,32 @@ export function getAuthUser() {
   }
 }
 
-/** Signs in a user. Pass promoCode to set a 14-day access window. */
-export function signIn(email, plan = 'starter', syncPassword = null, promoCode = null) {
+/** Signs in a user. Pass promoCode + promoDays to set a variable-length access window. */
+export function signIn(email, plan = 'starter', syncPassword = null, promoCode = null, promoDays = null) {
   const cleanEmail = email.trim().toLowerCase();
-  const seededPlan = SEEDED_ACCOUNTS[cleanEmail];
+  const seeded = SEEDED_ACCOUNTS[cleanEmail];
+  const seededPlan = seeded?.plan || seeded || null;
+  const seededAdmin = seeded?.isAdmin || false;
   const effectivePlan = seededPlan || plan;
   const existing = getAuthUser();
+  const daysToUse = promoDays ?? PROMO_VALIDITY_DAYS;
 
-  const promoFields = (!seededPlan && promoCode)
+  const promoFields = (!seeded && promoCode)
     ? {
         promoCode: promoCode.trim().toUpperCase(),
-        promoExpiresAt: Date.now() + PROMO_VALIDITY_DAYS * 24 * 60 * 60 * 1000,
+        promoExpiresAt: Date.now() + daysToUse * 24 * 60 * 60 * 1000,
         promoExpired: false,
+        promoDays: daysToUse,
       }
-    : (existing?.promoCode && !seededPlan
-        ? { promoCode: existing.promoCode, promoExpiresAt: existing.promoExpiresAt, promoExpired: existing.promoExpired }
+    : (existing?.promoCode && !seeded
+        ? { promoCode: existing.promoCode, promoExpiresAt: existing.promoExpiresAt, promoExpired: existing.promoExpired, promoDays: existing.promoDays }
         : {});
 
   const user = {
     email: cleanEmail,
     displayName: cleanEmail.split('@')[0],
     plan: effectivePlan,
+    ...(seededAdmin ? { isAdmin: true } : {}),
     buildsUsed: existing?.buildsUsed ?? 0,
     joinedAt: existing?.joinedAt ?? new Date().toISOString().slice(0, 10),
     ...(syncPassword ? { syncPassword } : existing?.syncPassword ? { syncPassword: existing.syncPassword } : {}),
@@ -193,8 +254,13 @@ export function signOut() {
   localStorage.removeItem(AUTH_KEY);
 }
 
+/** Returns { plan, days } for a static promo code, or null if not found. */
 export function resolvePromoCode(code) {
-  return PROMO_CODES[(code || '').trim().toUpperCase()] || null;
+  const entry = PROMO_CODES[(code || '').trim().toUpperCase()];
+  if (!entry) return null;
+  // Backward compat: if entry is a plain string (old format), treat as { plan, days: PROMO_VALIDITY_DAYS }
+  if (typeof entry === 'string') return { plan: entry, days: PROMO_VALIDITY_DAYS };
+  return entry;
 }
 
 const TIER_ORDER = ['guest', 'starter', 'professional', 'team', 'enterprise'];
@@ -212,7 +278,8 @@ const FEATURE_TIER = {
 
 export function canUseFeature(user, feature) {
   const email = user?.email;
-  const tier = SEEDED_ACCOUNTS[email] ?? user?.plan ?? 'guest';
+  const seeded = SEEDED_ACCOUNTS[email];
+  const tier = (seeded?.plan || seeded) ?? user?.plan ?? 'guest';
   const userLevel = TIER_ORDER.indexOf(tier);
   return userLevel >= (FEATURE_TIER[feature] ?? 0);
 }
@@ -220,7 +287,8 @@ export function canUseFeature(user, feature) {
 export function buildLimitReached(user) {
   // Guests can always build — they just can't save
   if (!user || !user.plan) return false;
-  const effectivePlan = SEEDED_ACCOUNTS[user.email] ?? user.plan;
+  const seeded = SEEDED_ACCOUNTS[user.email];
+  const effectivePlan = (seeded?.plan || seeded) ?? user.plan;
   const plan = PLANS[effectivePlan];
   if (!plan) return false;
   if (plan.buildsPerYear === Infinity) return false;

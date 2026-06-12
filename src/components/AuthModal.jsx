@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PLANS, signIn, signOut, resolvePromoCode, promoDaysRemaining, PROMO_VALIDITY_DAYS } from '../lib/auth.js';
+import { PLANS, signIn, signOut, resolvePromoCode, resolveInviteCode, generateInviteCode, getAllInvites, promoDaysRemaining } from '../lib/auth.js';
 import { FIREBASE_CONFIGURED, fbSignIn } from '../lib/firebase.js';
 import { STRIPE_CONFIGURED, startCheckout, openCustomerPortal } from '../lib/stripe.js';
 import { useAuth } from '../lib/AuthContext.jsx';
@@ -40,6 +40,13 @@ export default function AuthModal({ reason = 'signup', onClose }) {
   const [showPromo, setShowPromo] = useState(false);
   const [promoMsg, setPromoMsg] = useState('');
   const [appliedPromoCode, setAppliedPromoCode] = useState(null);
+  const [appliedPromoDays, setAppliedPromoDays] = useState(null);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteDuration, setInviteDuration] = useState(30);
+  const [invitePlan, setInvitePlan] = useState('enterprise');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [invites, setInvites] = useState(() => (typeof window !== 'undefined' ? getAllInvites() : {}));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -59,16 +66,27 @@ export default function AuthModal({ reason = 'signup', onClose }) {
 
   function handlePromoApply() {
     const code = promo.trim().toUpperCase();
-    const plan = resolvePromoCode(code);
-    if (plan) {
-      setSelectedPlan(plan);
+    // Check static codes first, then admin-generated invite codes
+    const resolved = resolvePromoCode(code) || resolveInviteCode(code, email.trim());
+    if (resolved) {
+      setSelectedPlan(resolved.plan);
       setAppliedPromoCode(code);
-      setPromoMsg(`Code accepted — ${PLANS[plan]?.name} access for ${PROMO_VALIDITY_DAYS} days.`);
+      setAppliedPromoDays(resolved.days);
+      setPromoMsg(`Code accepted — ${PLANS[resolved.plan]?.name} access for ${resolved.days} day${resolved.days !== 1 ? 's' : ''}.`);
       setPromo('');
     } else {
       setAppliedPromoCode(null);
+      setAppliedPromoDays(null);
       setPromoMsg('Invalid or expired code. Contact hello@opsmanifest.app for a valid access code.');
     }
+  }
+
+  function handleGenerateInvite() {
+    if (!inviteEmail.trim()) return;
+    const code = generateInviteCode(inviteEmail.trim(), invitePlan, Number(inviteDuration));
+    setGeneratedCode(code);
+    setInvites(getAllInvites());
+    setInviteEmail('');
   }
 
   async function handleSubmit(e) {
@@ -91,7 +109,7 @@ export default function AuthModal({ reason = 'signup', onClose }) {
       if (needsCloudSync && syncPassword.trim()) {
         await fbSignIn(email.trim().toLowerCase(), syncPassword.trim());
       }
-      const user = signIn(email.trim(), selectedPlan, needsCloudSync ? syncPassword.trim() : null, appliedPromoCode);
+      const user = signIn(email.trim(), selectedPlan, needsCloudSync ? syncPassword.trim() : null, appliedPromoCode, appliedPromoDays);
       setAuthUser(user);
       onClose();
     } catch (err) {
@@ -366,7 +384,7 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                       )}
                       {appliedPromoCode && (
                         <div className="text-xs mt-1 text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
-                          Access valid for {PROMO_VALIDITY_DAYS} days from sign-in. Code saved in your browser profile.
+                          Access valid for {appliedPromoDays} day{appliedPromoDays !== 1 ? 's' : ''} from sign-in. Code saved in your browser profile.
                         </div>
                       )}
                       <div className="text-xs text-slate-500 mt-2 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200 leading-relaxed">
@@ -377,7 +395,6 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                         </a>.
                         By using a code you agree to OpsManifest's{' '}
                         <a href="/privacy.html" className="text-teal-600 hover:underline" target="_blank" rel="noopener">terms of use</a>.
-                        Codes are personal, non-transferable, and valid for {PROMO_VALIDITY_DAYS} days from first use.
                       </div>
                     </div>
                   )}
@@ -413,6 +430,144 @@ export default function AuthModal({ reason = 'signup', onClose }) {
         </div>
 
       </div>
+
+      {/* Admin Panel — only visible to admin users */}
+      {authUser?.isAdmin && (
+        <div className="border-t-2 border-purple-200 bg-purple-50">
+          <button
+            onClick={() => setAdminOpen(o => !o)}
+            className="w-full px-8 py-3 flex items-center justify-between text-sm font-semibold text-purple-800 hover:bg-purple-100 transition-colors"
+          >
+            <span>Admin Panel — {authUser.email}</span>
+            <span className="text-purple-400">{adminOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {adminOpen && (
+            <div className="px-8 pb-8 space-y-6">
+
+              {/* Static demo codes */}
+              <div>
+                <div className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-2">Quick Demo Codes</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[{ code: 'DEMO1D', label: '1-Day Demo', plan: 'Professional' },
+                    { code: 'DEMO3D', label: '3-Day Demo', plan: 'Professional' },
+                    { code: 'DEMO7D', label: '7-Day Demo', plan: 'Professional' }].map(({ code, label, plan }) => (
+                    <div key={code} className="bg-white border border-purple-200 rounded-lg p-3">
+                      <div className="text-xs text-slate-500 mb-1">{label} · {plan}</div>
+                      <div className="font-mono text-sm font-bold text-purple-800 tracking-widest mb-2">{code}</div>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(code)}
+                        className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors w-full"
+                      >Copy</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">Share these codes with prospects for a quick hands-on demo.</div>
+              </div>
+
+              {/* Enterprise invite generator */}
+              <div>
+                <div className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-2">Generate Enterprise Trial Invite</div>
+                <div className="bg-white border border-purple-200 rounded-lg p-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Recipient email</label>
+                    <input
+                      type="email"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                      value={inviteEmail}
+                      onChange={e => setInviteEmail(e.target.value)}
+                      placeholder="contact@enterprise.com"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Plan</label>
+                      <select
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        value={invitePlan}
+                        onChange={e => setInvitePlan(e.target.value)}
+                      >
+                        <option value="professional">Professional</option>
+                        <option value="team">Team</option>
+                        <option value="enterprise">Enterprise</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Duration</label>
+                      <select
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        value={inviteDuration}
+                        onChange={e => setInviteDuration(e.target.value)}
+                      >
+                        <option value={1}>1 day</option>
+                        <option value={3}>3 days</option>
+                        <option value={7}>7 days</option>
+                        <option value={30}>1 month (30d)</option>
+                        <option value={60}>2 months (60d)</option>
+                        <option value={180}>6 months (180d)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleGenerateInvite}
+                    disabled={!inviteEmail.trim()}
+                    className="w-full py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >Generate Invite Code</button>
+                  {generatedCode && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="text-xs text-green-700 mb-1">Generated code — send this to the recipient:</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-base font-bold text-green-800 tracking-widest flex-1">{generatedCode}</span>
+                        <button
+                          onClick={() => navigator.clipboard?.writeText(generatedCode)}
+                          className="text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                        >Copy</button>
+                      </div>
+                      <div className="text-xs text-green-600 mt-1.5">Valid for {inviteDuration} days · Email-locked · Expires in 60 days if unused</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Active invites list */}
+              {Object.keys(invites).length > 0 && (
+                <div>
+                  <div className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-2">Issued Invites ({Object.keys(invites).length})</div>
+                  <div className="bg-white border border-purple-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-purple-50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold text-purple-700">Code</th>
+                          <th className="text-left px-3 py-2 font-semibold text-purple-700">Email</th>
+                          <th className="text-left px-3 py-2 font-semibold text-purple-700">Plan / Days</th>
+                          <th className="text-left px-3 py-2 font-semibold text-purple-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-purple-100">
+                        {Object.entries(invites).slice(-10).reverse().map(([code, inv]) => {
+                          const expired = inv.linkExpiresAt && Date.now() > inv.linkExpiresAt;
+                          const statusLabel = inv.used ? `Used by ${inv.usedBy || '?'}` : expired ? 'Expired' : 'Active';
+                          const statusColor = inv.used ? 'text-slate-400' : expired ? 'text-red-500' : 'text-green-600';
+                          return (
+                            <tr key={code} className="hover:bg-purple-50">
+                              <td className="px-3 py-2 font-mono font-bold text-purple-800">{code}</td>
+                              <td className="px-3 py-2 text-slate-600 truncate max-w-[120px]">{inv.targetEmail}</td>
+                              <td className="px-3 py-2 text-slate-600">{PLANS[inv.plan]?.name} · {inv.days}d</td>
+                              <td className={`px-3 py-2 font-medium ${statusColor}`}>{statusLabel}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
