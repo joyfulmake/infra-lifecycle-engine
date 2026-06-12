@@ -333,6 +333,76 @@ async function handleCartesiaTts(req, env) {
   });
 }
 
+// ── Orchestrator chat ─────────────────────────────────────────────────────────
+// NLP command interpreter: natural language -> structured action plan.
+// Requires GROQ_API_KEY. Context is a compact state snapshot from buildStateContext().
+
+async function handleOrchestratorChat(req, env) {
+  const { message, context } = await req.json().catch(() => ({}));
+  if (!message) return err('message is required');
+
+  const rolesDesc = context.userRoles?.length > 0
+    ? `User roles in this build: ${context.userRoles.join(', ')}`
+    : context.isPM
+      ? 'User is the Project Manager (full access to all actions)'
+      : 'User has no assigned role in this build (read-only access)';
+
+  const prompt = `You are the OpsManifest Expert Orchestrator — an AI that manages enterprise infrastructure lifecycle builds.
+
+CURRENT BUILD STATE:
+Phase: ${context.phase}
+Stack: ${context.stack}
+Project: ${context.project} | Env: ${context.envType}
+Go-live: ${context.goLive} | SLA: ${context.sla}
+Incidents in scope: ${context.incidents} | UUM items: ${context.uumItems}
+RTM rows: ${JSON.stringify(context.rtmCounts)}
+Tasks stale: ${context.tasksStale} | RTM stale: ${context.rtmStale}
+Active coherence alerts: ${(context.alerts || []).join('; ') || 'none'}
+Assigned roles: ${context.assignedRoles || 'none'}
+Filled design sections: ${context.filledDesignSections || 'none'}
+
+USER: ${context.userEmail}
+${rolesDesc}
+
+USER MESSAGE: "${message}"
+
+AVAILABLE ACTIONS (use only what applies):
+SET_CTX            { key: "hw"|"os"|"db"|"app", value: string }
+SET_REQUIREMENT    { key: "projectName"|"envType"|"goLiveDate"|"sla"|"hoursPerDay"|"projectStartDate", value: string }
+SET_DESIGN_FIELD   { section: "unix"|"web"|"app"|"db"|"storage"|"backup"|"network"|"security", field: string, value: string }
+TOGGLE_INC         { code: string }   — add/remove an incident code
+TOGGLE_UUM         { code: string }   — add/remove a UUM item code
+SET_RTM_ROW        { id: string, status: "PASS"|"FAIL"|"NA"|"PENDING" }
+SET_ROLE_ASSIGNMENT { role: string, data: { name: string, email: string, backup: string, raci: string } }
+APPLY_DESIGN       {}   requiresConfirmation ALWAYS
+INJECT_PHASE2      {}   requiresConfirmation ALWAYS
+SUBMIT_CAB         {}   requiresConfirmation ALWAYS
+SIGN_RTM           {}   requiresConfirmation ALWAYS
+PROMOTE            {}   requiresConfirmation ALWAYS — critical, irreversible
+
+RULES:
+1. reply = 1-2 sentences, professional, action-oriented
+2. Always set requiresConfirmation: true for APPLY_DESIGN, INJECT_PHASE2, SUBMIT_CAB, SIGN_RTM, PROMOTE
+3. Only include actions the user's RACI permits (see rolesDesc above)
+4. Questions about current state → answer in reply, empty actions array
+5. description = brief human-readable summary of what each action will do (shown in confirmation UI)
+6. nextPrompt = short follow-up suggestion (optional, <=10 words)
+
+Return valid JSON only — no markdown, no code fences:
+{"reply":"...","actions":[{"type":"...","params":{},"description":"...","requiresConfirmation":false}],"nextPrompt":"..."}`;
+
+  try {
+    const groqRes = await groqChat(env, [{ role: 'user', content: prompt }], 900);
+    const content = groqRes.choices?.[0]?.message?.content || '';
+    const match   = content.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in Groq response');
+    const result = JSON.parse(match[0]);
+    return json({ result, model: groqRes.model });
+  } catch (e) {
+    return err(`Orchestrator chat failed: ${e.message}`, 500);
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
@@ -374,6 +444,10 @@ export default {
 
     if (req.method === 'POST' && url.pathname === '/groq-mission-analysis') {
       return handleMissionAnalysis(req, env);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/orchestrator-chat') {
+      return handleOrchestratorChat(req, env);
     }
 
     return err('Not found', 404);
