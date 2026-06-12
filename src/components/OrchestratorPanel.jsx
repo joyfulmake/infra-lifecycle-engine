@@ -147,29 +147,44 @@ export default function OrchestratorPanel() {
 
   function nextId() { return ++msgId.current; }
 
-  // Initialise with the contextual script as the first message when panel opens
+  const hasGreeted = useRef(false);
+
+  function buildWelcome(s) {
+    const { hw, os, db, app } = s.ctx || {};
+    const filled = [hw, os, db, app].filter(Boolean).length;
+    if (filled === 4 && s.isBuilt) {
+      return `Welcome back! Your build is in progress — ${script.title}.\n\n${script.nextAction ? 'Next: ' + script.nextAction : 'All phases are complete.'}\n\nAsk me anything, or say "show alerts" to check coherence issues.`;
+    }
+    return `Hello! I'm your Expert Orchestrator — your step-by-step mentor for the full infrastructure lifecycle.\n\nI'll guide you through all 7 phases: Build → AI Scan → System Design → Phase 2 → Gantt → RTM → Closure.\n\nTo begin Phase 1, I need four things:\n• Hardware platform (e.g. Dell PowerEdge R750, HPE ProLiant)\n• Operating System (e.g. RHEL 8.6, Ubuntu 22.04, AIX 7.2)\n• Database (e.g. Oracle 19c, PostgreSQL 15, MySQL 8)\n• Application/Middleware (e.g. WebSphere, JBoss, Tomcat)\n\nYou can type them here — "hardware is Dell PowerEdge R750" — or fill them in the left panel directly.\n\nWhat's the hardware platform for this project?`;
+  }
+
+  // Initialise with welcome message when panel opens for the first time
   useEffect(() => {
     if (open && messages.length === 0) {
-      setMessages([{
-        id: nextId(),
-        role: 'orchestrator',
-        text: script.lines.map(l => `[${l.voice === 'guide' ? 'Guide' : 'Learner'}] ${l.text}`).join('\n'),
-      }]);
+      const welcome = buildWelcome(s);
+      setMessages([{ id: nextId(), role: 'orchestrator', text: welcome }]);
+      // Auto-play voice greeting once per session
+      if (CARTESIA_CONFIGURED && !hasGreeted.current) {
+        hasGreeted.current = true;
+        const greetLines = [{ text: 'Hello! I am your Expert Orchestrator. I will guide you through the full infrastructure lifecycle. What is the hardware platform for this project?', voice: 'guide' }];
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
+        setPlaying(true);
+        speakScript(greetLines, { onLineStart: () => {}, signal: ctrl.signal })
+          .then(() => { if (!ctrl.signal.aborted) { setPlaying(false); abortRef.current = null; } })
+          .catch(() => { setPlaying(false); });
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Update the opening script when workflow state changes — but only if user hasn't chatted yet
+  // Update welcome when workflow state changes — only if conversation is still at greeting
   const prevScriptId = useRef(script.id);
   useEffect(() => {
     if (prevScriptId.current !== script.id) {
       prevScriptId.current = script.id;
       if (messages.length <= 1) {
-        setMessages([{
-          id: nextId(),
-          role: 'orchestrator',
-          text: script.lines.map(l => `[${l.voice === 'guide' ? 'Guide' : 'Learner'}] ${l.text}`).join('\n'),
-        }]);
+        setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome(s) }]);
         setLineIdx(0);
         abortRef.current?.abort();
         setPlaying(false);
@@ -247,11 +262,18 @@ export default function OrchestratorPanel() {
     setThinking(true);
 
     try {
-      // Rule-based fallback for simple state questions (no Groq needed)
+      // Rule-based mentor — handles phase guidance, field-setting, status queries
       const fast = ruleBasedResponse(text, s, authUser);
       if (fast) {
         setThinking(false);
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fast }]);
+        const { reply, actions = [] } = typeof fast === 'string' ? { reply: fast } : fast;
+        const immediate = actions.filter(a => !a.requiresConfirmation);
+        const needsConfirm = actions.filter(a => a.requiresConfirmation);
+        if (immediate.length > 0) applyActions(immediate);
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+        if (needsConfirm.length > 0) {
+          setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
+        }
         return;
       }
 
@@ -286,13 +308,13 @@ export default function OrchestratorPanel() {
 
     } catch (e) {
       setThinking(false);
-      const isGroqMissing = e.message?.includes('GROQ_API_KEY');
+      // When Groq is unavailable, respond with helpful guidance instead of a technical error
+      const fallback = ruleBasedResponse('help', s, authUser);
+      const fallbackText = typeof fallback === 'string' ? fallback : fallback?.reply;
       setMessages(m => [...m, {
         id: nextId(),
         role: 'orchestrator',
-        text: isGroqMissing
-          ? 'Natural language commands need GROQ_API_KEY in the Cloudflare Worker. State questions still work — try "what is the current state?" or "who is the Unix Admin?"'
-          : `Error: ${e.message}`,
+        text: fallbackText || 'I can answer questions about your build status, roles, RTM, stack, and guide you through each phase. Try: "what\'s the current status?" or "what\'s next?"',
       }]);
     }
   }
@@ -378,7 +400,10 @@ export default function OrchestratorPanel() {
           {/* Quick suggestions — shown when input empty */}
           {!input && authUser && !thinking && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
-              {['Current status?', "What's next?", 'RTM ready?', 'Who is the Unix Admin?'].map(q => (
+              {(s.isBuilt
+                ? ["What's next?", 'Show alerts', 'RTM ready?', 'Who is the Unix Admin?']
+                : ['Phase 1 fields?', "What's hardware?", "What's next?", 'Current status?']
+              ).map(q => (
                 <button
                   key={q}
                   onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 50); }}

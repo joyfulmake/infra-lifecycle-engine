@@ -285,6 +285,35 @@
 [data-theme="dark"] .orchestrator-panel .orch-footer { color: #475569 !important; }
 [data-theme="dark"] .orchestrator-panel .orch-footer span { color: #64748B !important; }
 
+/* Extra bg coverage — catches bg-white/XX, hover:bg-white, arbitrary whites */
+[data-theme="dark"] .main-root [class*="bg-white"]:not([class*="text-white"]) { background-color: #1E293B !important; }
+[data-theme="dark"] .main-root [class~="bg-gray-50"]  { background-color: #1E293B !important; }
+[data-theme="dark"] .main-root [class~="bg-gray-100"] { background-color: #334155 !important; }
+[data-theme="dark"] .main-root [class~="bg-gray-200"] { background-color: #475569 !important; }
+[data-theme="dark"] .main-root [class~="bg-zinc-50"]  { background-color: #1E293B !important; }
+[data-theme="dark"] .main-root [class~="bg-zinc-100"] { background-color: #334155 !important; }
+
+/* Extra text coverage — gray/zinc/neutral variants */
+[data-theme="dark"] .main-root [class~="text-gray-900"] { color: #F8FAFC !important; }
+[data-theme="dark"] .main-root [class~="text-gray-800"] { color: #F1F5F9 !important; }
+[data-theme="dark"] .main-root [class~="text-gray-700"] { color: #E2E8F0 !important; }
+[data-theme="dark"] .main-root [class~="text-gray-600"] { color: #CBD5E1 !important; }
+[data-theme="dark"] .main-root [class~="text-gray-500"] { color: #94A3B8 !important; }
+[data-theme="dark"] .main-root [class~="text-zinc-800"] { color: #F1F5F9 !important; }
+[data-theme="dark"] .main-root [class~="text-zinc-700"] { color: #E2E8F0 !important; }
+[data-theme="dark"] .main-root [class~="border-gray-200"] { border-color: #334155 !important; }
+
+/* Force dark bg and light text on unlabelled content wrappers */
+[data-theme="dark"] .main-root .fade-in { color: #E2E8F0; }
+
+/* Input/select custom classes */
+[data-theme="dark"] .main-root .input-field,
+[data-theme="dark"] .main-root .select-field {
+  background-color: #1E293B !important;
+  color: #F1F5F9 !important;
+  border-color: #475569 !important;
+}
+
 /* Auth modal dark */
 [data-theme="dark"] .auth-modal-content {
   background-color: #1E293B !important;
