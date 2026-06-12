@@ -19,16 +19,15 @@
 // INR pricing note: Razorpay charges in paise (1 INR = 100 paise).
 // Amounts in RAZORPAY_PLANS are in paise.
 
-export const RAZORPAY_CONFIGURED = false;
+export const RAZORPAY_CONFIGURED = true;
 
-export const RAZORPAY_KEY_ID = 'rzp_live_REPLACE_WITH_YOUR_KEY_ID';
+export const RAZORPAY_KEY_ID = 'rzp_live_StVLbMeLpOj5bS';
 
-export const RAZORPAY_WORKER_URL = 'https://opsmanifest-razorpay.REPLACE.workers.dev';
+export const RAZORPAY_WORKER_URL = 'https://opsmanifest-razorpay.sriram-c76-254.workers.dev';
 
-// Suggested INR pricing (adjust to match your Razorpay plan configuration)
 export const RAZORPAY_PLANS = {
-  professional_monthly: { planId: 'plan_REPLACE_PROF_MONTHLY', amountPaise: 159900, label: '₹1,599/mo' },
-  professional_annual:  { planId: 'plan_REPLACE_PROF_ANNUAL',  amountPaise: 1590000, label: '₹15,900/yr' },
-  team_monthly:         { planId: 'plan_REPLACE_TEAM_MONTHLY', amountPaise: 499900, label: '₹4,999/mo' },
-  team_annual:          { planId: 'plan_REPLACE_TEAM_ANNUAL',  amountPaise: 4990000, label: '₹49,900/yr' },
+  professional_monthly: { planId: 'plan_T0lPOoB67scLkv', amountPaise: 159900, label: '₹1,599/mo' },
+  professional_annual:  { planId: 'plan_T0lQ826uLUCr3l', amountPaise: 1590000, label: '₹15,900/yr' },
+  team_monthly:         { planId: 'plan_T0lQbB4Apsbjeo', amountPaise: 499900, label: '₹4,999/mo' },
+  team_annual:          { planId: 'plan_T0lR9nLwdxJyZT', amountPaise: 4990000, label: '₹49,900/yr' },
 };

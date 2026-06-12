@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { PLANS, signIn, signOut, resolvePromoCode, resolveInviteCode, generateInviteCode, getAllInvites, promoDaysRemaining } from '../lib/auth.js';
 import { FIREBASE_CONFIGURED, fbSignIn } from '../lib/firebase.js';
 import { STRIPE_CONFIGURED, startCheckout, openCustomerPortal } from '../lib/stripe.js';
+import { RAZORPAY_CONFIGURED } from '../lib/razorpayConfig.js';
+import { razorpayPriceLabel } from '../lib/razorpay.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 
 const PLAN_STYLE = {
@@ -53,7 +55,7 @@ export default function AuthModal({ reason = 'signup', onClose }) {
   const isPro = ['professional', 'team', 'enterprise'].includes(selectedPlan);
   const needsCloudSync = isPro && FIREBASE_CONFIGURED;
   const isPaidPlan = ['professional', 'team'].includes(selectedPlan);
-  const needsPayment = isPaidPlan && STRIPE_CONFIGURED && !authUser;
+  const needsPayment = isPaidPlan && (STRIPE_CONFIGURED || RAZORPAY_CONFIGURED) && !authUser;
   const canManageBilling = STRIPE_CONFIGURED && authUser && ['professional', 'team', 'enterprise'].includes(authUser.plan);
 
   async function handleManageBilling() {
@@ -101,10 +103,21 @@ export default function AuthModal({ reason = 'signup', onClose }) {
     }
     setSubmitting(true);
     try {
-      // Stripe payment flow for paid plans when Stripe is configured
+      // Payment flow — Stripe takes priority; Razorpay used when Stripe is off
       if (needsPayment) {
-        await startCheckout({ plan: selectedPlan, annual, email: email.trim().toLowerCase() });
-        return; // browser redirects to Stripe; execution stops here
+        if (STRIPE_CONFIGURED) {
+          await startCheckout({ plan: selectedPlan, annual, email: email.trim().toLowerCase() });
+          return; // browser redirects to Stripe; execution stops here
+        }
+        if (RAZORPAY_CONFIGURED) {
+          const { startRazorpayCheckout } = await import('../lib/razorpay.js');
+          const result = await startRazorpayCheckout({ plan: selectedPlan, annual, email: email.trim().toLowerCase() });
+          // Payment succeeded — sign the user in at the paid plan
+          const user = signIn(email.trim(), result.plan, needsCloudSync ? syncPassword.trim() : null, null, null);
+          setAuthUser(user);
+          onClose();
+          return;
+        }
       }
       if (needsCloudSync && syncPassword.trim()) {
         await fbSignIn(email.trim().toLowerCase(), syncPassword.trim());
@@ -405,7 +418,10 @@ export default function AuthModal({ reason = 'signup', onClose }) {
 
                   {needsPayment && (
                     <div className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
-                      <span className="font-semibold">7-day free trial</span> — no charge until day 7. Cancel any time during the trial and you won't be billed. After clicking Subscribe you'll be redirected to Stripe Checkout to set up billing.
+                      {RAZORPAY_CONFIGURED && !STRIPE_CONFIGURED
+                        ? <><span className="font-semibold">Secure payment via Razorpay.</span> A subscription will be created. Cancel any time from your account.</>
+                        : <><span className="font-semibold">7-day free trial</span> — no charge until day 7. Cancel any time during the trial and you won't be billed. After clicking Subscribe you'll be redirected to Stripe Checkout to set up billing.</>
+                      }
                     </div>
                   )}
 
@@ -417,7 +433,15 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                     {submitting
                       ? 'Setting up...'
                       : needsPayment
-                        ? `Subscribe to ${PLANS[selectedPlan]?.name} — ${annual ? `$${Math.round(PLANS[selectedPlan]?.annualPrice / 12)}/mo billed annually` : `$${PLANS[selectedPlan]?.monthlyPrice}/mo`}`
+                        ? (() => {
+                            const rzLabel = RAZORPAY_CONFIGURED && !STRIPE_CONFIGURED ? razorpayPriceLabel(selectedPlan, annual) : null;
+                            const priceStr = rzLabel
+                              ? rzLabel
+                              : annual
+                                ? `$${Math.round(PLANS[selectedPlan]?.annualPrice / 12)}/mo billed annually`
+                                : `$${PLANS[selectedPlan]?.monthlyPrice}/mo`;
+                            return `Subscribe to ${PLANS[selectedPlan]?.name} — ${priceStr}`;
+                          })()
                         : authUser
                           ? `Switch to ${PLANS[selectedPlan]?.name}`
                           : `Continue with ${PLANS[selectedPlan]?.name}`}

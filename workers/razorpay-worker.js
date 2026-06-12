@@ -127,10 +127,10 @@ function ab2b64url(buf) {
 
 // Plan lookup by Razorpay plan ID — populate after creating plans in Razorpay dashboard
 const PLAN_ID_TO_PLAN = {
-  'plan_REPLACE_PROF_MONTHLY': 'professional',
-  'plan_REPLACE_PROF_ANNUAL':  'professional',
-  'plan_REPLACE_TEAM_MONTHLY': 'team',
-  'plan_REPLACE_TEAM_ANNUAL':  'team',
+  'plan_T0lPOoB67scLkv': 'professional',
+  'plan_T0lQ826uLUCr3l': 'professional',
+  'plan_T0lQbB4Apsbjeo': 'team',
+  'plan_T0lR9nLwdxJyZT': 'team',
 };
 
 export default {
