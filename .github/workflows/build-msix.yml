@@ -18,11 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.5.0.0'
-      hosted_url:
-        description: 'Live hosted URL (no trailing slash) — update if hosting changes'
-        required: false
-        default: 'https://opsmanifest.pages.dev'
+        default: '1.6.0.0'
 
 jobs:
   build-msix:
@@ -31,6 +27,19 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies and build app
+        shell: powershell
+        run: |
+          npm ci
+          npm run build
+          Write-Host "Vite build complete — dist/ ready"
 
       - name: Prepare folders
         shell: powershell
@@ -85,6 +94,16 @@ jobs:
 
           $src.Dispose()
 
+      - name: Copy web app bundle into MSIX package root
+        shell: powershell
+        run: |
+          # Bundle the Vite build output into the MSIX so the app loads from
+          # ms-appx-web:/// with no network dependency — eliminates the cert-lab
+          # "unreachable CDN" failure that has blocked every submission so far.
+          Copy-Item -Path "dist\*" -Destination "msix\" -Recurse -Force
+          Write-Host "Copied dist/ contents to msix/"
+          Get-ChildItem msix | Select-Object Name, Length | Format-Table -AutoSize
+
       - name: Write AppxManifest.xml
         shell: powershell
         env:
@@ -92,14 +111,12 @@ jobs:
           PUBLISHER_ID:           ${{ github.event.inputs.publisher_id }}
           PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name }}
           APP_VERSION:            ${{ github.event.inputs.app_version }}
-          HOSTED_URL:             ${{ github.event.inputs.hosted_url }}
         run: |
           # Use XmlWriter so no encoding surprises — no BOM, no invisible chars
           $packageName          = $env:PACKAGE_NAME.Trim()
           $publisherId          = $env:PUBLISHER_ID.Trim()
           $publisherDisplayName = $env:PUBLISHER_DISPLAY_NAME.Trim()
           $appVersion           = $env:APP_VERSION.Trim()
-          $hostedUrl            = $env:HOSTED_URL.Trim()
 
           $outPath = (Resolve-Path "msix").Path + "\AppxManifest.xml"
           $settings = New-Object System.Xml.XmlWriterSettings
@@ -153,7 +170,7 @@ jobs:
             $w.WriteStartElement("Applications", $ns)
               $w.WriteStartElement("Application", $ns)
               $w.WriteAttributeString("Id",        "App")
-              $w.WriteAttributeString("StartPage", "$hostedUrl/")
+              $w.WriteAttributeString("StartPage", "index.html")
 
                 $w.WriteStartElement("VisualElements", $nsUap)
                 $w.WriteAttributeString("DisplayName",         "OpsManifest")
@@ -184,16 +201,17 @@ jobs:
 
                 $w.WriteEndElement() # VisualElements
 
-                # ApplicationContentUriRules — declares the app's navigation scope to WebView2
-                # Include both the root URL and all sub-paths so the StartPage always matches
+                # ApplicationContentUriRules — packaged web app: app content is
+                # served from ms-appx-web:/// (the MSIX bundle), not from a CDN.
+                # This eliminates cert-lab failures caused by unreachable *.pages.dev.
                 $w.WriteStartElement("ApplicationContentUriRules", $nsUap)
                   $w.WriteStartElement("Rule", $nsUap)
                   $w.WriteAttributeString("Type",  "include")
-                  $w.WriteAttributeString("Match", "$hostedUrl/")
+                  $w.WriteAttributeString("Match", "ms-appx-web:///")
                   $w.WriteEndElement()
                   $w.WriteStartElement("Rule", $nsUap)
                   $w.WriteAttributeString("Type",  "include")
-                  $w.WriteAttributeString("Match", "$hostedUrl/*")
+                  $w.WriteAttributeString("Match", "ms-appx-web:///*")
                   $w.WriteEndElement()
                 $w.WriteEndElement()
 
