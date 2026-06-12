@@ -200,6 +200,18 @@ export default function OrchestratorPanel() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Auto-open after demo tour dismisses (fires once per session)
+  useEffect(() => {
+    const handler = () => {
+      setTimeout(() => {
+        setOpen(true);
+        setTimeout(() => inputRef.current?.focus(), 150);
+      }, 600);
+    };
+    window.addEventListener('opsmanifest-tour-dismissed', handler);
+    return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
+  }, []);
+
   // ── TTS playback ─────────────────────────────────────────────────────────
 
   const handlePlay = useCallback(async () => {
@@ -397,16 +409,19 @@ export default function OrchestratorPanel() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Quick suggestions — shown when input empty */}
-          {!input && authUser && !thinking && (
+          {/* Quick suggestions — always shown when input empty */}
+          {!input && !thinking && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
               {(s.isBuilt
                 ? ["What's next?", 'Show alerts', 'RTM ready?', 'Who is the Unix Admin?']
-                : ['Phase 1 fields?', "What's hardware?", "What's next?", 'Current status?']
+                : ['Phase 1 fields?', "What's next?", 'Current status?', 'Can I share details here?']
               ).map(q => (
                 <button
                   key={q}
-                  onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 50); }}
+                  onClick={() => {
+                    setInput(q);
+                    setTimeout(() => inputRef.current?.focus(), 50);
+                  }}
                   className="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-500 hover:border-teal-400 hover:text-teal-600 transition-colors bg-white"
                 >
                   {q}
@@ -422,15 +437,15 @@ export default function OrchestratorPanel() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={authUser ? 'Ask anything or type a command…' : 'Sign in to use the orchestrator'}
-              disabled={!authUser || thinking}
+              placeholder="Ask anything or type a command…"
+              disabled={thinking}
               rows={1}
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || thinking || !authUser}
+              disabled={!input.trim() || thinking}
               className="px-4 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm"
             >
               ↵
@@ -438,12 +453,12 @@ export default function OrchestratorPanel() {
           </div>
 
           {/* RACI context hint */}
-          {authUser && (
-            <div className="orch-footer px-4 pb-2.5 text-xs text-slate-400 flex-shrink-0">
-              <span className="font-medium text-slate-500">{authUser.email}</span>
-              {s.requirements?.pmEmail === authUser.email ? ' · PM — full access' : ' · Role-based access active'}
-            </div>
-          )}
+          <div className="orch-footer px-4 pb-2.5 text-xs text-slate-400 flex-shrink-0">
+            {authUser
+              ? <><span className="font-medium text-slate-500">{authUser.email}</span>{s.requirements?.pmEmail === authUser.email ? ' · PM — full access' : ' · Role-based access active'}</>
+              : <span className="text-slate-400">Guest mode — sign in to save builds and execute actions</span>
+            }
+          </div>
         </div>
       )}
     </>

@@ -10,34 +10,40 @@ export const VOICE_IDS = {
 export const CARTESIA_WORKER_URL = 'https://opsmanifest-ai.sriram-c76-254.workers.dev';
 export const CARTESIA_CONFIGURED = true;
 
-// Fetch audio for a single line. Returns an HTMLAudioElement or null (text mode).
+// Fetch audio for a single line. Returns an HTMLAudioElement or null.
 async function fetchAudio(line) {
   if (!CARTESIA_CONFIGURED) return null;
-
-  const res = await fetch(`${CARTESIA_WORKER_URL}/cartesia-tts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text:    line.text,
-      voiceId: VOICE_IDS[line.voice] || VOICE_IDS.guide,
-      speed:   line.speed   || 'normal',
-      emotion: line.emotion || [],
-    }),
-  });
-
-  if (!res.ok) throw new Error(`Cartesia TTS ${res.status}`);
-
-  const blob = await res.blob();
-  const url  = URL.createObjectURL(blob);
-  return new Audio(url);
+  try {
+    const res = await fetch(`${CARTESIA_WORKER_URL}/cartesia-tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text:    line.text,
+        voiceId: VOICE_IDS[line.voice] || VOICE_IDS.guide,
+        speed:   line.speed   || 'normal',
+        emotion: line.emotion || [],
+      }),
+    });
+    if (!res.ok) return null; // fall through to Web Speech
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    return new Audio(url);
+  } catch {
+    return null; // network error — fall through to Web Speech
+  }
 }
 
-// Text-mode wait: ~130 wpm average reading pace, minimum 1.8 s.
-function textWait(text, signal) {
-  const ms = Math.max(1800, (text.split(/\s+/).length / 130) * 60_000);
+// Web Speech API fallback — works in all modern browsers, no API key needed.
+function speakWebSpeech(text, signal) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
   return new Promise(resolve => {
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate  = 0.92;
+    utt.pitch = 1.05;
+    utt.onend   = resolve;
+    utt.onerror = resolve;
+    signal?.addEventListener('abort', () => { speechSynthesis.cancel(); resolve(); }, { once: true });
+    speechSynthesis.speak(utt);
   });
 }
 
@@ -64,22 +70,18 @@ export async function speakScript(lines, { onLineStart, onLineEnd, signal } = {}
     const line = lines[i];
     onLineStart?.(i, line);
 
-    try {
-      const audio = await fetchAudio(line);
+    const audio = await fetchAudio(line);
 
-      if (audio) {
-        await new Promise((resolve, reject) => {
-          audio.addEventListener('ended', resolve, { once: true });
-          audio.addEventListener('error', e => reject(e), { once: true });
-          signal?.addEventListener('abort', () => { audio.pause(); resolve(); }, { once: true });
-          audio.play().catch(reject);
-        });
-      } else {
-        // Text-only fallback
-        await textWait(line.text, signal);
-      }
-    } catch {
-      // Non-fatal: skip line on fetch/play error and continue
+    if (audio) {
+      await new Promise((resolve, reject) => {
+        audio.addEventListener('ended', resolve, { once: true });
+        audio.addEventListener('error', resolve, { once: true }); // non-fatal
+        signal?.addEventListener('abort', () => { audio.pause(); resolve(); }, { once: true });
+        audio.play().catch(resolve); // autoplay block → fall through silently
+      });
+    } else {
+      // Web Speech API fallback (built into every modern browser)
+      await speakWebSpeech(line.text, signal);
     }
 
     onLineEnd?.(i, line);

@@ -274,5 +274,22 @@ export function ruleBasedResponse(message, s, authUser) {
     return { reply: `Hello! I'm ready to help. ${next ? 'Where are we?\n\n' + next : generateScript(s).nextAction ? 'Next: ' + generateScript(s).nextAction : 'Your build is complete!'}` };
   }
 
-  return null; // caller tries Groq
+  // ── Share / can I / custom questions ──────────────────────────────────────
+  if (/\b(can i|share|send|paste|copy|enter|input|type|add|provide)\b/.test(m) && /\b(here|this|requirement|detail|value|info)\b/.test(m)) {
+    const next = nextPhase1Prompt(s);
+    return { reply: `Absolutely — just type it directly. For example:\n• "hardware is Dell PowerEdge R750"\n• "OS is RHEL 8.6"\n• "project name is Server Migration Q3"\n\n${next || 'All Phase 1 fields look complete — ask me anything else.'}` };
+  }
+
+  // ── Catch-all — give workflow-aware guidance instead of failing ───────────
+  const script = generateScript(s);
+  const next = nextPhase1Prompt(s);
+  const contextHint = next
+    ? `I'm in Phase 1 guidance mode. ${next}`
+    : script.nextAction
+    ? `Current focus: ${script.nextAction}`
+    : 'Your build is complete — ask me about any tab or phase.';
+
+  return {
+    reply: `I didn't quite catch that. Here are some things I can help with:\n\n• "What's next?" — current workflow step\n• "Phase 1 fields?" — list all build inputs\n• "hardware is [name]" — set a value directly\n• "Show alerts" — coherence warnings\n• "Who is the Unix Admin?" — role lookup\n• "RTM ready?" — sign-off status\n\n${contextHint}`,
+  };
 }

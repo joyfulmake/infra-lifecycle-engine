@@ -89,6 +89,8 @@ export default function DemoTour() {
     setTimeout(() => {
       localStorage.setItem(TOUR_KEY, '1');
       setVisible(false);
+      // Signal orchestrator to auto-open and greet the user
+      window.dispatchEvent(new CustomEvent('opsmanifest-tour-dismissed'));
     }, 300);
   }, []);
 
