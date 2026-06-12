@@ -13,7 +13,7 @@ export default function App() {
     <>
       <div className="flex h-screen bg-slate-100 overflow-hidden">
         {/* Left panel: phase workflow */}
-        <div className="flex-shrink-0 h-full overflow-y-auto overflow-x-hidden" style={{ width: '320px', background: '#1A2E4A' }}>
+        <div className="flex-shrink-0 h-full overflow-y-auto overflow-x-hidden sidebar-root" style={{ width: '320px' }}>
           <PhasePanel />
         </div>
 

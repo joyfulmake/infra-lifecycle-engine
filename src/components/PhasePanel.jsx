@@ -946,6 +946,13 @@ export default function PhasePanel() {
         <div className="flex items-center gap-2 mb-1">
           <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
           <div className="text-sm font-bold text-white tracking-tight">OpsManifest</div>
+          <button
+            onClick={s.toggleTheme}
+            className="ml-auto w-6 h-6 rounded flex items-center justify-center text-white/62 hover:text-white/90 hover:bg-white/8 transition-all"
+            title={s.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          >
+            {s.theme === 'dark' ? '☀' : '🌙'}
+          </button>
         </div>
         <div className="text-xs text-white/78 pl-4 leading-snug">Infrastructure Lifecycle Engine</div>
       </div>

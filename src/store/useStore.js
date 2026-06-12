@@ -248,8 +248,22 @@ export const useStore = create((set, get) => ({
   // System design section expand state
   designSectionOpen: {},
 
+  // UI theme: 'dark' (default navy sidebar) | 'light' (white sidebar)
+  theme: (() => {
+    const t = (typeof localStorage !== 'undefined' && localStorage.getItem('opsmanifest_theme')) || 'dark';
+    if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', t);
+    return t;
+  })(),
+
   // Actions
   setCoherenceAlerts: (alerts) => set({ coherenceAlerts: alerts }),
+
+  toggleTheme: () => set(s => {
+    const next = s.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('opsmanifest_theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+    return { theme: next };
+  }),
 
   markDirty: () => set({ isDirty: true }),
   markClean: () => set({ isDirty: false }),
