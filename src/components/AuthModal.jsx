@@ -55,7 +55,7 @@ export default function AuthModal({ reason = 'signup', onClose }) {
   const isPro = ['professional', 'team', 'enterprise'].includes(selectedPlan);
   const needsCloudSync = isPro && FIREBASE_CONFIGURED;
   const isPaidPlan = ['professional', 'team'].includes(selectedPlan);
-  const needsPayment = isPaidPlan && (STRIPE_CONFIGURED || RAZORPAY_CONFIGURED) && !authUser;
+  const needsPayment = isPaidPlan && (STRIPE_CONFIGURED || RAZORPAY_CONFIGURED) && !authUser && !appliedPromoCode;
   const canManageBilling = STRIPE_CONFIGURED && authUser && ['professional', 'team', 'enterprise'].includes(authUser.plan);
 
   async function handleManageBilling() {
@@ -126,7 +126,9 @@ export default function AuthModal({ reason = 'signup', onClose }) {
       setAuthUser(user);
       onClose();
     } catch (err) {
-      setError((err.message || 'Something went wrong') + (needsPayment ? ' — check Stripe config.' : ''));
+      if (err.message !== 'Payment cancelled') {
+        setError(err.message || 'Something went wrong');
+      }
     } finally {
       setSubmitting(false);
     }
