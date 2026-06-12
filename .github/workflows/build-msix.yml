@@ -39,7 +39,7 @@ jobs:
         run: |
           npm ci
           npm run build
-          Write-Host "Vite build complete — dist/ ready"
+          Write-Host "Vite build complete - dist/ ready"
 
       - name: Prepare folders
         shell: powershell
