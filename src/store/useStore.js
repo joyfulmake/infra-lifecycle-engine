@@ -165,6 +165,7 @@ export const useStore = create((set, get) => ({
   rtmSigned: false,
   rtmStale: false,
   promoted: false,
+  rtmBaseline: null, // { ctx, sysDesignData } snapshot captured at RTM sign-off
 
   // Dirty tracking — true whenever state has changed since last save/load
   isDirty: false,
@@ -338,7 +339,10 @@ export const useStore = create((set, get) => ({
     return { lockedDesignFields: next, isDirty: true };
   }),
 
-  signRtm: () => set({ rtmSigned: true, rtmStale: false, isDirty: true }),
+  signRtm: () => set(s => ({
+    rtmSigned: true, rtmStale: false, isDirty: true,
+    rtmBaseline: { ctx: s.ctx, sysDesignData: s.sysDesignData },
+  })),
 
   promote: () => set({ promoted: true, isDirty: true }),
 

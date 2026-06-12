@@ -6,31 +6,126 @@ import { buildStructuralMap, buildFunctionalFlow, buildCompatibilityMatrix, buil
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
 import { analyzeMissionContext } from '../../lib/groq.js';
 
-// ─── Visual diagram components (unchanged) ───────────────────────────────────
+// ─── Progressive LayerBox ─────────────────────────────────────────────────────
+// unlocked  — gate cleared; layer gains full colour (greyscale lifts)
+// approved  — CAB approved; green approval ring
+// frozen    — RTM signed; lock badge + "agreed baseline" state
+// live      — promoted to production; LIVE badge
+// drifted   — value changed after RTM sign-off; amber delta ring
 
-function LayerBox({ title, value, subtitle, color, incidents, uumItems, width = '100%' }) {
+function LayerBox({ title, value, subtitle, color, incidents, uumItems, width = '100%',
+                    unlocked = true, approved = false, frozen = false, live = false, drifted = false }) {
   const hasInc = incidents.length > 0;
-  const borderColor = hasInc ? '#EF4444' : color;
-  const bgColor = hasInc ? '#FEF2F2' : '#F8FAFC';
+
+  const borderColor = live      ? '#16A34A'
+                    : drifted   ? '#F59E0B'
+                    : approved  ? '#0D9488'
+                    : hasInc    ? '#EF4444'
+                    : unlocked  ? color
+                    : '#CBD5E1';
+
+  const bgColor = live     ? '#F0FDF4'
+                : drifted  ? '#FFFBEB'
+                : hasInc   ? '#FEF2F2'
+                : unlocked ? '#F8FAFC'
+                : '#F8FAFC';
+
+  const grayPct = unlocked ? 0 : 80;
+  const opacity  = unlocked ? 1 : 0.55;
+
+  const borderStyle = drifted  ? '2px dashed'
+                    : approved ? '2px solid'
+                    : frozen   ? '2px solid'
+                    : '2px solid';
+
   return (
-    <div style={{ border: `2px solid ${borderColor}`, borderRadius: 10, padding: '10px 14px', background: bgColor, position: 'relative', width, boxSizing: 'border-box', minHeight: 64 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>{title}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: hasInc ? '#991B1B' : '#1E293B', lineHeight: 1.3 }}>{value || <span style={{ color: '#CBD5E1', fontStyle: 'italic', fontWeight: 400 }}>Not configured</span>}</div>
+    <div style={{
+      border: `${borderStyle} ${borderColor}`,
+      borderRadius: 10, padding: '10px 14px',
+      background: bgColor, position: 'relative',
+      width, boxSizing: 'border-box', minHeight: 64,
+      filter: `grayscale(${grayPct}%)`,
+      opacity,
+      transition: 'filter 0.6s ease, opacity 0.6s ease, border-color 0.4s ease, background 0.4s ease',
+      outline: approved && !frozen && !live ? `3px solid #99F6E4` : 'none',
+      outlineOffset: 2,
+    }}>
+      {/* State badges — top-right corner */}
+      <div style={{ position: 'absolute', top: 6, right: 8, display: 'flex', gap: 3, alignItems: 'center' }}>
+        {live    && <span style={{ background: '#16A34A', color: '#fff', fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 3, letterSpacing: 0.5 }}>LIVE</span>}
+        {frozen && !live && <span title="Requirements frozen — agreed baseline" style={{ fontSize: 11, lineHeight: 1 }}>🔒</span>}
+        {drifted && <span title="Changed after RTM sign-off" style={{ fontSize: 11, lineHeight: 1 }}>⚠</span>}
+      </div>
+
+      <div style={{ fontSize: 10, fontWeight: 700, color: unlocked ? '#94A3B8' : '#C0C8D4', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>{title}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: hasInc ? '#991B1B' : unlocked ? '#1E293B' : '#94A3B8', lineHeight: 1.3 }}>
+        {value || <span style={{ color: '#CBD5E1', fontStyle: 'italic', fontWeight: 400 }}>{unlocked ? 'Not configured' : 'Pending'}</span>}
+      </div>
       {subtitle && <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>{subtitle}</div>}
-      {hasInc && (
+      {hasInc && unlocked && (
         <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
           {incidents.map((inc, i) => (
             <span key={i} style={{ background: '#FEE2E2', color: '#B91C1C', fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, border: '1px solid #FECACA' }}>{inc}</span>
           ))}
         </div>
       )}
-      {uumItems.length > 0 && (
+      {uumItems.length > 0 && unlocked && (
         <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
           {uumItems.map((u, i) => (
             <span key={i} style={{ background: '#FEF3C7', color: '#92400E', fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 4, border: '1px solid #FDE68A' }}>{u}</span>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Phase progress strip ─────────────────────────────────────────────────────
+
+function PhaseStrip({ s }) {
+  const steps = [
+    { label: 'Stack',    done: s.isBuilt },
+    { label: 'Scan',     done: s.scanComplete },
+    { label: 'Design',   done: s.designApplied },
+    { label: 'Phase 2',  done: s.phase2Active },
+    { label: 'CAB',      done: s.cabApproved,  warn: s.cabDeclined },
+    { label: 'RTM',      done: s.rtmSigned,    warn: s.rtmStale },
+    { label: 'Live',     done: s.promoted },
+    { label: 'Closure',  done: s.promoted && s.closureComplete },
+  ];
+
+  // Find the active (next pending) step
+  const activeIdx = steps.findIndex(st => !st.done && !st.warn);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 12, overflowX: 'auto' }}>
+      {steps.map((step, i) => {
+        const isActive = i === activeIdx;
+        const bg = step.done  ? '#0D9488'
+                 : step.warn  ? '#F59E0B'
+                 : isActive   ? '#E2E8F0'
+                 : '#F1F5F9';
+        const fg = step.done || step.warn ? '#fff' : isActive ? '#475569' : '#94A3B8';
+        const ring = isActive ? '0 0 0 2px #0D948880' : 'none';
+
+        return (
+          <div key={step.label} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{
+              background: bg, color: fg,
+              fontSize: 9, fontWeight: 700, padding: '4px 10px',
+              borderRadius: 4,
+              boxShadow: ring,
+              transition: 'background 0.5s ease, color 0.5s ease',
+              letterSpacing: 0.3,
+            }}>
+              {step.done ? '✓ ' : step.warn ? '! ' : isActive ? '→ ' : ''}{step.label}
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ width: 12, height: 2, background: step.done ? '#99F6E4' : '#E2E8F0', flexShrink: 0 }} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -342,6 +437,43 @@ export default function InfraDiagramTab() {
   const overallHealth = s.promoted ? 'PRODUCTION STABLE' : anyInc ? 'FAULT ACTIVE' : s.cabDeclined ? 'CHANGE DECLINED' : s.cabApproved ? 'CAB APPROVED' : s.phase2Active ? 'REMEDIATION' : 'HEALTHY';
   const healthColor = { 'PRODUCTION STABLE': '#16A34A', 'FAULT ACTIVE': '#DC2626', 'CHANGE DECLINED': '#DC2626', 'REMEDIATION': '#D97706', 'CAB APPROVED': '#0F766E', 'HEALTHY': '#0F766E' }[overallHealth] || '#0F766E';
 
+  // ── Progressive state flags ──────────────────────────────────────────────
+  const layerProps = (layerKey) => {
+    const unlocked = {
+      hw:       s.isBuilt,
+      os:       s.scanComplete,
+      app:      s.designApplied,
+      db:       s.designApplied,
+      storage:  s.designApplied,
+      backup:   s.designApplied,
+      network:  s.designApplied,
+      security: s.designApplied,
+    }[layerKey] ?? s.isBuilt;
+
+    // Drift detection: compare current ctx/design against RTM baseline
+    const baseline = s.rtmBaseline;
+    let drifted = false;
+    if (s.unlockedForRevision && baseline) {
+      if (layerKey === 'hw') drifted = baseline.ctx?.hw !== s.ctx?.hw;
+      else if (layerKey === 'os') drifted = baseline.ctx?.os !== s.ctx?.os;
+      else if (layerKey === 'db') drifted = baseline.ctx?.db !== s.ctx?.db || JSON.stringify(baseline.sysDesignData?.db) !== JSON.stringify(s.sysDesignData?.db);
+      else if (layerKey === 'app') drifted = baseline.ctx?.app !== s.ctx?.app || JSON.stringify(baseline.sysDesignData?.app) !== JSON.stringify(s.sysDesignData?.app);
+      else {
+        const bSection = JSON.stringify(baseline.sysDesignData?.[layerKey]);
+        const cSection = JSON.stringify(s.sysDesignData?.[layerKey]);
+        drifted = bSection !== cSection;
+      }
+    }
+
+    return {
+      unlocked,
+      approved: s.cabApproved,
+      frozen:   s.rtmSigned,
+      live:     s.promoted,
+      drifted,
+    };
+  };
+
   // Snapshot for text-based views
   const stateSnap = {
     ctx: s.ctx, sysDesignData: s.sysDesignData, selInc: s.selInc, selUUM: s.selUUM,
@@ -393,42 +525,55 @@ export default function InfraDiagramTab() {
       {/* ── Visual view ── */}
       {viewMode === 'visual' && (
         <>
+          {/* Phase progress strip */}
+          <PhaseStrip s={s} />
+
           {/* Legend */}
-          <div className="flex items-center gap-4 mb-4 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
-            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #0F766E', background: '#F8FAFC' }} /><span>Healthy layer</span></div>
-            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #EF4444', background: '#FEF2F2' }} /><span>Incident active</span></div>
-            <div className="flex items-center gap-1.5"><div style={{ width: 10, height: 10, borderRadius: 2, background: '#FEE2E2', border: '1px solid #FECACA' }} /><span>Incident tag</span></div>
-            <div className="flex items-center gap-1.5"><div style={{ width: 10, height: 10, borderRadius: 2, background: '#FEF3C7', border: '1px solid #FDE68A' }} /><span>UUM change</span></div>
+          <div className="flex flex-wrap items-center gap-3 mb-4 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #0F766E', background: '#F8FAFC' }} /><span>Unlocked</span></div>
+            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #CBD5E1', background: '#F8FAFC', opacity: 0.55 }} /><span>Pending</span></div>
+            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #EF4444', background: '#FEF2F2' }} /><span>Incident</span></div>
+            <div className="flex items-center gap-1.5"><div style={{ width: 10, height: 10, borderRadius: 2, background: '#FEF3C7', border: '1px solid #FDE68A' }} /><span>UUM scope</span></div>
+            <div className="flex items-center gap-1.5"><span style={{ fontSize: 11 }}>🔒</span><span>Frozen (RTM signed)</span></div>
+            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px dashed #F59E0B', background: '#FFFBEB' }} /><span>Drifted from baseline</span></div>
+            <div className="flex items-center gap-1.5"><div style={{ width: 12, height: 12, borderRadius: 3, border: '2px solid #16A34A', background: '#F0FDF4' }} /><span>Live</span></div>
           </div>
+
+          {/* Drift notice */}
+          {s.unlockedForRevision && s.rtmBaseline && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <span className="font-bold">⚠ Revision mode:</span> dashed amber rings show components that changed from the agreed RTM baseline. Re-sign the RTM after revisions are complete.
+            </div>
+          )}
 
           <div className="card p-4 mb-4">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: 700, margin: '0 auto' }}>
-              <LayerBox title="Hardware Platform" value={ctx.hw} subtitle={`${unix.cpu || ''} ${unix.ram ? '| ' + unix.ram : ''}`} color="#6366F1" incidents={layerInc.hw} uumItems={layerUUM.hw} width="80%" />
+              <LayerBox title="Hardware Platform" value={ctx.hw} subtitle={`${unix.cpu || ''} ${unix.ram ? '| ' + unix.ram : ''}`} color="#6366F1" incidents={layerInc.hw} uumItems={layerUUM.hw} width="80%" {...layerProps('hw')} />
               <Connector label="Virtualisation / Bare Metal" />
-              <LayerBox title="Operating System" value={ctx.os} subtitle={[unix.kernel_params && 'Kernel tuned', unix.selinux && `SELinux: ${unix.selinux}`, unix.patch_window && `Patch: ${unix.patch_window}`].filter(Boolean).join(' | ')} color="#0F766E" incidents={layerInc.os} uumItems={layerUUM.os} width="80%" />
+              <LayerBox title="Operating System" value={ctx.os} subtitle={[unix.kernel_params && 'Kernel tuned', unix.selinux && `SELinux: ${unix.selinux}`, unix.patch_window && `Patch: ${unix.patch_window}`].filter(Boolean).join(' | ')} color="#0F766E" incidents={layerInc.os} uumItems={layerUUM.os} width="80%" {...layerProps('os')} />
               <Connector label="System calls / IPC" />
               <div style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <LayerBox title="Web / HTTP Layer" value={ctx.app?.includes('NGINX') || ctx.app?.includes('Apache') ? ctx.app : (web.health_check_url ? 'HTTP Tier' : ctx.app)} subtitle={[web.ssl_protocols && `TLS: ${web.ssl_protocols}`, web.load_bal_algo && `LB: ${web.load_bal_algo}`].filter(Boolean).join(' | ')} color="#3B82F6" incidents={layerInc.app.filter((_, i) => i < 2)} uumItems={layerUUM.app.filter((_, i) => i < 2)} width="100%" />
+                  <LayerBox title="Web / HTTP Layer" value={ctx.app?.includes('NGINX') || ctx.app?.includes('Apache') ? ctx.app : (web.health_check_url ? 'HTTP Tier' : ctx.app)} subtitle={[web.ssl_protocols && `TLS: ${web.ssl_protocols}`, web.load_bal_algo && `LB: ${web.load_bal_algo}`].filter(Boolean).join(' | ')} color="#3B82F6" incidents={layerInc.app.filter((_, i) => i < 2)} uumItems={layerUUM.app.filter((_, i) => i < 2)} width="100%" {...layerProps('app')} />
                   <Connector />
-                  <LayerBox title="Application Runtime" value={ctx.app} subtitle={[app.jvm_xmx && `Heap: ${app.jvm_xmx}`, app.thread_pool && `Threads: ${app.thread_pool}`, app.app_port && `Port: ${app.app_port}`].filter(Boolean).join(' | ')} color="#8B5CF6" incidents={layerInc.app.filter((_, i) => i >= 2)} uumItems={layerUUM.app.filter((_, i) => i >= 2)} width="100%" />
+                  <LayerBox title="Application Runtime" value={ctx.app} subtitle={[app.jvm_xmx && `Heap: ${app.jvm_xmx}`, app.thread_pool && `Threads: ${app.thread_pool}`, app.app_port && `Port: ${app.app_port}`].filter(Boolean).join(' | ')} color="#8B5CF6" incidents={layerInc.app.filter((_, i) => i >= 2)} uumItems={layerUUM.app.filter((_, i) => i >= 2)} width="100%" {...layerProps('app')} />
                 </div>
                 <SideConnector />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <LayerBox title="Database Engine" value={ctx.db} subtitle={[db.buf_pool && `Buffer: ${db.buf_pool}`, db.max_conn && `MaxConn: ${db.max_conn}`, db.listener_port && `Port: ${db.listener_port}`].filter(Boolean).join(' | ')} color="#F59E0B" incidents={layerInc.db} uumItems={layerUUM.db} width="100%" />
+                  <LayerBox title="Database Engine" value={ctx.db} subtitle={[db.buf_pool && `Buffer: ${db.buf_pool}`, db.max_conn && `MaxConn: ${db.max_conn}`, db.listener_port && `Port: ${db.listener_port}`].filter(Boolean).join(' | ')} color="#F59E0B" incidents={layerInc.db} uumItems={layerUUM.db} width="100%" {...layerProps('db')} />
                   <Connector label="JDBC / native" />
-                  <LayerBox title="DB Storage" value={`${db.replication || 'Standalone'}`} subtitle={[db.standby_lag && `Standby lag: ${db.standby_lag}`, db.archive_dest && `Archive: ${db.archive_dest}`].filter(Boolean).join(' | ')} color="#D97706" incidents={[]} uumItems={layerUUM.db.filter((_, i) => i >= 2)} width="100%" />
+                  <LayerBox title="DB Storage" value={`${db.replication || 'Standalone'}`} subtitle={[db.standby_lag && `Standby lag: ${db.standby_lag}`, db.archive_dest && `Archive: ${db.archive_dest}`].filter(Boolean).join(' | ')} color="#D97706" incidents={[]} uumItems={layerUUM.db.filter((_, i) => i >= 2)} width="100%" {...layerProps('db')} />
                 </div>
               </div>
               <Connector label="SAN / NFS / iSCSI" />
               <div style={{ display: 'flex', width: '100%', gap: 8 }}>
-                <LayerBox title="Block / File Storage" value={[storage.raid_level && `RAID: ${storage.raid_level}`, storage.lun_size && `LUN: ${storage.lun_size}`, storage.iops_req && `IOPS: ${storage.iops_req}`].filter(Boolean).join(' | ') || 'Storage Layer'} subtitle={[storage.multipath_mode && `Multipath: ${storage.multipath_mode}`, storage.thin_prov && `Thin: ${storage.thin_prov}`].filter(Boolean).join(' | ')} color="#64748B" incidents={layerInc.storage} uumItems={layerUUM.storage} width="50%" />
-                <LayerBox title="Backup / DR" value={[backup.backup_tool && backup.backup_tool, `RPO: ${backup.rpo_hours || '4'}h`, `RTO: ${backup.rto_hours || '8'}h`].filter(Boolean).join(' | ')} subtitle={[backup.offsite_target && `Offsite: ${backup.offsite_target}`, backup.immutable && `Immutable: ${backup.immutable}`].filter(Boolean).join(' | ')} color="#0EA5E9" incidents={layerInc.backup} uumItems={layerUUM.backup} width="50%" />
+                <LayerBox title="Block / File Storage" value={[storage.raid_level && `RAID: ${storage.raid_level}`, storage.lun_size && `LUN: ${storage.lun_size}`, storage.iops_req && `IOPS: ${storage.iops_req}`].filter(Boolean).join(' | ') || 'Storage Layer'} subtitle={[storage.multipath_mode && `Multipath: ${storage.multipath_mode}`, storage.thin_prov && `Thin: ${storage.thin_prov}`].filter(Boolean).join(' | ')} color="#64748B" incidents={layerInc.storage} uumItems={layerUUM.storage} width="50%" {...layerProps('storage')} />
+                <LayerBox title="Backup / DR" value={[backup.backup_tool && backup.backup_tool, `RPO: ${backup.rpo_hours || '4'}h`, `RTO: ${backup.rto_hours || '8'}h`].filter(Boolean).join(' | ')} subtitle={[backup.offsite_target && `Offsite: ${backup.offsite_target}`, backup.immutable && `Immutable: ${backup.immutable}`].filter(Boolean).join(' | ')} color="#0EA5E9" incidents={layerInc.backup} uumItems={layerUUM.backup} width="50%" {...layerProps('backup')} />
               </div>
               <Connector label="TCP/IP stack" />
               <div style={{ display: 'flex', width: '100%', gap: 8 }}>
-                <LayerBox title="Network" value={[network.vlan_ids && `VLANs: ${network.vlan_ids}`, network.bandwidth && network.bandwidth, network.bond_mode && `Bond: ${network.bond_mode}`].filter(Boolean).join(' | ') || 'Network Layer'} subtitle={[network.fw_rules && `FW Rules active`, network.load_bal && `LB: ${network.load_bal}`].filter(Boolean).join(' | ')} color="#06B6D4" incidents={layerInc.network} uumItems={layerUUM.network} width="50%" />
-                <LayerBox title="Security Controls" value={[security.compliance_framework && security.compliance_framework, security.mfa_required && `MFA: ${security.mfa_required}`].filter(Boolean).join(' | ') || 'Security Layer'} subtitle={[security.siem_endpoint && `SIEM active`, security.ids_ips && `IDS/IPS: ${security.ids_ips}`, security.edr && `EDR: ${security.edr}`].filter(Boolean).join(' | ')} color="#EF4444" incidents={layerInc.security} uumItems={layerUUM.security} width="50%" />
+                <LayerBox title="Network" value={[network.vlan_ids && `VLANs: ${network.vlan_ids}`, network.bandwidth && network.bandwidth, network.bond_mode && `Bond: ${network.bond_mode}`].filter(Boolean).join(' | ') || 'Network Layer'} subtitle={[network.fw_rules && `FW Rules active`, network.load_bal && `LB: ${network.load_bal}`].filter(Boolean).join(' | ')} color="#06B6D4" incidents={layerInc.network} uumItems={layerUUM.network} width="50%" {...layerProps('network')} />
+                <LayerBox title="Security Controls" value={[security.compliance_framework && security.compliance_framework, security.mfa_required && `MFA: ${security.mfa_required}`].filter(Boolean).join(' | ') || 'Security Layer'} subtitle={[security.siem_endpoint && `SIEM active`, security.ids_ips && `IDS/IPS: ${security.ids_ips}`, security.edr && `EDR: ${security.edr}`].filter(Boolean).join(' | ')} color="#EF4444" incidents={layerInc.security} uumItems={layerUUM.security} width="50%" {...layerProps('security')} />
               </div>
             </div>
           </div>
