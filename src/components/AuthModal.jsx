@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PLANS, signIn, signOut, resolvePromoCode, resolveInviteCode, generateInviteCode, getAllInvites, promoDaysRemaining } from '../lib/auth.js';
+import { PLANS, SEEDED_ACCOUNTS, signIn, signOut, resolvePromoCode, resolveInviteCode, generateInviteCode, getAllInvites, promoDaysRemaining } from '../lib/auth.js';
 import { FIREBASE_CONFIGURED, fbSignIn } from '../lib/firebase.js';
 import { STRIPE_CONFIGURED, startCheckout, openCustomerPortal } from '../lib/stripe.js';
 import { RAZORPAY_CONFIGURED } from '../lib/razorpayConfig.js';
@@ -98,7 +98,8 @@ export default function AuthModal({ reason = 'signup', onClose }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError('Enter a valid email address.'); return;
     }
-    if (needsCloudSync && !syncPassword.trim()) {
+    const isSeeded = !!SEEDED_ACCOUNTS[email.trim().toLowerCase()];
+    if (needsCloudSync && !isSeeded && !syncPassword.trim()) {
       setError('Set a sync password to enable cloud backup for your plan.'); return;
     }
     setSubmitting(true);
@@ -119,10 +120,10 @@ export default function AuthModal({ reason = 'signup', onClose }) {
           return;
         }
       }
-      if (needsCloudSync && syncPassword.trim()) {
+      if (needsCloudSync && !isSeeded && syncPassword.trim()) {
         await fbSignIn(email.trim().toLowerCase(), syncPassword.trim());
       }
-      const user = signIn(email.trim(), selectedPlan, needsCloudSync ? syncPassword.trim() : null, appliedPromoCode, appliedPromoDays);
+      const user = signIn(email.trim(), selectedPlan, (needsCloudSync && !isSeeded) ? syncPassword.trim() : null, appliedPromoCode, appliedPromoDays);
       setAuthUser(user);
       onClose();
     } catch (err) {
