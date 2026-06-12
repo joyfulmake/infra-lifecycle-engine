@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.6.0.0'
+        default: '1.7.0.0'
 
 jobs:
   build-msix:
