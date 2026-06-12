@@ -180,6 +180,43 @@
 
   /* ── Keyboard hint ────────────────────────────────────── */
   .kbd-hint { position: fixed; top: 20px; left: 28px; font-size: 11px; color: rgba(255,255,255,0.22); }
+
+  /* ── Architecture layer diagram ───────────────────────── */
+  .arch-stack { display: flex; flex-direction: column; gap: 0; margin-top: 18px; max-width: 900px; width: 100%; }
+  .arch-layer { display: flex; align-items: stretch; border-radius: 10px; border: 1px solid; overflow: hidden; }
+  .arch-label-cell {
+    flex-shrink: 0; width: 128px; padding: 14px 12px;
+    display: flex; flex-direction: column; justify-content: center;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .arch-label-sub { font-size: 9px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.65; margin-top: 3px; }
+  .arch-items-row { flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 12px 14px; }
+  .arch-item {
+    font-size: 11.5px; padding: 4px 10px; border-radius: 6px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.09); color: #CBD5E1;
+  }
+  .arch-item.hi { background: rgba(20,184,166,0.12); border-color: rgba(20,184,166,0.3); color: #5EEAD4; }
+  .arch-connector {
+    display: flex; align-items: center; justify-content: center; padding: 6px 0;
+    font-size: 10.5px; color: rgba(255,255,255,0.32); letter-spacing: 0.05em; gap: 10px;
+  }
+  .arch-connector::before, .arch-connector::after {
+    content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.08); max-width: 120px;
+  }
+
+  /* ── ROI metrics ───────────────────────────────────────── */
+  .roi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; margin-top: 18px; max-width: 900px; width: 100%; }
+  .roi-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 15px 13px; display: flex; flex-direction: column; gap: 5px;
+  }
+  .roi-label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .roi-row { display: flex; align-items: baseline; gap: 10px; }
+  .roi-before { font-size: 13px; color: rgba(255,255,255,0.28); text-decoration: line-through; font-weight: 500; }
+  .roi-arrow-sm { font-size: 11px; color: rgba(255,255,255,0.25); }
+  .roi-after { font-size: 17px; font-weight: 800; color: var(--teal); }
+  .roi-saving { font-size: 11px; font-weight: 700; color: var(--green); }
+  .roi-where { font-size: 10px; color: rgba(255,255,255,0.38); margin-top: 1px; line-height: 1.4; }
 </style>
 </head>
 <body>
@@ -660,6 +697,163 @@
     </div>
   </div>
 
+  <!-- ── Slide 12: Triple-Layer Architecture ───────────────── -->
+  <div class="slide" id="s11arch">
+    <div class="accent-bar" style="background:linear-gradient(90deg,#3B82F6,#0D9488,#22C55E);"></div>
+    <div class="eyebrow">System Architecture</div>
+    <h2>Business → Functional → Technical — one aligned flow</h2>
+    <p class="sub" style="margin-top:6px;font-size:13px;">
+      Mission Intel maps every provisioning decision across three layers. The AI Orchestrator bridges them in real time.
+    </p>
+
+    <div class="arch-stack">
+      <!-- Business layer -->
+      <div class="arch-layer" style="border-color:rgba(59,130,246,0.4);">
+        <div class="arch-label-cell" style="background:rgba(59,130,246,0.12);color:#93C5FD;">
+          Business
+          <div class="arch-label-sub">Why we do it</div>
+        </div>
+        <div class="arch-items-row">
+          <span class="arch-item hi">Reduce change failure rate</span>
+          <span class="arch-item hi">Eliminate audit gaps</span>
+          <span class="arch-item">SLA commitment protection</span>
+          <span class="arch-item">RACI accountability</span>
+          <span class="arch-item">Regulatory compliance</span>
+          <span class="arch-item">Cost of outage reduction</span>
+        </div>
+      </div>
+
+      <div class="arch-connector">Mission Intel extracts signals · aligns WHY ↔ WHAT · surfaces RTM traceability</div>
+
+      <!-- Functional layer -->
+      <div class="arch-layer" style="border-color:rgba(20,184,166,0.4);">
+        <div class="arch-label-cell" style="background:rgba(20,184,166,0.12);color:#2DD4BF;">
+          Functional
+          <div class="arch-label-sub">What we build</div>
+        </div>
+        <div class="arch-items-row">
+          <span class="arch-item hi">7-Phase guided workflow</span>
+          <span class="arch-item hi">AI Orchestrator chat</span>
+          <span class="arch-item hi">Coherence engine (14 checks)</span>
+          <span class="arch-item">CAB / RTM gates</span>
+          <span class="arch-item">RACI-enforced actions</span>
+          <span class="arch-item">Sign-off enforcement</span>
+          <span class="arch-item">8-layer dependency Matrix</span>
+          <span class="arch-item">CPM critical-path Gantt</span>
+        </div>
+      </div>
+
+      <div class="arch-connector">Groq llama-3.3-70b · endoflife.date REST API · Cloudflare Workers proxy</div>
+
+      <!-- Technical layer -->
+      <div class="arch-layer" style="border-color:rgba(34,197,94,0.4);">
+        <div class="arch-label-cell" style="background:rgba(34,197,94,0.12);color:#86EFAC;">
+          Technical
+          <div class="arch-label-sub">How it's built</div>
+        </div>
+        <div class="arch-items-row">
+          <span class="arch-item hi">React 19 + Zustand</span>
+          <span class="arch-item hi">Dexie.js IndexedDB</span>
+          <span class="arch-item hi">Firebase Firestore sync</span>
+          <span class="arch-item">Groq llama-3.3-70b</span>
+          <span class="arch-item">endoflife.date API</span>
+          <span class="arch-item">Cloudflare Pages + Workers</span>
+          <span class="arch-item">PWA · offline-capable</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);color:#93C5FD;">AI Orchestrator maps all 3 layers in real time via Groq NLP</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);color:#2DD4BF;">Rule-based coherence engine runs offline — no API dependency</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:#86EFAC;">State-driven: every tab updates live as any slice changes</span>
+    </div>
+  </div>
+
+  <!-- ── Slide 13: ROI & Productivity Impact ────────────────── -->
+  <div class="slide" id="s12roi">
+    <div class="accent-bar" style="background:linear-gradient(90deg,#22C55E,#14B8A6,#3B82F6);"></div>
+    <div class="eyebrow">Productivity Impact</div>
+    <h2>Time saved. Chaos reduced. Evidence, not promises.</h2>
+    <p class="sub" style="margin-top:6px;font-size:13px;">
+      Typical outcomes across server provisioning, platform migration, and major change projects.
+    </p>
+
+    <div class="roi-grid">
+      <div class="roi-card" style="border-color:rgba(20,184,166,0.25);background:rgba(20,184,166,0.06);">
+        <div class="roi-label">CAB Package Prep</div>
+        <div class="roi-row">
+          <span class="roi-before">4–6 hrs</span>
+          <span class="roi-arrow-sm">→</span>
+          <span class="roi-after">45 min</span>
+        </div>
+        <div class="roi-saving">↓ 85% time saved</div>
+        <div class="roi-where">Guided sidebar + 14-sheet Excel export replaces document assembly</div>
+      </div>
+
+      <div class="roi-card" style="border-color:rgba(59,130,246,0.25);background:rgba(59,130,246,0.06);">
+        <div class="roi-label">System Design Document</div>
+        <div class="roi-row">
+          <span class="roi-before">2–3 hrs</span>
+          <span class="roi-arrow-sm">→</span>
+          <span class="roi-after">2 min</span>
+        </div>
+        <div class="roi-saving">↓ 98% faster</div>
+        <div class="roi-where">240 fields auto-filled from HW/OS/DB/App stack selection</div>
+      </div>
+
+      <div class="roi-card" style="border-color:rgba(239,68,68,0.25);background:rgba(239,68,68,0.05);">
+        <div class="roi-label">EOL/Vulnerability Discovery</div>
+        <div class="roi-row">
+          <span class="roi-before" style="font-size:11px;">Go-live surprise</span>
+          <span class="roi-arrow-sm">→</span>
+          <span class="roi-after" style="font-size:14px;">Design phase</span>
+        </div>
+        <div class="roi-saving">Weeks earlier</div>
+        <div class="roi-where">endoflife.date API + Smart Scan catch EOL/CVE before any design is applied</div>
+      </div>
+
+      <div class="roi-card" style="border-color:rgba(245,158,11,0.25);background:rgba(245,158,11,0.05);">
+        <div class="roi-label">Dependency Gaps Missed</div>
+        <div class="roi-row">
+          <span class="roi-before" style="font-size:11px;">3–5 per project</span>
+          <span class="roi-arrow-sm">→</span>
+          <span class="roi-after">≈ 0</span>
+        </div>
+        <div class="roi-saving">Near-zero slip-through</div>
+        <div class="roi-where">8-layer Cross-Stack Matrix surfaces all cross-role dependencies before cutover</div>
+      </div>
+
+      <div class="roi-card" style="border-color:rgba(139,92,246,0.25);background:rgba(139,92,246,0.05);">
+        <div class="roi-label">Post-Migration Audit</div>
+        <div class="roi-row">
+          <span class="roi-before">4 hrs</span>
+          <span class="roi-arrow-sm">→</span>
+          <span class="roi-after">1 click</span>
+        </div>
+        <div class="roi-saving">↓ 99% effort</div>
+        <div class="roi-where">14-sheet styled Excel: design · RTM · RAID · Gantt · Mission Intel maps</div>
+      </div>
+
+      <div class="roi-card" style="border-color:rgba(34,197,94,0.25);background:rgba(34,197,94,0.05);">
+        <div class="roi-label">CAB Rejection Rate</div>
+        <div class="roi-row">
+          <span class="roi-before">15–25%</span>
+          <span class="roi-arrow-sm">→</span>
+          <span class="roi-after">&lt; 5%</span>
+        </div>
+        <div class="roi-saving">Industry avg → structured package</div>
+        <div class="roi-where">Complete RTM + RAID + Gantt + design = first-pass approval by default</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);color:#86EFAC;">Each CAB rejection = 2–4 week slip · structured packages prevent this</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#FCD34D;">Tribal knowledge risk eliminated — every step documented in real time</span>
+      <span style="font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);color:#93C5FD;">No new tools — complements ServiceNow, Jira, Confluence</span>
+    </div>
+  </div>
+
   <!-- ── Slide CTA ─────────────────────────────────────────── -->
   <div class="slide" id="s7cta">
     <div class="accent-bar"></div>
@@ -688,7 +882,7 @@
       Demo access codes are issued on request — email <span style="color:var(--teal);">hello@opsmanifest.app</span> · Personal, non-transferable, 14 days from first use
     </div>
     <div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,0.25);text-align:center;letter-spacing:0.06em;">
-      v1.5.0.0 · Microsoft Store · Meta Quest · PWA
+      v1.6.0.0 · Microsoft Store · Meta Quest · PWA · Dark/Light Theme
     </div>
     <p class="disclaim">
       OpsManifest <strong>guides</strong> infra teams through structured provisioning workflows.<br />

@@ -15,7 +15,7 @@ function Bubble({ msg }) {
   if (isResult) {
     return (
       <div className="flex justify-center">
-        <span className="text-xs px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200 font-medium">
+        <span className="text-xs px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 font-semibold">
           {msg.text}
         </span>
       </div>
@@ -23,17 +23,17 @@ function Bubble({ msg }) {
   }
 
   return (
-    <div className={['flex gap-2', isUser ? 'justify-end' : 'justify-start'].join(' ')}>
+    <div className={['flex gap-2.5', isUser ? 'justify-end' : 'justify-start'].join(' ')}>
       {!isUser && (
-        <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5" style={{ fontSize: 9, fontWeight: 800 }}>
+        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-sm" style={{ fontSize: 9, fontWeight: 800 }}>
           AI
         </div>
       )}
       <div className={[
-        'rounded-2xl px-3 py-2 text-xs leading-relaxed max-w-[85%]',
+        'rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] shadow-sm',
         isUser
           ? 'bg-teal-600 text-white rounded-tr-sm'
-          : 'bg-slate-100 text-slate-800 rounded-tl-sm',
+          : 'orch-bubble-ai bg-slate-100 text-slate-800 rounded-tl-sm',
       ].join(' ')}>
         {msg.text}
       </div>
@@ -48,29 +48,29 @@ function ConfirmCard({ actions, onConfirm, onCancel }) {
   const immediate   = actions.filter(a => !a.requiresConfirmation);
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-      <div className="text-xs font-bold text-amber-800">Ready to execute:</div>
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 space-y-2.5">
+      <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Ready to execute</div>
       {[...immediate, ...significant].map((a, i) => (
-        <div key={i} className="flex items-start gap-2 text-xs">
+        <div key={i} className="flex items-start gap-2 text-sm">
           <span className={[
             'mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold',
             a.requiresConfirmation ? 'bg-amber-500' : 'bg-teal-500',
           ].join(' ')} style={{ fontSize: 8 }}>
             {a.requiresConfirmation ? '!' : '✓'}
           </span>
-          <span className="text-slate-700">{a.description}</span>
+          <span className="text-slate-700 leading-snug">{a.description}</span>
         </div>
       ))}
-      <div className="flex gap-2 pt-1">
+      <div className="flex gap-2 pt-1.5">
         <button
           onClick={onConfirm}
-          className="flex-1 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors"
+          className="flex-1 py-2 rounded-lg bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 transition-colors"
         >
           Yes, go ahead
         </button>
         <button
           onClick={onCancel}
-          className="px-3 py-1.5 rounded-lg bg-white text-slate-600 text-xs font-medium border border-slate-200 hover:bg-slate-50 transition-colors"
+          className="px-4 py-2 rounded-lg bg-white text-slate-600 text-sm font-medium border border-slate-200 hover:bg-slate-50 transition-colors"
         >
           Cancel
         </button>
@@ -323,30 +323,33 @@ export default function OrchestratorPanel() {
       {/* Panel */}
       {open && (
         <div
-          className="fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
-          style={{ width: 360, maxHeight: 560, bottom: 72, right: 20 }}
+          className="orchestrator-panel fixed z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+          style={{ width: 440, maxHeight: 660, bottom: 72, right: 20 }}
         >
           {/* Header */}
-          <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center gap-2 flex-shrink-0">
+          <div className="bg-slate-800 text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
+            <div className="w-2 h-2 rounded-full bg-teal-400 flex-shrink-0" />
             <span className="text-sm font-semibold flex-1 tracking-tight">Expert Orchestrator</span>
             <button
               onClick={handlePlay}
               className={[
-                'text-xs px-2 py-1 rounded font-medium transition-all',
-                playing ? 'bg-amber-500 text-white' : 'bg-slate-600 hover:bg-slate-500 text-slate-200',
+                'text-xs px-2.5 py-1 rounded font-medium transition-all',
+                playing ? 'bg-amber-500 text-white' : 'bg-slate-600 hover:bg-slate-500 text-slate-300',
               ].join(' ')}
               title={CARTESIA_CONFIGURED ? 'Play voice guidance' : 'Text mode — add CARTESIA_API_KEY for voice'}
             >
-              {playing ? '⏹' : '▶'}
+              {playing ? '⏹ Stop' : '▶ Voice'}
             </button>
-            <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white w-5 h-5 flex items-center justify-center ml-1">×</button>
+            <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center ml-1 text-lg leading-none">×</button>
           </div>
 
           {/* Checklist */}
-          <WorkflowStrip items={checklist} />
+          <div className="orch-workflow-strip">
+            <WorkflowStrip items={checklist} />
+          </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
             {messages.map(msg =>
               msg.role === 'confirm' ? (
                 <ConfirmCard
@@ -360,11 +363,11 @@ export default function OrchestratorPanel() {
               )
             )}
             {thinking && (
-              <div className="flex gap-2 justify-start">
-                <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5" style={{ fontSize: 9, fontWeight: 800 }}>AI</div>
-                <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-3 py-2 flex items-center gap-1">
+              <div className="flex gap-2.5 justify-start">
+                <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-sm" style={{ fontSize: 9, fontWeight: 800 }}>AI</div>
+                <div className="orch-bubble-ai bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
                   {[0, 0.2, 0.4].map(d => (
-                    <div key={d} className="w-1.5 h-1.5 rounded-full bg-slate-400" style={{ animation: `splash-pulse 1.2s ease-in-out ${d}s infinite` }} />
+                    <div key={d} className="w-2 h-2 rounded-full bg-slate-400" style={{ animation: `splash-pulse 1.2s ease-in-out ${d}s infinite` }} />
                   ))}
                 </div>
               </div>
@@ -372,23 +375,38 @@ export default function OrchestratorPanel() {
             <div ref={bottomRef} />
           </div>
 
+          {/* Quick suggestions — shown when input empty */}
+          {!input && authUser && !thinking && (
+            <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
+              {['Current status?', "What's next?", 'RTM ready?', 'Who is the Unix Admin?'].map(q => (
+                <button
+                  key={q}
+                  onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 50); }}
+                  className="text-xs px-2.5 py-1 rounded-full border border-slate-200 text-slate-500 hover:border-teal-400 hover:text-teal-600 transition-colors bg-white"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Input */}
-          <div className="flex gap-2 px-3 py-2.5 border-t border-slate-100 flex-shrink-0">
+          <div className="orch-input-area flex gap-2 px-4 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
             <textarea
               ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={authUser ? 'Type a command or question…' : 'Sign in to use the orchestrator'}
+              placeholder={authUser ? 'Ask anything or type a command…' : 'Sign in to use the orchestrator'}
               disabled={!authUser || thinking}
               rows={1}
-              className="flex-1 resize-none text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-teal-400 placeholder:text-slate-400 disabled:opacity-50"
-              style={{ minHeight: 34, maxHeight: 80 }}
+              className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
+              style={{ minHeight: 42, maxHeight: 96 }}
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || thinking || !authUser}
-              className="px-3 py-2 rounded-lg bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+              className="px-4 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm"
             >
               ↵
             </button>
@@ -396,9 +414,9 @@ export default function OrchestratorPanel() {
 
           {/* RACI context hint */}
           {authUser && (
-            <div className="px-3 pb-2 text-xs text-slate-400 flex-shrink-0">
-              Signed in as <span className="font-medium text-slate-500">{authUser.email}</span>
-              {s.requirements?.pmEmail === authUser.email ? ' · PM (full access)' : ''}
+            <div className="orch-footer px-4 pb-2.5 text-xs text-slate-400 flex-shrink-0">
+              <span className="font-medium text-slate-500">{authUser.email}</span>
+              {s.requirements?.pmEmail === authUser.email ? ' · PM — full access' : ' · Role-based access active'}
             </div>
           )}
         </div>
