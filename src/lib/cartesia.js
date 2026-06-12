@@ -1,22 +1,14 @@
 // Cartesia Sonic-2 TTS client.
-// All API calls proxy through the Cloudflare Worker to keep the key out of the browser.
+// All API calls proxy through the Cloudflare Worker to keep the API key out of the browser.
 // Works in text-only mode (word-count timing) when CARTESIA_CONFIGURED is false.
-//
-// Voice IDs — confirm the full UUIDs from your Cartesia dashboard:
-//   Guide   b7d50908  warm female
-//   Learner 694f9389  clear male
-//
-// To activate:
-//   1. Add CARTESIA_API_KEY to the Cloudflare Worker env vars (same worker as Groq)
-//   2. Set VITE_CARTESIA_WORKER_URL in .env.local to your worker URL
 
 export const VOICE_IDS = {
-  guide:   'b7d50908',
-  learner: '694f9389',
+  guide:   'b7d50908-b17c-442d-ad8d-810c63997ed9', // warm female
+  learner: '694f9389-aac1-45b6-b726-9d9369183238', // clear male
 };
 
-export const CARTESIA_WORKER_URL = import.meta.env.VITE_CARTESIA_WORKER_URL || '';
-export const CARTESIA_CONFIGURED = Boolean(CARTESIA_WORKER_URL);
+export const CARTESIA_WORKER_URL = 'https://opsmanifest-ai.sriram-c76-254.workers.dev';
+export const CARTESIA_CONFIGURED = true;
 
 // Fetch audio for a single line. Returns an HTMLAudioElement or null (text mode).
 async function fetchAudio(line) {

@@ -11,7 +11,7 @@
 
 export const GROQ_CONFIGURED = false;
 
-export const GROQ_WORKER_URL = 'https://opsmanifest-ai.YOUR_SUBDOMAIN.workers.dev';
+export const GROQ_WORKER_URL = 'https://opsmanifest-ai.sriram-c76-254.workers.dev';
 
 // Model used by the worker (overridable via GROQ_MODEL worker env var)
 export const GROQ_MODEL = 'llama-3.3-70b-versatile';
