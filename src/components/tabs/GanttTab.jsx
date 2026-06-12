@@ -325,9 +325,11 @@ function FsmPanel({ task, ctx }) {
 
 // ── Task row with expand/edit ─────────────────────────────────────────────────
 
-function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHours, isUum, canEdit, onSave, onClear, ctx, cpm }) {
+function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHours, isUum, canEdit, onSave, onClear, ctx, cpm, roleAssignments }) {
   const role = task.team || task.role || '';
   const color = TEAM_COLORS[role] || 'badge-slate';
+  const assigneeName = roleAssignments?.[role]?.name || '';
+  const initials = assigneeName ? assigneeName.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '';
   const barColor = TEAM_BAR_COLOR[role] || '#14B8A6';
   const raw = override?.durationHours ?? (task.duration_hours || task.est_hours || task.hours || 2);
   const buf = Math.ceil(raw * BUFFER);
@@ -354,6 +356,14 @@ function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHour
           {isParallel ? '‖' : String(index + 1).padStart(2, '0')}
         </div>
         <span className={`badge ${color} flex-shrink-0 text-xs`}>{role}</span>
+        {initials && (
+          <span
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-xs font-bold flex-shrink-0"
+            title={assigneeName}
+          >
+            {initials}
+          </span>
+        )}
         {isCritical && !isParallel && (
           <span className="text-xs text-red-400 font-semibold flex-shrink-0 leading-5" title="Critical path task — delay propagates to project end">CP</span>
         )}
@@ -821,6 +831,7 @@ export default function GanttTab() {
                 onClear={handleClearOverride}
                 ctx={s.ctx}
                 cpm={designCPM[i]}
+                roleAssignments={s.roleAssignments}
               />
             );
           })}
@@ -861,6 +872,7 @@ export default function GanttTab() {
                     onSave={handleSaveOverride}
                     onClear={handleClearOverride}
                     ctx={s.ctx}
+                    roleAssignments={s.roleAssignments}
                   />
                 );
               })}

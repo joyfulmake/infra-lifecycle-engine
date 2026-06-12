@@ -282,6 +282,57 @@ Return ONLY valid JSON (no markdown, no code fences):
   }
 }
 
+// ── Cartesia Sonic-2 TTS proxy ────────────────────────────────────────────────
+// Keeps CARTESIA_API_KEY out of the browser.
+// Required worker env var: CARTESIA_API_KEY
+// Voice IDs must be full UUIDs from the Cartesia dashboard.
+
+async function handleCartesiaTts(req, env) {
+  if (!env.CARTESIA_API_KEY) return err('CARTESIA_API_KEY not configured', 500);
+
+  const { text, voiceId, speed, emotion } = await req.json().catch(() => ({}));
+  if (!text)    return err('text is required');
+  if (!voiceId) return err('voiceId is required');
+
+  const res = await fetch('https://api.cartesia.ai/tts/bytes', {
+    method: 'POST',
+    headers: {
+      'Cartesia-Version': '2024-06-10',
+      'Authorization':    `Bearer ${env.CARTESIA_API_KEY}`,
+      'Content-Type':     'application/json',
+    },
+    body: JSON.stringify({
+      model_id:  'sonic-2',
+      transcript: text,
+      voice: {
+        mode: 'id',
+        id:   voiceId,
+        __experimental_controls: {
+          speed:   speed   || 'normal',
+          emotion: emotion || [],
+        },
+      },
+      output_format: {
+        container:   'mp3',
+        encoding:    'mp3',
+        sample_rate: 44100,
+      },
+      language: 'en',
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    return err(`Cartesia API ${res.status}: ${body}`, 502);
+  }
+
+  const audio = await res.arrayBuffer();
+  return new Response(audio, {
+    status: 200,
+    headers: { ...CORS, 'Content-Type': 'audio/mpeg' },
+  });
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default {
@@ -294,6 +345,11 @@ export default {
 
     if (url.pathname === '/health') {
       return json({ ok: true, model: env.GROQ_MODEL || 'llama-3.3-70b-versatile' });
+    }
+
+    // Cartesia TTS — checked before the Groq key guard
+    if (req.method === 'POST' && url.pathname === '/cartesia-tts') {
+      return handleCartesiaTts(req, env);
     }
 
     if (!env.GROQ_API_KEY) {

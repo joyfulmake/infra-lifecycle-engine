@@ -3,6 +3,7 @@ import ExecOverview from './components/ExecOverview.jsx';
 import PmTabs from './components/PmTabs.jsx';
 import AuthModal from './components/AuthModal.jsx';
 import DemoTour from './components/DemoTour.jsx';
+import OrchestratorPanel from './components/OrchestratorPanel.jsx';
 import { useAuth } from './lib/AuthContext.jsx';
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
 
       {showAuthModal && <AuthModal reason={authModalReason} onClose={() => setShowAuthModal(false)} />}
       <DemoTour />
+      <OrchestratorPanel />
     </>
   );
 }
