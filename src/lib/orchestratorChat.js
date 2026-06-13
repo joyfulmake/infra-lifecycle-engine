@@ -175,7 +175,7 @@ export function ruleBasedResponse(message, s, authUser) {
 
   // ── Help / capabilities ───────────────────────────────────────────────────
   if (/\b(help|what can you do|capabilities|commands|how do i use|what.*do)\b/.test(m)) {
-    return { reply: `I'm your Expert Orchestrator — here's what I can do:\n\n📋 Guide you through all 7 lifecycle phases step by step\n🔧 Set Phase 1 values ("hardware is Dell PowerEdge R750")\n📊 Check build status, RTM, role assignments, stack info\n⚠️ Surface coherence alerts and stale data warnings\n✅ Execute workflow actions with your confirmation\n🎙️ Voice narration for each phase (click ▶ Voice)\n\nTry asking:\n• "What's the current status?"\n• "Who is the Unix Admin?"\n• "Is the RTM ready?"\n• "What's next in the workflow?"\n• "OS is RHEL 8.6"` };
+    return { reply: `I'm your OpsMentor — here's what I can do:\n\n📋 Guide you through all 7 lifecycle phases step by step\n🔧 Set Phase 1 values ("hardware is Dell PowerEdge R750")\n📊 Check build status, RTM, role assignments, stack info\n⚠️ Surface coherence alerts and stale data warnings\n✅ Execute workflow actions with your confirmation\n🎙️ Voice narration for each phase (click ▶ Voice)\n\nTry asking:\n• "What's the current status?"\n• "Who is the Unix Admin?"\n• "Is the RTM ready?"\n• "What's next in the workflow?"\n• "OS is RHEL 8.6"` };
   }
 
   // ── Status / current state ─────────────────────────────────────────────────
@@ -249,8 +249,8 @@ export function ruleBasedResponse(message, s, authUser) {
   // ── Phase-specific hints ───────────────────────────────────────────────────
   if (/\b(system design|design tab|phase 3|design fields)\b/.test(m)) {
     if (!s.scanComplete) return { reply: 'System Design unlocks after the AI Smart Scan. Run the scan from the left panel first.' };
-    if (!s.designApplied) return { reply: 'Go to the System Design tab. Fill in the 8 sections (Network, Storage, Security, etc.) then click "Lock & Apply Design" to proceed.' };
-    return { reply: 'System Design is applied. Be careful — changes now will mark Gantt tasks as stale.' };
+    if (!s.designApplied) return { reply: 'Go to the System Design tab. Fill in all 8 sections (Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA).\n\nThere are TWO ways to proceed:\n1. "Generate Task Plan" — builds your Gantt task schedule AND locks the design (recommended)\n2. "Apply Design (skip tasks)" — locks the design without generating tasks\n\nClick "Generate Task Plan" to do both in one step.' };
+    return { reply: 'System Design is locked and applied. Changes now will mark Gantt tasks as stale and require regeneration.' };
   }
 
   if (/\b(gantt|schedule|tasks|timeline)\b/.test(m)) {

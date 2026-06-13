@@ -374,6 +374,58 @@
   background-color: #1E293B;
   color: #F1F5F9;
 }
+/* Light mode — main area options use browser defaults (white bg, dark text) */
+[data-theme="light"] .main-root select option {
+  background-color: #FFFFFF;
+  color: #1E293B;
+}
+
+/* ── Dark mode component class overrides ────────────────────────────────────
+   .card, .form-select, .form-input use @apply bg-white which generates CSS
+   properties — NOT a class attribute — so [class~="bg-white"] won't match.
+   We must override the component classes directly. */
+[data-theme="dark"] .main-root .card {
+  background-color: #1E293B !important;
+  border-color: #334155 !important;
+  color: #F1F5F9;
+}
+[data-theme="dark"] .main-root .form-select {
+  background-color: #1E293B !important;
+  color: #F1F5F9 !important;
+  border-color: #475569 !important;
+}
+[data-theme="dark"] .main-root .form-input {
+  background-color: #1E293B !important;
+  color: #F1F5F9 !important;
+  border-color: #475569 !important;
+}
+[data-theme="dark"] .main-root .item-row {
+  border-bottom-color: #334155 !important;
+}
+[data-theme="dark"] .main-root .item-row:hover {
+  background-color: #334155 !important;
+}
+[data-theme="dark"] .main-root .badge-red   { background-color: #7F1D1D !important; color: #FCA5A5 !important; }
+[data-theme="dark"] .main-root .badge-amber { background-color: #451A03 !important; color: #FDE68A !important; }
+[data-theme="dark"] .main-root .badge-teal  { background-color: #042F2E !important; color: #2DD4BF !important; }
+[data-theme="dark"] .main-root .badge-slate { background-color: #334155 !important; color: #CBD5E1 !important; }
+[data-theme="dark"] .main-root .badge-green { background-color: #14532D !important; color: #86EFAC !important; }
+[data-theme="dark"] .main-root .badge-blue  { background-color: #1E3A5F !important; color: #93C5FD !important; }
+[data-theme="dark"] .main-root .section-hdr { background-color: rgba(13,148,136,0.15) !important; }
+/* suggest dropdown in dark mode */
+[data-theme="dark"] .suggest-dropdown {
+  background: #1E293B !important;
+  border-color: #334155 !important;
+}
+[data-theme="dark"] .suggest-item {
+  color: #E2E8F0 !important;
+  border-bottom-color: #334155 !important;
+}
+[data-theme="dark"] .suggest-item:hover,
+[data-theme="dark"] .suggest-item.highlight {
+  background: #134E4A !important;
+  color: #2DD4BF !important;
+}
 
 /* ── Orchestrator panel — inner element dark mode coverage ──────────────── */
 [data-theme="dark"] .orchestrator-panel [class~="bg-amber-50"]    { background-color: #2D1A00 !important; }

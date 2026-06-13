@@ -262,14 +262,14 @@ export function generateScript(s) {
     return {
       id: 'apply_design',
       title: 'Scan complete — review and apply design',
-      nextAction: 'Apply design in the System Design tab',
+      nextAction: 'Open System Design tab → fill 8 sections → click Generate Task Plan',
       nextTab: 'design',
       lines: [
         g(`The AI Smart Scan is complete for ${stack}. Design defaults have been suggested based on your hardware and software choices.`,
           'normal', ['positivity:high'], 400),
         l('Should I review those defaults before applying?',
           'normal', ['curiosity:high'], 200),
-        g('Always. Open the System Design tab and step through each of the eight sections. Adjust any field that does not match your real environment, then click Apply Design to lock the baseline before Phase 2.',
+        g('Always. Open the System Design tab and step through each of the eight sections. When every field looks right, click Generate Task Plan — this builds your task schedule and locks the design in one step. If you want to skip task generation, use Apply Design instead.',
           'slow', ['positivity:medium'], 0),
       ],
     };

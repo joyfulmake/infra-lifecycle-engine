@@ -9,8 +9,10 @@ import { sendChatMessage, ruleBasedResponse } from '../lib/orchestratorChat.js';
 // ── Message bubble ────────────────────────────────────────────────────────────
 
 function Bubble({ msg }) {
-  const isUser = msg.role === 'user';
+  const isUser   = msg.role === 'user';
   const isResult = msg.role === 'result';
+  const isLog    = msg.role === 'log';
+  const isNudge  = msg.role === 'nudge';
 
   if (isResult) {
     return (
@@ -18,6 +20,26 @@ function Bubble({ msg }) {
         <span className="text-xs px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 font-semibold">
           {msg.text}
         </span>
+      </div>
+    );
+  }
+
+  // Auto-logged workflow events — compact single-line strip
+  if (isLog) {
+    return (
+      <div className="flex items-start gap-2 py-1">
+        <span className="text-teal-500 flex-shrink-0 mt-0.5" style={{ fontSize: 10 }}>✓</span>
+        <span className="text-xs text-slate-500 leading-snug">{msg.text}</span>
+      </div>
+    );
+  }
+
+  // Inactivity nudge — subtle prompt
+  if (isNudge) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 bg-slate-50 text-xs text-slate-500 italic">
+        <span className="text-slate-400">→</span>
+        {msg.text}
       </div>
     );
   }
@@ -150,15 +172,13 @@ export default function OrchestratorPanel() {
 
   function nextId() { return ++msgId.current; }
 
-  const hasGreeted = useRef(false);
-
   function buildWelcome(s) {
     const { hw, os, db, app } = s.ctx || {};
     const filled = [hw, os, db, app].filter(Boolean).length;
     if (filled === 4 && s.isBuilt) {
       return `Welcome back! Your build is in progress — ${script.title}.\n\n${script.nextAction ? 'Next step: ' + script.nextAction : 'All phases complete.'}\n\nAsk me anything, or type "show alerts" to check for issues.`;
     }
-    return `Hello! I'm your Expert Orchestrator — I'll guide you through every step.\n\nHere's your full 7-phase roadmap:\n1. Phase 1 — Select hardware, OS, database, and application, then click Build\n2. AI Smart Scan — auto-scans your stack for CVEs and EOL risks\n3. System Design — fill 8 sections (Network, Storage, Security, DR, etc.)\n4. Phase 2 — inject incidents and UUM change items\n5. Gantt — review your auto-generated project schedule\n6. CAB Gate + RTM — submit for approval and sign off requirements\n7. Closure — complete post-go-live checklist and export to Excel\n\nLet's start with Phase 1. Tell me your hardware platform — for example: "hardware is Dell PowerEdge R750" — or choose from the left panel.\n\nWhat's the hardware platform for this project?`;
+    return `Hello! I'm OpsMentor — I'll guide you through every step of the infrastructure lifecycle.\n\nYour 7-phase roadmap:\n1. Phase 1 — Select hardware, OS, database, and application, then click Build\n2. AI Smart Scan — auto-scans for CVEs and EOL risks (sidebar button)\n3. System Design — fill 8 sections, then click "Generate Task Plan"\n4. Phase 2 — inject incidents and UUM items (sidebar "Inject Phase 2" button)\n5. Gantt — review your auto-generated project schedule\n6. CAB Gate + RTM — submit for approval and sign off all requirements\n7. Closure — complete post-go-live checklist and export to Excel\n\nLet's start. Tell me your hardware platform — e.g. "hardware is Dell PowerEdge R750" — or select from the left panel.`;
   }
 
   // Show welcome message when panel opens — auto-speak is handled by the messages effect
@@ -191,6 +211,95 @@ export default function OrchestratorPanel() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // ── Action logging — watch key state transitions and auto-post log entries ──
+  // Each flag is tracked with a prev ref; when it flips we post a chat log.
+  const prevState = useRef({
+    isBuilt: false, scanComplete: false, designApplied: false,
+    phase2Active: false, cabApproved: false, cabDeclined: false,
+    rtmSigned: false, promoted: false, rtmStale: false, tasksStaleReason: null,
+  });
+
+  useEffect(() => {
+    const prev = prevState.current;
+    const logs = [];
+
+    if (!prev.isBuilt && s.isBuilt) {
+      const { hw, os, db, app } = s.ctx || {};
+      logs.push(`Stack built: ${[hw, os, db, app].filter(Boolean).join(' / ') || 'stack'}. Next: run the AI Smart Scan in the left panel.`);
+    }
+    if (!prev.scanComplete && s.scanComplete) {
+      logs.push(`AI Smart Scan complete — ${(s.selInc || []).length} incident(s) pre-selected. Next: open the System Design tab and fill in the 8 sections, then click "Generate Task Plan".`);
+    }
+    if (!prev.designApplied && s.designApplied) {
+      logs.push(`System Design locked. Next: scroll to Phase 2 in the left panel and click "Inject Phase 2" to activate incident and UUM scope.`);
+    }
+    if (!prev.phase2Active && s.phase2Active) {
+      logs.push(`Phase 2 active — ${(s.selInc || []).length} incident(s), ${(s.selUUM || []).length} UUM item(s) in scope. Open the Gantt tab to review the auto-generated schedule, then submit to CAB.`);
+    }
+    if (!prev.cabApproved && s.cabApproved) {
+      logs.push(`CAB approved the change. You are cleared for cutover. Open the RTM tab to sign off all requirements before going live.`);
+    }
+    if (!prev.cabDeclined && s.cabDeclined) {
+      logs.push(`CAB declined the change request. Click "Unlock Tabs for Revision" in the sidebar, address the feedback, then resubmit.`);
+    }
+    if (!prev.rtmSigned && s.rtmSigned) {
+      logs.push(`RTM signed off. All requirements verified. Proceed to the Closure tab to initiate cutover.`);
+    }
+    if (!prev.promoted && s.promoted) {
+      logs.push(`System is now live. Complete the Closure checklist and export the full audit trail to Excel.`);
+    }
+    if (!prev.rtmStale && s.rtmStale) {
+      logs.push(`RTM has drifted — scope changed after sign-off. Review the RTM tab and re-sign if requirements are still met.`);
+    }
+    if (!prev.tasksStaleReason && s.tasksStaleReason) {
+      logs.push(`Gantt tasks are stale: ${s.tasksStaleReason}. Open the Gantt tab and click "Regenerate Tasks" to refresh the schedule.`);
+    }
+
+    if (logs.length > 0) {
+      setMessages(m => [...m, ...logs.map(text => ({ id: nextId(), role: 'log', text }))]);
+    }
+
+    prevState.current = {
+      isBuilt: s.isBuilt, scanComplete: s.scanComplete, designApplied: s.designApplied,
+      phase2Active: s.phase2Active, cabApproved: s.cabApproved, cabDeclined: s.cabDeclined,
+      rtmSigned: s.rtmSigned, promoted: s.promoted, rtmStale: s.rtmStale,
+      tasksStaleReason: s.tasksStaleReason,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.isBuilt, s.scanComplete, s.designApplied, s.phase2Active, s.cabApproved,
+      s.cabDeclined, s.rtmSigned, s.promoted, s.rtmStale, s.tasksStaleReason]);
+
+  // ── Inactivity prompt — if panel open and user idle 3s after last orch message ─
+  const inactivityTimerRef = useRef(null);
+  const nudgeSentRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+    clearTimeout(inactivityTimerRef.current);
+    nudgeSentRef.current = false; // reset on new message
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'orchestrator') return;
+    // Wait 3 seconds; if user hasn't typed anything, send a contextual nudge
+    inactivityTimerRef.current = setTimeout(() => {
+      if (nudgeSentRef.current) return;
+      nudgeSentRef.current = true;
+      const sc = generateScript(s);
+      const nudge = sc.nextAction
+        ? `Still here if you need me. Next step: ${sc.nextAction}`
+        : 'Your build looks complete! Ask me anything or export your audit trail.';
+      setMessages(m => [...m, { id: nextId(), role: 'nudge', text: nudge }]);
+    }, 3000);
+    return () => clearTimeout(inactivityTimerRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, open]);
+
+  // Cancel inactivity timer when user starts typing
+  const handleInputChange = useCallback((e) => {
+    clearTimeout(inactivityTimerRef.current);
+    nudgeSentRef.current = true; // suppress nudge once typing starts
+    setInput(e.target.value);
+  }, []);
+
   // Open after tour dismisses every time
   useEffect(() => {
     const handler = () => {
@@ -203,11 +312,11 @@ export default function OrchestratorPanel() {
     return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
   }, []);
 
-  // Auto-speak every new orchestrator message — continuous voice guidance
+  // Auto-speak every new orchestrator message — skip log/nudge entries
   useEffect(() => {
     if (!open || messages.length === 0) return;
     const last = messages[messages.length - 1];
-    if (last.role !== 'orchestrator') return;
+    if (last.role !== 'orchestrator') return; // don't speak log/nudge/user/result
 
     // Abort any current playback before speaking the new message
     abortRef.current?.abort();
@@ -279,6 +388,12 @@ export default function OrchestratorPanel() {
   }
 
   // ── Mic / voice input ────────────────────────────────────────────────────
+  // Uses continuous mode so the mic stays open. interimResults shows
+  // partial transcripts in the input as the user speaks. When the user
+  // stops speaking (onspeechend or a 2-second silence), it finalises and
+  // auto-sends so there's no extra button press needed.
+
+  const micSilenceTimerRef = useRef(null);
 
   function handleMic() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -288,6 +403,7 @@ export default function OrchestratorPanel() {
     }
 
     if (recording) {
+      clearTimeout(micSilenceTimerRef.current);
       recognitionRef.current?.stop();
       setRecording(false);
       setRecStatus('');
@@ -296,20 +412,66 @@ export default function OrchestratorPanel() {
 
     const rec = new SR();
     rec.lang = 'en-US';
-    rec.continuous = false;
-    rec.interimResults = false;
+    rec.continuous = true;
+    rec.interimResults = true;
 
-    rec.onstart  = () => { setRecording(true); setRecStatus('listening'); };
-    rec.onspeechend = () => setRecStatus('processing');
+    let finalTranscript = '';
+
+    rec.onstart = () => { setRecording(true); setRecStatus('listening'); finalTranscript = ''; };
+
     rec.onresult = e => {
-      const transcript = e.results[0][0].transcript;
-      setInput(transcript);
-      setRecStatus('');
-      setRecording(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      clearTimeout(micSilenceTimerRef.current);
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) {
+          finalTranscript += r[0].transcript + ' ';
+        } else {
+          interim = r[0].transcript;
+        }
+      }
+      // Show combined transcript in the input box
+      const display = (finalTranscript + interim).trim();
+      if (display) setInput(display);
+
+      // Auto-send after 2s of silence if we have final text
+      if (finalTranscript.trim()) {
+        micSilenceTimerRef.current = setTimeout(() => {
+          rec.stop();
+          setRecording(false);
+          setRecStatus('');
+          // Auto-send the transcribed text
+          const text = finalTranscript.trim();
+          if (text) {
+            finalTranscript = '';
+            setInput('');
+            setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
+            setThinking(true);
+            const fast = ruleBasedResponse(text, s, authUser);
+            if (fast) {
+              setThinking(false);
+              const { reply, actions = [] } = typeof fast === 'string' ? { reply: fast } : fast;
+              const immediate = actions.filter(a => !a.requiresConfirmation);
+              const needsConfirm = actions.filter(a => a.requiresConfirmation);
+              if (immediate.length > 0) applyActions(immediate);
+              setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+              if (needsConfirm.length > 0) {
+                setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
+              }
+            }
+          }
+        }, 2000);
+      }
     };
-    rec.onerror = () => { setRecording(false); setRecStatus(''); };
-    rec.onend   = () => { setRecording(false); setRecStatus(''); };
+
+    rec.onspeechend = () => setRecStatus('processing');
+    rec.onerror = (e) => {
+      if (e.error !== 'no-speech') {
+        setRecording(false);
+        setRecStatus('');
+      }
+    };
+    rec.onend = () => { setRecording(false); setRecStatus(''); clearTimeout(micSilenceTimerRef.current); };
 
     recognitionRef.current = rec;
     rec.start();
@@ -401,7 +563,7 @@ export default function OrchestratorPanel() {
           open ? 'bg-teal-600 scale-110' : 'bg-slate-700 hover:bg-teal-700',
           hasAlerts && !open ? 'ring-2 ring-amber-400 ring-offset-1 animate-pulse' : '',
         ].join(' ')}
-        title="Expert Orchestrator"
+        title="OpsMentor"
       >
         {open ? '×' : '🎯'}
       </button>
@@ -415,7 +577,7 @@ export default function OrchestratorPanel() {
           {/* Header */}
           <div className="bg-slate-800 text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
             <div className="w-2 h-2 rounded-full bg-teal-400 flex-shrink-0" />
-            <span className="text-sm font-semibold flex-1 tracking-tight">Expert Orchestrator</span>
+            <span className="text-sm font-semibold flex-1 tracking-tight">OpsMentor</span>
             <button
               onClick={handlePlay}
               className={[
@@ -495,7 +657,7 @@ export default function OrchestratorPanel() {
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Ask anything or speak with the mic…"
               disabled={thinking}
