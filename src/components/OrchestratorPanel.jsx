@@ -156,27 +156,15 @@ export default function OrchestratorPanel() {
     const { hw, os, db, app } = s.ctx || {};
     const filled = [hw, os, db, app].filter(Boolean).length;
     if (filled === 4 && s.isBuilt) {
-      return `Welcome back! Your build is in progress — ${script.title}.\n\n${script.nextAction ? 'Next: ' + script.nextAction : 'All phases are complete.'}\n\nAsk me anything, or say "show alerts" to check coherence issues.`;
+      return `Welcome back! Your build is in progress — ${script.title}.\n\n${script.nextAction ? 'Next step: ' + script.nextAction : 'All phases complete.'}\n\nAsk me anything, or type "show alerts" to check for issues.`;
     }
-    return `Hello! I'm your Expert Orchestrator — your step-by-step mentor for the full infrastructure lifecycle.\n\nI'll guide you through all 7 phases: Build → AI Scan → System Design → Phase 2 → Gantt → RTM → Closure.\n\nTo begin Phase 1, I need four things:\n• Hardware platform (e.g. Dell PowerEdge R750, HPE ProLiant)\n• Operating System (e.g. RHEL 8.6, Ubuntu 22.04, AIX 7.2)\n• Database (e.g. Oracle 19c, PostgreSQL 15, MySQL 8)\n• Application/Middleware (e.g. WebSphere, JBoss, Tomcat)\n\nYou can type them here — "hardware is Dell PowerEdge R750" — or fill them in the left panel directly.\n\nWhat's the hardware platform for this project?`;
+    return `Hello! I'm your Expert Orchestrator — I'll guide you through every step.\n\nHere's your full 7-phase roadmap:\n1. Phase 1 — Select hardware, OS, database, and application, then click Build\n2. AI Smart Scan — auto-scans your stack for CVEs and EOL risks\n3. System Design — fill 8 sections (Network, Storage, Security, DR, etc.)\n4. Phase 2 — inject incidents and UUM change items\n5. Gantt — review your auto-generated project schedule\n6. CAB Gate + RTM — submit for approval and sign off requirements\n7. Closure — complete post-go-live checklist and export to Excel\n\nLet's start with Phase 1. Tell me your hardware platform — for example: "hardware is Dell PowerEdge R750" — or choose from the left panel.\n\nWhat's the hardware platform for this project?`;
   }
 
-  // Initialise with welcome message when panel opens for the first time
+  // Show welcome message when panel opens — auto-speak is handled by the messages effect
   useEffect(() => {
     if (open && messages.length === 0) {
-      const welcome = buildWelcome(s);
-      setMessages([{ id: nextId(), role: 'orchestrator', text: welcome }]);
-      // Auto-play voice greeting once per session
-      if (CARTESIA_CONFIGURED && !hasGreeted.current) {
-        hasGreeted.current = true;
-        const greetLines = [{ text: 'Hello! I am your Expert Orchestrator. I will guide you through the full infrastructure lifecycle. What is the hardware platform for this project?', voice: 'guide' }];
-        const ctrl = new AbortController();
-        abortRef.current = ctrl;
-        setPlaying(true);
-        speakScript(greetLines, { onLineStart: () => {}, signal: ctrl.signal })
-          .then(() => { if (!ctrl.signal.aborted) { setPlaying(false); abortRef.current = null; } })
-          .catch(() => { setPlaying(false); });
-      }
+      setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome(s) }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -203,17 +191,41 @@ export default function OrchestratorPanel() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // Auto-open after demo tour dismisses (fires once per session)
+  // Open after tour dismisses every time
   useEffect(() => {
     const handler = () => {
       setTimeout(() => {
         setOpen(true);
         setTimeout(() => inputRef.current?.focus(), 150);
-      }, 600);
+      }, 500);
     };
     window.addEventListener('opsmanifest-tour-dismissed', handler);
     return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
   }, []);
+
+  // Auto-speak every new orchestrator message — continuous voice guidance
+  useEffect(() => {
+    if (!open || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last.role !== 'orchestrator') return;
+
+    // Abort any current playback before speaking the new message
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setPlaying(true);
+
+    // Speak the first meaningful line (skip bullet lists, keep intro sentence)
+    const firstLine = last.text.split('\n').find(l => l.trim().length > 10) || last.text.slice(0, 180);
+    const voiceText = firstLine.replace(/[•\-–—]\s*/g, '').slice(0, 220);
+
+    speakScript([{ text: voiceText, voice: 'guide' }], { signal: ctrl.signal })
+      .then(() => { if (!ctrl.signal.aborted) { setPlaying(false); abortRef.current = null; } })
+      .catch(() => setPlaying(false));
+
+    return () => ctrl.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, open]);
 
   // ── TTS playback ─────────────────────────────────────────────────────────
 

@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const TOUR_KEY = 'opsmanifest_tour_v4';
-
 const SLIDES = [
   {
     icon: '⚙',
@@ -75,21 +73,17 @@ export default function DemoTour() {
   const autoTimerRef = useRef(null);
   const transRef     = useRef(false);
 
+  // Always show on every load — user can close when ready
   useEffect(() => {
-    const seen = localStorage.getItem(TOUR_KEY);
-    if (!seen) {
-      const t = setTimeout(() => setVisible(true), 800);
-      return () => clearTimeout(t);
-    }
+    const t = setTimeout(() => setVisible(true), 800);
+    return () => clearTimeout(t);
   }, []);
 
   const dismiss = useCallback(() => {
     setOpacity(0);
     setTranslateY(12);
     setTimeout(() => {
-      localStorage.setItem(TOUR_KEY, '1');
       setVisible(false);
-      // Signal orchestrator to auto-open and greet the user
       window.dispatchEvent(new CustomEvent('opsmanifest-tour-dismissed'));
     }, 300);
   }, []);
