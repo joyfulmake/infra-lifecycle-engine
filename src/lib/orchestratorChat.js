@@ -152,6 +152,72 @@ export function ruleBasedResponse(message, s, authUser) {
     };
   }
 
+  // ── Workflow gate actions (checked BEFORE generic status/phase/cab matchers) ─
+  if (/\b(run scan|start scan|scan now|do the scan|run the scan|ai scan)\b/.test(m)) {
+    if (!s.isBuilt) return { reply: 'Please build the stack first. Select hardware, OS, DB, and App in the left panel then click Build.' };
+    if (s.scanComplete) return { reply: 'AI Smart Scan already completed. The results are shown in the Exec Summary tab.' };
+    return {
+      reply: 'Running AI Smart Scan now — checking your stack for CVEs, EOL risks, and compatibility issues.',
+      actions: [{ type: 'RUN_SCAN', description: 'Run AI Smart Scan on current stack', requiresConfirmation: false }],
+    };
+  }
+
+  if (/\b(apply design|lock design|lock.*design|design.*lock)\b/.test(m)) {
+    if (!s.scanComplete) return { reply: 'System Design unlocks after the AI Smart Scan. Run the scan first.' };
+    if (s.designApplied) return { reply: 'System Design is already locked and applied.' };
+    return {
+      reply: 'Applying and locking the System Design now. Note: this skips task plan generation. Use "generate task plan" instead to create tasks AND lock the design.',
+      actions: [{ type: 'APPLY_DESIGN', description: 'Lock and apply System Design', requiresConfirmation: true }],
+    };
+  }
+
+  if (/\b(inject phase 2|start phase 2|activate phase 2|phase 2 now|inject.*phase)\b/.test(m)) {
+    if (!s.designApplied) return { reply: 'Phase 2 requires System Design to be applied first. Fill the 8 sections and click Generate Task Plan.' };
+    if (s.phase2Active) return { reply: 'Phase 2 is already active. Check the Exec Summary tab for selected incidents and UUM items.' };
+    return {
+      reply: 'Injecting Phase 2 now — this activates incident and UUM scope and unlocks the Gantt chart.',
+      actions: [{ type: 'INJECT_PHASE2', description: 'Inject Phase 2 (activate incident and UUM scope)', requiresConfirmation: true }],
+    };
+  }
+
+  if (/\b(submit.*cab|approve cab|cab approve|send to cab|cab submit|submit to cab)\b/.test(m)) {
+    if (!s.phase2Active) return { reply: 'CAB submission requires Phase 2 to be active and Gantt tasks reviewed. Complete those first.' };
+    if (s.cabApproved) return { reply: 'CAB has already approved this change.' };
+    return {
+      reply: 'Submitting to CAB for approval. This marks the change as approved — use this only when you have actual CAB sign-off.',
+      actions: [{ type: 'SUBMIT_CAB', description: 'Mark CAB as approved', requiresConfirmation: true }],
+    };
+  }
+
+  if (/\b(sign rtm|sign off rtm|rtm sign|sign.*requirements|sign.*traceability)\b/.test(m)) {
+    if (!s.cabApproved) return { reply: 'RTM sign-off is available after CAB approval. Submit to CAB first.' };
+    if (s.rtmSigned) return { reply: 'RTM is already signed off.' };
+    const counts = Object.values(s.rtmRows || {}).reduce((a, v) => { a[v] = (a[v] || 0) + 1; return a; }, {});
+    const fails = counts.FAIL || 0;
+    if (fails > 0) return { reply: `RTM has ${fails} FAIL row${fails !== 1 ? 's' : ''}. Resolve all failures before signing off. Open the RTM tab to review.` };
+    return {
+      reply: 'Signing off the RTM now — this confirms all requirements are verified and ready for cutover.',
+      actions: [{ type: 'SIGN_RTM', description: 'Sign off Requirements Traceability Matrix', requiresConfirmation: true }],
+    };
+  }
+
+  if (/\b(go live|mark live|promote|system live|mark.*live|live now)\b/.test(m)) {
+    if (!s.rtmSigned) return { reply: 'System cannot go live until the RTM is signed off. Complete RTM first.' };
+    if (s.promoted) return { reply: 'The system is already marked as live.' };
+    return {
+      reply: 'Marking the system as live. This triggers the closure checklist and audit trail export.',
+      actions: [{ type: 'PROMOTE', description: 'Mark system as live (promote to production)', requiresConfirmation: true }],
+    };
+  }
+
+  // ── RTM status (before generic status matcher) ────────────────────────────
+  if (/\b(rtm|traceability)\b/.test(m) && /\b(status|done|complete|ready|check)\b/.test(m)) {
+    const counts = Object.values(s.rtmRows || {}).reduce((a, v) => { a[v] = (a[v] || 0) + 1; return a; }, {});
+    const total = Object.keys(s.rtmRows || {}).length;
+    const allPass = (counts.PASS || 0) + (counts.NA || 0) === total && total > 0;
+    return { reply: `RTM Status: ${counts.PASS || 0} PASS · ${counts.FAIL || 0} FAIL · ${counts.PENDING || 0} PENDING · ${counts.NA || 0} NA\n${s.rtmSigned ? '✓ RTM is signed off.' : allPass ? 'All rows pass — ready to sign off in the RTM tab.' : 'Not yet ready to sign. Review FAIL and PENDING rows in the RTM tab.'}` };
+  }
+
   // ── Phase 1 guidance ──────────────────────────────────────────────────────
   if (/\b(phase 1|phase1|build requirements|start|begin|get started|what do i enter|where do i start)\b/.test(m)) {
     return { reply: PHASE1_FIELDS };
@@ -199,14 +265,6 @@ export function ruleBasedResponse(message, s, authUser) {
     const assignment = s.roleAssignments?.[roleName];
     if (assignment?.name) return { reply: `${roleName}: ${assignment.name} — ${assignment.email || 'no email set'}${assignment.backup ? '\nBackup: ' + assignment.backup : ''}` };
     return { reply: `${roleName} has not been assigned yet. Go to the Roles tab to assign team members.` };
-  }
-
-  // ── RTM status ─────────────────────────────────────────────────────────────
-  if (/\b(rtm|traceability|sign.?off)\b/.test(m) && /\b(status|done|complete|ready|check)\b/.test(m)) {
-    const counts = Object.values(s.rtmRows || {}).reduce((a, v) => { a[v] = (a[v] || 0) + 1; return a; }, {});
-    const total = Object.keys(s.rtmRows || {}).length;
-    const allPass = (counts.PASS || 0) + (counts.NA || 0) === total && total > 0;
-    return { reply: `RTM Status: ${counts.PASS || 0} PASS · ${counts.FAIL || 0} FAIL · ${counts.PENDING || 0} PENDING · ${counts.NA || 0} NA\n${s.rtmSigned ? '✓ RTM is signed off.' : allPass ? 'All rows pass — ready to sign off in the RTM tab.' : 'Not yet ready to sign. Review FAIL and PENDING rows in the RTM tab.'}` };
   }
 
   // ── What's next ────────────────────────────────────────────────────────────
@@ -314,64 +372,6 @@ export function ruleBasedResponse(message, s, authUser) {
         params: { section, field, value },
         requiresConfirmation: false,
       }],
-    };
-  }
-
-  // ── Workflow gate actions — OpsMentor can execute these ───────────────────
-  if (/\b(run scan|start scan|scan now|do the scan|run the scan|ai scan)\b/.test(m)) {
-    if (!s.isBuilt) return { reply: 'Please build the stack first. Select hardware, OS, DB, and App in the left panel then click Build.' };
-    if (s.scanComplete) return { reply: 'AI Smart Scan already completed. The results are shown in the Exec Summary tab.' };
-    return {
-      reply: 'Running AI Smart Scan now — checking your stack for CVEs, EOL risks, and compatibility issues.',
-      actions: [{ type: 'RUN_SCAN', description: 'Run AI Smart Scan on current stack', requiresConfirmation: false }],
-    };
-  }
-
-  if (/\b(apply design|lock design|lock.*design|design.*lock)\b/.test(m)) {
-    if (!s.scanComplete) return { reply: 'System Design unlocks after the AI Smart Scan. Run the scan first.' };
-    if (s.designApplied) return { reply: 'System Design is already locked and applied.' };
-    return {
-      reply: 'Applying and locking the System Design now. Note: this skips task plan generation. Use "generate task plan" instead to create tasks AND lock the design.',
-      actions: [{ type: 'APPLY_DESIGN', description: 'Lock and apply System Design', requiresConfirmation: true }],
-    };
-  }
-
-  if (/\b(inject phase 2|start phase 2|activate phase 2|phase 2 now|inject.*phase)\b/.test(m)) {
-    if (!s.designApplied) return { reply: 'Phase 2 requires System Design to be applied first. Fill the 8 sections and click Generate Task Plan.' };
-    if (s.phase2Active) return { reply: 'Phase 2 is already active. Check the Exec Summary tab for selected incidents and UUM items.' };
-    return {
-      reply: 'Injecting Phase 2 now — this activates incident and UUM scope and unlocks the Gantt chart.',
-      actions: [{ type: 'INJECT_PHASE2', description: 'Inject Phase 2 (activate incident and UUM scope)', requiresConfirmation: true }],
-    };
-  }
-
-  if (/\b(submit.*cab|approve cab|cab approve|send to cab|cab submit|submit to cab)\b/.test(m)) {
-    if (!s.phase2Active) return { reply: 'CAB submission requires Phase 2 to be active and Gantt tasks reviewed. Complete those first.' };
-    if (s.cabApproved) return { reply: 'CAB has already approved this change.' };
-    return {
-      reply: 'Submitting to CAB for approval. This marks the change as approved — use this only when you have actual CAB sign-off.',
-      actions: [{ type: 'SUBMIT_CAB', description: 'Mark CAB as approved', requiresConfirmation: true }],
-    };
-  }
-
-  if (/\b(sign rtm|sign off rtm|rtm sign|sign.*requirements|sign.*traceability)\b/.test(m)) {
-    if (!s.cabApproved) return { reply: 'RTM sign-off is available after CAB approval. Submit to CAB first.' };
-    if (s.rtmSigned) return { reply: 'RTM is already signed off.' };
-    const counts = Object.values(s.rtmRows || {}).reduce((a, v) => { a[v] = (a[v] || 0) + 1; return a; }, {});
-    const fails = counts.FAIL || 0;
-    if (fails > 0) return { reply: `RTM has ${fails} FAIL row${fails !== 1 ? 's' : ''}. Resolve all failures before signing off. Open the RTM tab to review.` };
-    return {
-      reply: 'Signing off the RTM now — this confirms all requirements are verified and ready for cutover.',
-      actions: [{ type: 'SIGN_RTM', description: 'Sign off Requirements Traceability Matrix', requiresConfirmation: true }],
-    };
-  }
-
-  if (/\b(go live|mark live|promote|system live|mark.*live|live now)\b/.test(m)) {
-    if (!s.rtmSigned) return { reply: 'System cannot go live until the RTM is signed off. Complete RTM first.' };
-    if (s.promoted) return { reply: 'The system is already marked as live.' };
-    return {
-      reply: 'Marking the system as live. This triggers the closure checklist and audit trail export.',
-      actions: [{ type: 'PROMOTE', description: 'Mark system as live (promote to production)', requiresConfirmation: true }],
     };
   }
 
