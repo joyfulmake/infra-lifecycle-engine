@@ -4,8 +4,19 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Relative base ensures paths work from ms-appx-web:/// in MSIX packaged builds
-  // as well as standard CDN hosting — avoids absolute-path resolution issues in
-  // the Windows WebView2 container used by packaged hosted web apps.
   base: './',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('react-dom') || id.includes('/react/')) return 'vendor-react';
+          if (id.includes('zustand'))       return 'vendor-zustand';
+          if (id.includes('dexie'))         return 'vendor-dexie';
+          if (id.includes('xlsx-js-style')) return 'vendor-xlsx';
+          if (id.includes('firebase'))      return 'vendor-firebase';
+        },
+      },
+    },
+  },
 })
