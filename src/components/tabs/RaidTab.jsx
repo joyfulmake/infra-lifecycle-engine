@@ -90,6 +90,18 @@ export default function RaidTab() {
     });
   });
 
+  // Custom entries added via OpsMentor
+  (s.customRaidEntries || []).forEach(e => {
+    rows.push({
+      type: e.type || 'RISK',
+      description: e.description || '',
+      severity: e.severity || 'MED',
+      mitigation: e.mitigation || 'Under review.',
+      status: e.status || 'OPEN',
+      owner: e.owner || 'PM',
+    });
+  });
+
   // Standard rows
   rows.push(
     { type: 'ASSUMPTION', description: 'All function teams are available for scheduled change windows', severity: 'MED', mitigation: 'Confirm attendance at kick-off session', status: 'OPEN', owner: 'Change Manager' },

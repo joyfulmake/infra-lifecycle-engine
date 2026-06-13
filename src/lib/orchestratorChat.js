@@ -264,6 +264,59 @@ export function ruleBasedResponse(message, s, authUser) {
     return { reply: 'Go to the Closure tab to tick off post-go-live checks and add final notes. Once all checks are done, mark the build as promoted.' };
   }
 
+  // ── Add task to Gantt ──────────────────────────────────────────────────────
+  const addTaskMatch = raw.match(/\badd task[:\s]+(.+)/i) || raw.match(/\bnew task[:\s]+(.+)/i) || raw.match(/\bcreate task[:\s]+(.+)/i);
+  if (addTaskMatch) {
+    const title = addTaskMatch[1].trim();
+    return {
+      reply: `Got it — "${title}". Should I add this to the Gantt schedule or the RAID log?\n\nSay "gantt" or "raid".`,
+      _pendingTask: title,
+    };
+  }
+
+  // Add issue/risk to RAID
+  const addRaidMatch = raw.match(/\badd (issue|risk|assumption|decision|dependency)[:\s]+(.+)/i) || raw.match(/\brad to raid[:\s]+(.+)/i);
+  if (addRaidMatch) {
+    const type = (addRaidMatch[1] || 'ISSUE').toUpperCase().replace('RAD', 'ISSUE');
+    const desc = (addRaidMatch[2] || addRaidMatch[1] || '').trim();
+    const id = `raid-${Date.now()}`;
+    return {
+      reply: `Added "${desc}" to the RAID log as a ${type}. Open the RAID tab to see it.`,
+      actions: [{
+        type: 'ADD_RAID_ENTRY',
+        description: `Add ${type} to RAID log`,
+        params: { id, type, description: desc, severity: 'MED', mitigation: 'Pending', status: 'OPEN', owner: 'PM', addedAt: new Date().toISOString() },
+        requiresConfirmation: false,
+      }, {
+        type: 'NAVIGATE_TAB',
+        description: 'Navigate to RAID tab',
+        params: { tab: 'raid' },
+        requiresConfirmation: false,
+      }],
+    };
+  }
+
+  // Set system design field: "set [section] [field]: [value]" or "network field firewall is pfsense"
+  const designMatch = raw.match(/\bset\s+(network|storage|security|backup|compliance|monitoring|dr|ha)\s+(\w[\w\s]*?)\s*[=:to]+\s*(.+)/i)
+    || raw.match(/\b(network|storage|security|backup|compliance|monitoring|disaster recovery|high availability)\s+(\w[\w\s]*?)\s+is\s+(.+)/i);
+  if (designMatch) {
+    const sectionRaw = designMatch[1].toLowerCase().replace('disaster recovery', 'dr').replace('high availability', 'ha');
+    const sectionMap = { network: 'network', storage: 'storage', security: 'security', backup: 'backup', compliance: 'compliance', monitoring: 'monitoring', dr: 'dr', ha: 'ha' };
+    const section = sectionMap[sectionRaw] || sectionRaw;
+    const field = designMatch[2].trim().toLowerCase().replace(/\s+/g, '_');
+    const value = designMatch[3].trim();
+    if (!s.scanComplete) return { reply: 'System Design is locked until after the AI Smart Scan. Run the scan first.' };
+    return {
+      reply: `Setting ${section} → ${field} to "${value}". Open the System Design tab to review.`,
+      actions: [{
+        type: 'SET_DESIGN_FIELD',
+        description: `Set ${section}/${field} = ${value}`,
+        params: { section, field, value },
+        requiresConfirmation: false,
+      }],
+    };
+  }
+
   // ── Workflow gate actions — OpsMentor can execute these ───────────────────
   if (/\b(run scan|start scan|scan now|do the scan|run the scan|ai scan)\b/.test(m)) {
     if (!s.isBuilt) return { reply: 'Please build the stack first. Select hardware, OS, DB, and App in the left panel then click Build.' };

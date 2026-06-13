@@ -887,6 +887,29 @@ export default function GanttTab() {
         </div>
       )}
 
+      {/* OpsMentor custom tasks */}
+      {(s.customMentorTasks || []).length > 0 && (
+        <div className="card overflow-hidden mb-4 border-l-4 border-teal-400">
+          <div className="bg-teal-50 px-4 py-2 border-b border-teal-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-teal-700 text-xs uppercase tracking-wide">OpsMentor Tasks</span>
+              <span className="badge badge-teal text-xs">{s.customMentorTasks.length} added</span>
+            </div>
+          </div>
+          <div className="divide-y divide-teal-50">
+            {s.customMentorTasks.map(t => (
+              <div key={t.id} className="flex items-center gap-2 px-3 py-2 hover:bg-teal-50/40">
+                <div className="text-xs text-teal-400 font-mono w-7">✦</div>
+                <span className="badge badge-teal text-xs">Manual</span>
+                <div className="flex-1 text-xs text-slate-700">{t.title}</div>
+                {t.notes && <div className="text-xs text-slate-400 italic">{t.notes}</div>}
+                <div className="text-xs text-slate-400 w-12 text-right">~{t.est_hours || 2}h</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Rollback plan */}
       {s.cabDeclined && (
         <div className="card overflow-hidden mb-4 border-l-4 border-red-500">

@@ -160,7 +160,8 @@ export default function OrchestratorPanel() {
   const reqGoLiveDate  = store.requirements?.goLiveDate  || '';
   const reqSla         = store.requirements?.sla         || '';
 
-  const [open,        setOpen]        = useState(false);
+  const [open,        setOpen]        = useState(false);  // OpsMentor activated
+  const [panelVisible, setPanelVisible] = useState(false);  // panel UI shown
   const [messages,    setMessages]    = useState([]);
   const [input,       setInput]       = useState('');
   const [thinking,    setThinking]    = useState(false);
@@ -178,11 +179,13 @@ export default function OrchestratorPanel() {
   const recognitionRef  = useRef(null);
 
   // Always-current refs to avoid stale closures in mic/timers
-  const userNameRef      = useRef('');
-  const awaitingNameRef  = useRef(true);
-  const recordingRef     = useRef(false);
-  const sRef             = useRef(s);
-  const authUserRef      = useRef(authUser);
+  const userNameRef       = useRef('');
+  const awaitingNameRef   = useRef(true);
+  const awaitingFieldRef  = useRef(null); // 'hw'|'os'|'db'|'app'|'projectName'|'envType'|'goLiveDate'|null
+  const pendingTaskRef    = useRef(null); // { title } waiting for gantt/raid choice
+  const recordingRef      = useRef(false);
+  const sRef              = useRef(s);
+  const authUserRef       = useRef(authUser);
   useEffect(() => { sRef.current = s; });
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
   useEffect(() => { recordingRef.current = recording; }, [recording]);
@@ -220,13 +223,16 @@ export default function OrchestratorPanel() {
     return `Hello! I'm OpsMentor — your AI guide for the entire infrastructure lifecycle.\n\nBefore we begin, what should I call you?`;
   }
 
-  // Show welcome (name-ask) when panel opens for the first time
+  // Show welcome (name-ask) when OpsMentor activates for the first time
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Open after tour dismisses every time — also ensure voice starts
+  // (override existing handler below)
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -324,11 +330,12 @@ export default function OrchestratorPanel() {
     setInput(e.target.value);
   }, []);
 
-  // Open after tour dismisses every time
+  // Open after tour dismisses
   useEffect(() => {
     const handler = () => {
       setTimeout(() => {
         setOpen(true);
+        setPanelVisible(true);
         setTimeout(() => inputRef.current?.focus(), 150);
       }, 500);
     };
@@ -337,8 +344,7 @@ export default function OrchestratorPanel() {
   }, []);
 
   // ── Auto-speak ALL messages via Web Speech queue ──────────────────────────
-  // Speaks orchestrator replies (first meaningful line), log entries, and nudges.
-  // Uses speechSynthesis natural queue so nothing overlaps.
+  // Voice continues even when panel is minimized (checks `open`, not `panelVisible`).
   useEffect(() => {
     if (!open || messages.length === 0) return;
     const last = messages[messages.length - 1];
@@ -469,12 +475,66 @@ export default function OrchestratorPanel() {
   const micSilenceTimerRef = useRef(null);
 
   function processVoiceInput(text) {
-    // Use refs so this is safe to call from inside a timeout (no stale closures)
+    // Delegate to handleSend via setInput + synthetic submit to reuse all logic
+    // We set input and immediately call the send logic inline (avoids state timing issues)
     const currS    = sRef.current;
     const currAuth = authUserRef.current;
 
     if (awaitingNameRef.current) {
+      setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
       handleNameReply(text);
+      return;
+    }
+
+    // For pending task / field interview, delegate to inline logic using refs
+    if (pendingTaskRef.current || awaitingFieldRef.current) {
+      setInput(text);
+      // Trigger via a synthetic submit after a tick
+      setTimeout(() => {
+        setInput('');
+        // Re-run the logic with current state
+        const synth = text;
+        setMessages(m => [...m, { id: nextId(), role: 'user', text: synth }]);
+
+        if (pendingTaskRef.current) {
+          const taskTitle = pendingTaskRef.current;
+          pendingTaskRef.current = null;
+          const dest = synth.toLowerCase();
+          if (/gantt|schedule|task/.test(dest)) {
+            const taskId = `mentor-${Date.now()}`;
+            applyActionsWithRefs([
+              { type: 'ADD_CUSTOM_TASK', description: `Add "${taskTitle}" to Gantt`, params: { id: taskId, title: taskTitle, est_hours: 4, addedAt: new Date().toISOString(), notes: 'Added via OpsMentor' }, requiresConfirmation: false },
+              { type: 'NAVIGATE_TAB', description: 'Go to Gantt', params: { tab: 'gantt' }, requiresConfirmation: false },
+            ]);
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Added "${taskTitle}" to Gantt — I estimated 4 hours. Adjust in the Gantt tab if needed.` }]);
+          } else {
+            const raidId = `raid-${Date.now()}`;
+            applyActionsWithRefs([
+              { type: 'ADD_RAID_ENTRY', description: `Add "${taskTitle}" to RAID`, params: { id: raidId, type: 'ISSUE', description: taskTitle, severity: 'MED', mitigation: 'Pending', status: 'OPEN', owner: 'PM', addedAt: new Date().toISOString() }, requiresConfirmation: false },
+              { type: 'NAVIGATE_TAB', description: 'Go to RAID', params: { tab: 'raid' }, requiresConfirmation: false },
+            ]);
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Added "${taskTitle}" to RAID log as an issue.` }]);
+          }
+          return;
+        }
+
+        const awField = awaitingFieldRef.current;
+        if (awField) {
+          awaitingFieldRef.current = null;
+          const synthText = FIELD_CTX_MAP[awField] ? `${FIELD_CTX_MAP[awField]} is ${synth}` : FIELD_REQ_MAP[awField] ? `${FIELD_REQ_MAP[awField]} is ${synth}` : null;
+          if (synthText) {
+            const result = ruleBasedResponse(synthText, currS, currAuth);
+            if (result) {
+              const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
+              if (actions.length > 0) applyActionsWithRefs(actions);
+              const next = nextFieldPrompt(sRef.current, awField);
+              awaitingFieldRef.current = next;
+              setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply + (next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields done! Say "run scan" to continue.') }]);
+              return;
+            }
+          }
+        }
+      }, 0);
       return;
     }
 
@@ -484,7 +544,8 @@ export default function OrchestratorPanel() {
     const fast = ruleBasedResponse(text, currS, currAuth);
     if (fast) {
       setThinking(false);
-      const { reply, actions = [] } = typeof fast === 'string' ? { reply: fast } : fast;
+      const { reply, actions = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
+      if (_pendingTask) pendingTaskRef.current = _pendingTask;
       const immediate   = actions.filter(a => !a.requiresConfirmation);
       const needsConfirm = actions.filter(a => a.requiresConfirmation);
       if (immediate.length > 0) applyActionsWithRefs(immediate);
@@ -554,7 +615,27 @@ export default function OrchestratorPanel() {
     rec.onspeechend = () => setRecStatus('processing');
 
     rec.onerror = e => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      if (e.error === 'no-speech') return; // silence is fine, keep listening
+      if (e.error === 'aborted') return;   // manual stop, onend handles it
+
+      if (e.error === 'network' || e.error === 'service-not-allowed') {
+        // Brave Browser blocks Google's speech API by default
+        recordingRef.current = false;
+        setRecording(false);
+        setRecStatus('');
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Mic blocked — Brave shields are likely preventing the speech API.\n\nTo fix in Brave:\n1. Click the lion shield icon in the address bar\n2. Set "Block fingerprinting" to "Standard" (not Aggressive)\n3. Reload the page, then tap the mic again\n\nAlternatively, Chrome or Edge work without any changes.' }]);
+        return;
+      }
+
+      if (e.error === 'not-allowed') {
+        recordingRef.current = false;
+        setRecording(false);
+        setRecStatus('');
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Microphone permission denied. Click the lock/camera icon in the address bar → allow Microphone → reload and try again.' }]);
+        return;
+      }
+
+      // Other errors — don't restart, just stop
       recordingRef.current = false;
       setRecording(false);
       setRecStatus('');
@@ -601,14 +682,60 @@ export default function OrchestratorPanel() {
 
   // ── Name reply handler ───────────────────────────────────────────────────
 
+  // Field interview order and questions
+  const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'goLiveDate'];
+  const FIELD_QUESTIONS = {
+    hw:          'What hardware platform? (e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9, or any custom server)',
+    os:          'What operating system? (e.g. RHEL 8.6, Ubuntu 22.04 LTS, AIX 7.2, Windows Server 2022, or any custom OS)',
+    db:          'What database? (e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022, or any custom DB)',
+    app:         'What application or middleware? (e.g. WebSphere 9.0, JBoss EAP 7.4, Apache Tomcat 10, nginx, or any custom app)',
+    projectName: 'What is the project name? (a short identifier for this build)',
+    envType:     'What environment? (Production, UAT, DR, Dev, or SIT)',
+    goLiveDate:  'What is the target go-live date? (e.g. 2026-09-15)',
+  };
+  const FIELD_CTX_MAP = {
+    hw: 'hardware', os: 'OS', db: 'database', app: 'application',
+  };
+  const FIELD_REQ_MAP = {
+    projectName: 'project name', envType: 'environment', goLiveDate: 'go-live date',
+  };
+
+  function nextFieldPrompt(currS, afterField) {
+    const { hw, os, db, app } = currS.ctx || {};
+    const r = currS.requirements || {};
+    const order = FIELD_ORDER;
+    for (const f of order) {
+      if (afterField && order.indexOf(f) <= order.indexOf(afterField)) continue;
+      if (f === 'hw' && !hw) return f;
+      if (f === 'os' && !os) return f;
+      if (f === 'db' && !db) return f;
+      if (f === 'app' && !app) return f;
+      if (f === 'projectName' && !r.projectName) return f;
+      if (f === 'envType' && !r.envType) return f;
+      if (f === 'goLiveDate' && !r.goLiveDate) return f;
+    }
+    return null;
+  }
+
   function handleNameReply(text) {
     awaitingNameRef.current = false;
     const raw = text.split(/[\s,!.]+/)[0];
     const name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase().replace(/[^a-z]/g, '');
     userNameRef.current = name;
     setUserName(name);
-    const sc = generateScript(sRef.current);
-    const reply = `Great to meet you, ${name}!\n\nHere is your full 7-phase roadmap:\n1. Phase 1 — Select HW, OS, DB, App in the left panel, then click Build\n2. AI Smart Scan — click "Run AI Smart Scan" in the sidebar (or say "run scan")\n3. System Design — fill all 8 sections, then click "Generate Task Plan"\n4. Phase 2 — select incidents and UUM items, then click "Inject Phase 2"\n5. Gantt — review the auto-generated schedule and critical path\n6. CAB Gate + RTM — submit for approval (say "approve CAB"), then sign off (say "sign RTM")\n7. Closure — complete the checklist and export the full audit trail to Excel\n\nCurrent step: ${sc.nextAction || 'Phase 1 — select your stack in the left panel'}\n\nJust tell me what to do, ${name}. I can set any field, run actions, or explain each step.`;
+
+    const currS = sRef.current;
+    const firstField = nextFieldPrompt(currS, null);
+    awaitingFieldRef.current = firstField;
+
+    const sc = generateScript(currS);
+    const alreadyBuilt = currS.isBuilt;
+    let reply;
+    if (alreadyBuilt) {
+      reply = `Great to meet you, ${name}! Your build is already in progress.\n\nCurrent step: ${sc.nextAction || 'All phases complete!'}\n\nYou can say things like:\n• "run scan", "inject phase 2", "approve CAB", "sign RTM", "go live"\n• "add task: [task name]" to add to Gantt or RAID\n• "set network firewall: pfsense" to update System Design\n• Ask me anything — I'll guide you!`;
+    } else {
+      reply = `Great to meet you, ${name}! Let's build your infrastructure profile step by step.\n\n${firstField ? FIELD_QUESTIONS[firstField] : 'All Phase 1 fields are complete — say "run scan" to continue!'}`;
+    }
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
   }
 
@@ -628,6 +755,69 @@ export default function OrchestratorPanel() {
     }
 
     setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
+
+    // ── Pending task destination choice (gantt / raid) ────────────────────
+    if (pendingTaskRef.current) {
+      const taskTitle = pendingTaskRef.current;
+      pendingTaskRef.current = null;
+      const dest = text.toLowerCase().trim();
+      if (/gantt|schedule|task/.test(dest)) {
+        const taskId = `mentor-${Date.now()}`;
+        applyActions([{
+          type: 'ADD_CUSTOM_TASK',
+          description: `Add "${taskTitle}" to Gantt`,
+          params: { id: taskId, title: taskTitle, est_hours: 4, addedAt: new Date().toISOString(), notes: 'Added via OpsMentor' },
+          requiresConfirmation: false,
+        }, {
+          type: 'NAVIGATE_TAB',
+          description: 'Navigate to Gantt tab',
+          params: { tab: 'gantt' },
+          requiresConfirmation: false,
+        }]);
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Added "${taskTitle}" to the Gantt schedule. I've estimated 4 hours — you can adjust it in the Gantt tab.` }]);
+      } else {
+        const raidId = `raid-${Date.now()}`;
+        applyActions([{
+          type: 'ADD_RAID_ENTRY',
+          description: `Add "${taskTitle}" to RAID`,
+          params: { id: raidId, type: 'ISSUE', description: taskTitle, severity: 'MED', mitigation: 'Pending', status: 'OPEN', owner: 'PM', addedAt: new Date().toISOString() },
+          requiresConfirmation: false,
+        }, {
+          type: 'NAVIGATE_TAB',
+          description: 'Navigate to RAID tab',
+          params: { tab: 'raid' },
+          requiresConfirmation: false,
+        }]);
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Added "${taskTitle}" to the RAID log as an issue. Open the RAID tab to set mitigation details.` }]);
+      }
+      return;
+    }
+
+    // ── Guided field interview ─────────────────────────────────────────────
+    const awField = awaitingFieldRef.current;
+    if (awField && !awaitingNameRef.current) {
+      awaitingFieldRef.current = null;
+      let syntheticText;
+      if (FIELD_CTX_MAP[awField]) {
+        syntheticText = `${FIELD_CTX_MAP[awField]} is ${text}`;
+      } else if (FIELD_REQ_MAP[awField]) {
+        syntheticText = `${FIELD_REQ_MAP[awField]} is ${text}`;
+      }
+      if (syntheticText) {
+        const result = ruleBasedResponse(syntheticText, sRef.current, authUserRef.current);
+        if (result) {
+          const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
+          if (actions.length > 0) applyActionsWithRefs(actions);
+          // Queue next field question
+          const next = nextFieldPrompt(sRef.current, awField);
+          awaitingFieldRef.current = next;
+          const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields complete! Say "run scan" to continue.';
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply + nextQ }]);
+          return;
+        }
+      }
+    }
+
     setThinking(true);
 
     try {
@@ -635,13 +825,12 @@ export default function OrchestratorPanel() {
       const fast = ruleBasedResponse(text, s, authUser);
       if (fast) {
         setThinking(false);
-        const { reply, actions = [] } = typeof fast === 'string' ? { reply: fast } : fast;
+        const { reply, actions = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
+        if (_pendingTask) pendingTaskRef.current = _pendingTask;
         const immediate = actions.filter(a => !a.requiresConfirmation);
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
-        const name = userNameRef.current;
-        const namedReply = name && !reply.includes(name) ? reply : reply;
         if (immediate.length > 0) applyActions(immediate);
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: namedReply }]);
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
         if (needsConfirm.length > 0) {
           setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
         }
@@ -698,26 +887,37 @@ export default function OrchestratorPanel() {
 
   return (
     <>
-      {/* Floating trigger */}
+      {/* Floating trigger — always visible; pulsing when OpsMentor active but minimized */}
       <button
-        onClick={() => { setOpen(o => !o); setTimeout(() => inputRef.current?.focus(), 100); }}
+        onClick={() => {
+          if (!open) {
+            setOpen(true);
+            setPanelVisible(true);
+            setTimeout(() => inputRef.current?.focus(), 100);
+          } else {
+            setPanelVisible(v => !v);
+            if (!panelVisible) setTimeout(() => inputRef.current?.focus(), 100);
+          }
+        }}
         className={[
           'fixed bottom-5 right-5 z-50 w-11 h-11 rounded-full shadow-xl',
           'flex items-center justify-center text-white text-base',
           'transition-all duration-200',
-          open ? 'bg-teal-600 scale-110' : 'bg-slate-700 hover:bg-teal-700',
-          hasAlerts && !open ? 'ring-2 ring-amber-400 ring-offset-1 animate-pulse' : '',
+          open && panelVisible ? 'bg-teal-600 scale-110' :
+          open ? 'bg-teal-500 ring-2 ring-teal-300 animate-pulse' :
+          'bg-slate-700 hover:bg-teal-700',
+          hasAlerts && !panelVisible ? 'ring-2 ring-amber-400 ring-offset-1' : '',
         ].join(' ')}
-        title="OpsMentor"
+        title={open && !panelVisible ? 'OpsMentor active — click to restore' : 'OpsMentor'}
       >
-        {open ? '×' : '🎯'}
+        {open && panelVisible ? '×' : '🎯'}
       </button>
 
-      {/* Panel */}
+      {/* Panel — shown/hidden via panelVisible, never unmounted once open so voice continues */}
       {open && (
         <div
           className="orchestrator-panel fixed z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
-          style={{ width: 440, maxHeight: 660, bottom: 72, right: 20 }}
+          style={{ width: 440, maxHeight: 660, bottom: 72, right: 20, display: panelVisible ? 'flex' : 'none' }}
         >
           {/* Header */}
           <div className="bg-slate-800 text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
@@ -732,7 +932,7 @@ export default function OrchestratorPanel() {
             >
               ⏹ Mute
             </button>
-            <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center ml-1 text-lg leading-none">×</button>
+            <button onClick={() => setPanelVisible(false)} className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center ml-1 text-xl leading-none" title="Minimise (voice continues)">−</button>
           </div>
 
           {/* Checklist */}

@@ -130,6 +130,18 @@ export function executeAction(action, store) {
       break;
     }
 
+    case 'ADD_CUSTOM_TASK':
+      store.addCustomMentorTask(params);
+      break;
+
+    case 'ADD_RAID_ENTRY':
+      store.addCustomRaidEntry(params);
+      break;
+
+    case 'NAVIGATE_TAB':
+      store.setActiveTab(params.tab);
+      break;
+
     default:
       console.warn('[Orchestrator] Unknown action type:', type);
   }

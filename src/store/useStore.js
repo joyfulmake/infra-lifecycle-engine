@@ -242,6 +242,12 @@ export const useStore = create((set, get) => ({
   // Cross-tab coherence alerts from the agent engine: [{ id, severity, tabs, message, action }]
   coherenceAlerts: [],
 
+  // OpsMentor user-added tasks: [{ id, title, est_hours, addedAt, notes }]
+  customMentorTasks: [],
+
+  // OpsMentor user-added RAID entries: [{ id, type, description, severity, mitigation, status, owner, addedAt }]
+  customRaidEntries: [],
+
   // Active PM tab
   activeTab: 'exec',
 
@@ -297,6 +303,7 @@ export const useStore = create((set, get) => ({
     isBuilt: true, scanComplete: false, designApplied: false,
     phase2Active: false, cabApproved: false, cabDeclined: false, rtmSigned: false, promoted: false,
     ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [], customUUM: [],
+    customMentorTasks: [], customRaidEntries: [],
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
     unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
@@ -332,6 +339,11 @@ export const useStore = create((set, get) => ({
 
   addCustomInc: (inc) => set(s => ({ customInc: [...s.customInc, inc], isDirty: true })),
   removeCustomInc: (id) => set(s => ({ customInc: s.customInc.filter(i => i.id !== id), isDirty: true })),
+
+  addCustomMentorTask: (task) => set(s => ({ customMentorTasks: [...(s.customMentorTasks || []), task], isDirty: true })),
+  removeCustomMentorTask: (id) => set(s => ({ customMentorTasks: (s.customMentorTasks || []).filter(t => t.id !== id), isDirty: true })),
+  addCustomRaidEntry: (entry) => set(s => ({ customRaidEntries: [...(s.customRaidEntries || []), entry], isDirty: true })),
+  removeCustomRaidEntry: (id) => set(s => ({ customRaidEntries: (s.customRaidEntries || []).filter(e => e.id !== id), isDirty: true })),
 
   addCustomUUM: (uum) => set(s => ({ customUUM: [...(s.customUUM || []), uum], isDirty: true })),
   updateCustomUUM: (id, patch) => set(s => ({
@@ -426,6 +438,8 @@ export const useStore = create((set, get) => ({
     selFix: b.selFix ?? [],
     customInc: b.customInc ?? [],
     customUUM: b.customUUM ?? [],
+    customMentorTasks: b.customMentorTasks ?? [],
+    customRaidEntries: b.customRaidEntries ?? [],
     sysDesignData: b.sysDesignData ?? initDesignData(),
     sdAiTasks: b.sdAiTasks ?? [],
     scanResults: b.scanResults ?? [],
