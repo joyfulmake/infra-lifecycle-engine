@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
-import { speakScript, CARTESIA_CONFIGURED } from '../lib/cartesia.js';
+import { speakScript, CARTESIA_CONFIGURED, CARTESIA_WORKER_URL, VOICE_IDS } from '../lib/cartesia.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
 import { sendChatMessage, ruleBasedResponse } from '../lib/orchestratorChat.js';
 
@@ -197,26 +197,90 @@ export default function OrchestratorPanel() {
 
   function nextId() { return ++msgId.current; }
 
-  // ── Web Speech voice queue ───────────────────────────────────────────────
-  // speechSynthesis.speak() naturally queues — each call adds to the browser queue.
-  // We use this for all auto-speak: orchestrator replies, log entries, nudges.
+  // ── Cartesia TTS queue — human voice for all OpsMentor replies ──────────
+  // Uses Cartesia Sonic-2 (warm guide voice). Falls back to Web Speech if
+  // Cartesia is unavailable or the fetch fails.
 
-  function speakQueued(text) {
-    if (!('speechSynthesis' in window) || !text?.trim()) return;
-    const clean = text
+  const cartesiaQueueRef   = useRef([]);
+  const cartesiaPlayingRef = useRef(false);
+  const currentAudioRef    = useRef(null);
+
+  function cleanText(text) {
+    return (text || '')
       .replace(/[•★✓✗→←↑↓]\s*/g, '')
       .replace(/\n+/g, '. ')
       .replace(/\d+\.\s/g, '')
       .trim()
-      .slice(0, 200);
+      .slice(0, 350);
+  }
+
+  function stopCartesia() {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    cartesiaQueueRef.current = [];
+    cartesiaPlayingRef.current = false;
+    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+  }
+
+  async function runCartesiaQueue() {
+    if (cartesiaQueueRef.current.length === 0) {
+      cartesiaPlayingRef.current = false;
+      return;
+    }
+    cartesiaPlayingRef.current = true;
+    const text = cartesiaQueueRef.current.shift();
+
+    let played = false;
+    if (CARTESIA_CONFIGURED) {
+      try {
+        const res = await fetch(`${CARTESIA_WORKER_URL}/cartesia-tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            voiceId: VOICE_IDS.guide,
+            speed: 'normal',
+            emotion: ['positivity:medium', 'curiosity:low'],
+          }),
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url  = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          currentAudioRef.current = audio;
+          await new Promise(resolve => {
+            audio.onended = resolve;
+            audio.onerror = resolve;
+            audio.play().catch(resolve);
+          });
+          URL.revokeObjectURL(url);
+          currentAudioRef.current = null;
+          played = true;
+        }
+      } catch { /* fall through */ }
+    }
+
+    if (!played && typeof speechSynthesis !== 'undefined') {
+      await new Promise(resolve => {
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.rate = 0.88; utt.pitch = 1.0; utt.volume = 1; utt.lang = 'en-US';
+        const kv = setInterval(() => { if (speechSynthesis.paused) speechSynthesis.resume(); }, 5000);
+        utt.onend  = () => { clearInterval(kv); resolve(); };
+        utt.onerror = () => { clearInterval(kv); resolve(); };
+        speechSynthesis.speak(utt);
+      });
+    }
+
+    runCartesiaQueue();
+  }
+
+  function speakQueued(text) {
+    const clean = cleanText(text);
     if (!clean) return;
-    const utt = new SpeechSynthesisUtterance(clean);
-    utt.rate = 0.88; utt.pitch = 1.0; utt.volume = 1; utt.lang = 'en-US';
-    // Chrome keepalive — prevents silent stalls
-    const kv = setInterval(() => { if (speechSynthesis.paused) speechSynthesis.resume(); }, 5000);
-    utt.onend  = () => clearInterval(kv);
-    utt.onerror = () => clearInterval(kv);
-    speechSynthesis.speak(utt);
+    cartesiaQueueRef.current.push(clean);
+    if (!cartesiaPlayingRef.current) runCartesiaQueue();
   }
 
   function buildWelcome() {
@@ -619,11 +683,23 @@ export default function OrchestratorPanel() {
       if (e.error === 'aborted') return;   // manual stop, onend handles it
 
       if (e.error === 'network' || e.error === 'service-not-allowed') {
-        // Brave Browser blocks Google's speech API by default
         recordingRef.current = false;
         setRecording(false);
         setRecStatus('');
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Mic blocked — Brave shields are likely preventing the speech API.\n\nTo fix in Brave:\n1. Click the lion shield icon in the address bar\n2. Set "Block fingerprinting" to "Standard" (not Aggressive)\n3. Reload the page, then tap the mic again\n\nAlternatively, Chrome or Edge work without any changes.' }]);
+
+        const ua = navigator.userAgent || '';
+        const isBrave = !!(navigator.brave);
+        const isEdge  = /Edg\//.test(ua) && !isBrave;
+
+        let msg;
+        if (isBrave) {
+          msg = 'Mic blocked in Brave.\n\nStandard shields may still block the speech API. Try:\n1. Click the lion icon in the address bar\n2. Toggle "Shields down" for this site (or set Fingerprinting to "Disabled for this site")\n3. Reload and tap the mic again\n\nFor reliable voice, Chrome is recommended.';
+        } else if (isEdge) {
+          msg = 'Mic blocked in Edge.\n\n1. Click the lock icon in the address bar → Site permissions → Microphone → Allow\n2. Or open edge://settings/content/microphone and check this site is not blocked\n3. If this is a managed/corporate device, your IT policy may block the speech API\n4. Reload after changing permissions';
+        } else {
+          msg = 'Mic was blocked by the browser.\n\n1. Click the lock/padlock icon in the address bar\n2. Set Microphone to "Allow" for this site\n3. If using a VPN or privacy extension, disable it for this site\n4. Reload and try again';
+        }
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: msg }]);
         return;
       }
 
@@ -631,11 +707,19 @@ export default function OrchestratorPanel() {
         recordingRef.current = false;
         setRecording(false);
         setRecStatus('');
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Microphone permission denied. Click the lock/camera icon in the address bar → allow Microphone → reload and try again.' }]);
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Microphone permission denied.\n\n1. Click the lock/camera icon in the address bar\n2. Set Microphone to "Allow"\n3. Reload the page and tap the mic again' }]);
         return;
       }
 
-      // Other errors — don't restart, just stop
+      if (e.error === 'audio-capture') {
+        recordingRef.current = false;
+        setRecording(false);
+        setRecStatus('');
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'No microphone detected. Check that a mic is connected and not in use by another app.' }]);
+        return;
+      }
+
+      // Other errors — stop cleanly
       recordingRef.current = false;
       setRecording(false);
       setRecStatus('');
@@ -926,7 +1010,7 @@ export default function OrchestratorPanel() {
               OpsMentor{userName ? ` · ${userName}` : ''}
             </span>
             <button
-              onClick={() => { if ('speechSynthesis' in window) { speechSynthesis.cancel(); setPlaying(false); } }}
+              onClick={() => { stopCartesia(); setPlaying(false); abortRef.current?.abort(); }}
               className="text-xs px-2.5 py-1 rounded font-medium transition-all bg-slate-600 hover:bg-slate-500 text-slate-300"
               title="Stop voice"
             >
