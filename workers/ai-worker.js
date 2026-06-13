@@ -422,6 +422,36 @@ export default {
       return handleCartesiaTts(req, env);
     }
 
+    // Whisper STT — raw audio body, returns { transcript }
+    if (req.method === 'POST' && url.pathname === '/whisper-transcribe') {
+      if (!env.GROQ_API_KEY) return err('GROQ_API_KEY not configured', 500);
+      try {
+        const audioBytes = await req.arrayBuffer();
+        if (!audioBytes.byteLength) return err('audio body required', 400);
+        const mimeType = req.headers.get('X-Audio-Type') || req.headers.get('Content-Type') || 'audio/webm';
+        const ext = mimeType.includes('ogg') ? 'audio.ogg' : mimeType.includes('mp4') ? 'audio.mp4' : 'audio.webm';
+        const form = new FormData();
+        form.append('file', new Blob([audioBytes], { type: mimeType }), ext);
+        form.append('model', 'whisper-large-v3-turbo');
+        form.append('response_format', 'json');
+        form.append('language', 'en');
+        form.append('temperature', '0');
+        const wRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.GROQ_API_KEY}` },
+          body: form,
+        });
+        if (!wRes.ok) {
+          const body = await wRes.text();
+          return err(`Whisper ${wRes.status}: ${body}`, 502);
+        }
+        const data = await wRes.json();
+        return json({ transcript: (data.text || '').trim() });
+      } catch (e) {
+        return err(`Whisper failed: ${e.message}`, 500);
+      }
+    }
+
     if (!env.GROQ_API_KEY) {
       return err('GROQ_API_KEY not configured', 500);
     }

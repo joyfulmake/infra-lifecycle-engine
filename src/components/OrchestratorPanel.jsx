@@ -176,7 +176,15 @@ export default function OrchestratorPanel() {
   const bottomRef       = useRef(null);
   const msgId           = useRef(0);
   const pendingConfirmRef = useRef(null);
-  const recognitionRef  = useRef(null);
+  // MediaRecorder + Whisper STT (replaces SpeechRecognition API)
+  const mediaStreamRef   = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef   = useRef([]);
+  const silenceTimerRef  = useRef(null);
+  const maxRecTimerRef   = useRef(null);
+  const audioCtxRef      = useRef(null);
+  const hasSpeechRef     = useRef(false);
+  const audioUnlockedRef = useRef(false);
 
   // Always-current refs to avoid stale closures in mic/timers
   const userNameRef       = useRef('');
@@ -250,16 +258,21 @@ export default function OrchestratorPanel() {
           const url  = URL.createObjectURL(blob);
           const audio = new Audio(url);
           currentAudioRef.current = audio;
-          await new Promise(resolve => {
-            audio.onended = resolve;
-            audio.onerror = resolve;
-            audio.play().catch(resolve);
-          });
-          URL.revokeObjectURL(url);
-          currentAudioRef.current = null;
-          played = true;
+          try {
+            await audio.play(); // throws NotAllowedError if autoplay blocked
+            await new Promise(resolve => {
+              audio.onended = resolve;
+              audio.onerror = resolve;
+            });
+            played = true;
+          } catch {
+            // Autoplay blocked — fall through to Web Speech
+          } finally {
+            URL.revokeObjectURL(url);
+            currentAudioRef.current = null;
+          }
         }
-      } catch { /* fall through */ }
+      } catch { /* network error — fall through */ }
     }
 
     if (!played && typeof speechSynthesis !== 'undefined') {
@@ -532,12 +545,6 @@ export default function OrchestratorPanel() {
   }
 
   // ── Mic / voice input ────────────────────────────────────────────────────
-  // continuous=true + interimResults=true keeps the mic alive.
-  // Auto-restarts when Chrome kills the session (~15–30 s) via onend check.
-  // 2-second silence timer auto-sends the transcript so no button press needed.
-
-  const micSilenceTimerRef = useRef(null);
-
   function processVoiceInput(text) {
     // Delegate to handleSend via setInput + synthetic submit to reuse all logic
     // We set input and immediately call the send logic inline (avoids state timing issues)
@@ -639,129 +646,169 @@ export default function OrchestratorPanel() {
     if (blocked.length > 0) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Could not complete: ${blocked.join(' ')}` }]);
   }
 
-  function startRecognition() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.continuous = true;
-    rec.interimResults = true;
-    let finalTranscript = '';
+  // ── MediaRecorder + Groq Whisper STT ──────────────────────────────────────
+  // Uses MediaRecorder (getUserMedia) — works in ALL browsers including Brave/Edge.
+  // Audio is sent to the CF Worker → Groq Whisper → transcript returned.
+  // No Google/Microsoft speech API involved — zero browser-level blocking.
 
-    rec.onstart = () => {
+  function unlockAudio() {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    try {
+      const ctx = new AudioContext();
+      ctx.resume().then(() => ctx.close()).catch(() => {});
+    } catch {}
+  }
+
+  async function startRecording() {
+    if (recording) return;
+    unlockAudio();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      mediaStreamRef.current = stream;
+
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
+        .find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mediaRecorderRef.current = rec;
+      audioChunksRef.current = [];
+      hasSpeechRef.current = false;
+
+      rec.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
+      rec.start(300);
+
       setRecording(true);
       recordingRef.current = true;
       setRecStatus('listening');
-      finalTranscript = '';
-    };
 
-    rec.onresult = e => {
-      clearTimeout(micSilenceTimerRef.current);
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) finalTranscript += r[0].transcript + ' ';
-        else interim = r[0].transcript;
-      }
-      const display = (finalTranscript + interim).trim();
-      if (display) setInput(display);
+      // Volume analysis for silence detection
+      const audioCtx  = new AudioContext();
+      audioCtxRef.current = audioCtx;
+      const source  = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
 
-      if (finalTranscript.trim()) {
-        micSilenceTimerRef.current = setTimeout(() => {
-          const text = finalTranscript.trim();
-          finalTranscript = '';
-          setInput('');
-          if (text) processVoiceInput(text);
-        }, 2000);
-      }
-    };
-
-    rec.onspeechend = () => setRecStatus('processing');
-
-    rec.onerror = e => {
-      if (e.error === 'no-speech') return; // silence is fine, keep listening
-      if (e.error === 'aborted') return;   // manual stop, onend handles it
-
-      if (e.error === 'network' || e.error === 'service-not-allowed') {
-        recordingRef.current = false;
-        setRecording(false);
-        setRecStatus('');
-
-        const ua = navigator.userAgent || '';
-        const isBrave = !!(navigator.brave);
-        const isEdge  = /Edg\//.test(ua) && !isBrave;
-
-        let msg;
-        if (isBrave) {
-          msg = 'Mic blocked in Brave.\n\nStandard shields may still block the speech API. Try:\n1. Click the lion icon in the address bar\n2. Toggle "Shields down" for this site (or set Fingerprinting to "Disabled for this site")\n3. Reload and tap the mic again\n\nFor reliable voice, Chrome is recommended.';
-        } else if (isEdge) {
-          msg = 'Mic blocked in Edge.\n\n1. Click the lock icon in the address bar → Site permissions → Microphone → Allow\n2. Or open edge://settings/content/microphone and check this site is not blocked\n3. If this is a managed/corporate device, your IT policy may block the speech API\n4. Reload after changing permissions';
-        } else {
-          msg = 'Mic was blocked by the browser.\n\n1. Click the lock/padlock icon in the address bar\n2. Set Microphone to "Allow" for this site\n3. If using a VPN or privacy extension, disable it for this site\n4. Reload and try again';
+      function checkVolume() {
+        if (!recordingRef.current) return;
+        analyser.getByteTimeDomainData(buf);
+        const rms = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length);
+        if (rms > 3.5) { // speech detected
+          hasSpeechRef.current = true;
+          clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            if (recordingRef.current && hasSpeechRef.current) submitAudio();
+          }, 1800);
         }
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: msg }]);
-        return;
+        requestAnimationFrame(checkVolume);
       }
+      requestAnimationFrame(checkVolume);
 
-      if (e.error === 'not-allowed') {
-        recordingRef.current = false;
-        setRecording(false);
-        setRecStatus('');
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Microphone permission denied.\n\n1. Click the lock/camera icon in the address bar\n2. Set Microphone to "Allow"\n3. Reload the page and tap the mic again' }]);
-        return;
-      }
+      // Safety cap: submit after 30s regardless of silence
+      maxRecTimerRef.current = setTimeout(() => {
+        if (recordingRef.current) submitAudio();
+      }, 30000);
 
-      if (e.error === 'audio-capture') {
-        recordingRef.current = false;
-        setRecording(false);
-        setRecStatus('');
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'No microphone detected. Check that a mic is connected and not in use by another app.' }]);
-        return;
-      }
-
-      // Other errors — stop cleanly
-      recordingRef.current = false;
+    } catch (e) {
       setRecording(false);
+      recordingRef.current = false;
       setRecStatus('');
-    };
+      const msg =
+        e.name === 'NotAllowedError'  ? 'Microphone access denied.\n\nClick the lock/camera icon in the address bar → Microphone → Allow → reload the page.' :
+        e.name === 'NotFoundError'    ? 'No microphone found. Connect a mic and try again.' :
+        e.name === 'NotReadableError' ? 'Microphone is in use by another app. Close it and try again.' :
+                                        `Mic error: ${e.message}. Try reloading the page.`;
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: msg }]);
+    }
+  }
 
-    // Auto-restart when Chrome kills the session (if user didn't manually stop)
-    rec.onend = () => {
-      clearTimeout(micSilenceTimerRef.current);
-      if (recordingRef.current) {
-        setRecStatus('restarting');
-        setTimeout(() => {
-          if (recordingRef.current) {
-            setRecStatus('listening');
-            startRecognition();
-          }
-        }, 300);
-      } else {
-        setRecording(false);
-        setRecStatus('');
+  async function submitAudio() {
+    clearTimeout(silenceTimerRef.current);
+    clearTimeout(maxRecTimerRef.current);
+    hasSpeechRef.current = false;
+    setRecStatus('processing');
+
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== 'inactive') {
+      await new Promise(resolve => { rec.onstop = resolve; rec.stop(); });
+    }
+
+    const blob = new Blob(audioChunksRef.current, {
+      type: mediaRecorderRef.current?.mimeType || 'audio/webm',
+    });
+    audioChunksRef.current = [];
+
+    if (blob.size < 2000) { // too short — noise only
+      if (recordingRef.current) restartCapture();
+      return;
+    }
+
+    try {
+      const res = await fetch(`${CARTESIA_WORKER_URL}/whisper-transcribe`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': blob.type || 'audio/webm',
+          'X-Audio-Type':  blob.type || 'audio/webm',
+        },
+        body: blob,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { transcript } = await res.json();
+      if (transcript?.trim()) {
+        setInput('');
+        processVoiceInput(transcript.trim());
       }
-    };
+    } catch (e) {
+      console.error('[Whisper STT]', e);
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Could not transcribe — please type your message or check your connection and try again.' }]);
+    }
 
-    recognitionRef.current = rec;
-    try { rec.start(); } catch (_) { /* already started */ }
+    if (recordingRef.current) restartCapture();
+  }
+
+  function restartCapture() {
+    const stream = mediaStreamRef.current;
+    if (!stream || !recordingRef.current) { setRecStatus('listening'); return; }
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    mediaRecorderRef.current = rec;
+    audioChunksRef.current = [];
+    hasSpeechRef.current = false;
+    rec.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
+    rec.start(300);
+    setRecStatus('listening');
+    maxRecTimerRef.current = setTimeout(() => { if (recordingRef.current) submitAudio(); }, 30000);
+  }
+
+  function stopRecording() {
+    recordingRef.current = false;
+    clearTimeout(silenceTimerRef.current);
+    clearTimeout(maxRecTimerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    setRecording(false);
+    setRecStatus('');
   }
 
   function handleMic() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Voice input is not supported in this browser. Try Chrome or Edge.' }]);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Your browser does not support audio capture. Please type your message.' }]);
       return;
     }
-    if (recording) {
-      // Manual stop
-      recordingRef.current = false;
-      clearTimeout(micSilenceTimerRef.current);
-      recognitionRef.current?.stop();
-      setRecording(false);
-      setRecStatus('');
-      return;
-    }
-    startRecognition();
+    if (recording) stopRecording();
+    else startRecording();
   }
 
   // ── Name reply handler ───────────────────────────────────────────────────
@@ -1111,7 +1158,7 @@ export default function OrchestratorPanel() {
             </button>
             {/* Send button */}
             <button
-              onClick={handleSend}
+              onClick={() => { unlockAudio(); handleSend(); }}
               disabled={!input.trim() || thinking}
               className="px-4 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm"
             >
