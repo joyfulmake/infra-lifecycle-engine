@@ -132,7 +132,7 @@ export function ruleBasedResponse(message, s, authUser) {
       actions: [{
         type: 'SET_CTX',
         description: `Set ${ctxField.label} to ${ctxField.value}`,
-        payload: { [ctxField.field]: ctxField.value },
+        params: { key: ctxField.field, value: ctxField.value },
         requiresConfirmation: false,
       }],
     };
@@ -146,7 +146,7 @@ export function ruleBasedResponse(message, s, authUser) {
       actions: [{
         type: 'SET_REQUIREMENT',
         description: `Set ${reqField.label} to ${reqField.value}`,
-        payload: { [reqField.field]: reqField.value },
+        params: { key: reqField.field, value: reqField.value },
         requiresConfirmation: false,
       }],
     };
