@@ -2,6 +2,7 @@
 // All functions are pure / synchronous except executeAction (calls store setters).
 
 import { getUserRolesForBuild, canEditDesignSection, isQATeamLead } from './roleAccess.js';
+import { runSmartScan } from './smartScan.js';
 
 // ── Permission check ──────────────────────────────────────────────────────────
 // Returns { allowed: true } or { allowed: false, reason: string }
@@ -15,7 +16,14 @@ export function checkPermission(action, authUser, s) {
   switch (action.type) {
     case 'SET_CTX':
     case 'SET_REQUIREMENT':
+      // Allow when no PM is assigned (Phase 1 setup or guest mode)
+      if (!s.requirements?.pmEmail) return { allowed: true };
       return { allowed: false, reason: 'Only the PM can change stack or project settings.' };
+
+    case 'RUN_SCAN':
+      // Allow if stack is built and scan not yet done
+      if (!s.isBuilt) return { allowed: false, reason: 'Build the stack first before running a scan.' };
+      return { allowed: true };
 
     case 'SET_DESIGN_FIELD': {
       const ok = canEditDesignSection(userRoles, action.params?.section);
@@ -25,14 +33,17 @@ export function checkPermission(action, authUser, s) {
     }
 
     case 'SET_ROLE_ASSIGNMENT':
+      if (!s.requirements?.pmEmail) return { allowed: true };
       return { allowed: false, reason: 'Only the PM can assign roles.' };
 
     case 'APPLY_DESIGN':
     case 'INJECT_PHASE2':
     case 'SUBMIT_CAB':
+      if (!s.requirements?.pmEmail) return { allowed: true };
       return { allowed: false, reason: 'Only the PM can advance major workflow gates.' };
 
     case 'SIGN_RTM': {
+      if (!s.requirements?.pmEmail) return { allowed: true };
       const qaLead = isQATeamLead(authUser, s.roleAssignments);
       return qaLead
         ? { allowed: true }
@@ -40,6 +51,7 @@ export function checkPermission(action, authUser, s) {
     }
 
     case 'PROMOTE':
+      if (!s.requirements?.pmEmail) return { allowed: true };
       return { allowed: false, reason: 'Only the PM can promote to live production.' };
 
     case 'TOGGLE_INC':
@@ -111,6 +123,12 @@ export function executeAction(action, store) {
     case 'PROMOTE':
       store.promote();
       break;
+
+    case 'RUN_SCAN': {
+      const results = runSmartScan(store.ctx);
+      store.completeScan(results);
+      break;
+    }
 
     default:
       console.warn('[Orchestrator] Unknown action type:', type);
