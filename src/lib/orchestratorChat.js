@@ -51,6 +51,46 @@ You can say things like:
   "environment is Production"
 `.trim();
 
+// ── EOL / compatibility knowledge base ────────────────────────────────────────
+// Checked whenever a stack field is set; triggers automatic incident suggestions.
+const EOL_KNOWN = [
+  // OS
+  { field: 'os', pattern: /rhel\s*[67]|red hat.*[67]\b/i, eolDate: 'Nov 2020 (RHEL 6) / Jun 2024 (RHEL 7)', severity: 'CRITICAL', short: 'RHEL EOL', description: 'Red Hat Enterprise Linux 6/7 reached End of Life. Migrate to RHEL 8.x or 9.x.', grp: 'OS Lifecycle', layers: ['os'] },
+  { field: 'os', pattern: /ubuntu\s*(14|16|18)\.04/i, eolDate: 'varies (2019–2023)', severity: 'CRITICAL', short: 'Ubuntu LTS EOL', description: 'Ubuntu 14.04/16.04/18.04 reached End of Life. Upgrade to Ubuntu 22.04 LTS or 24.04 LTS.', grp: 'OS Lifecycle', layers: ['os'] },
+  { field: 'os', pattern: /centos\s*[678]/i, eolDate: 'Dec 2021 (CentOS 8)', severity: 'CRITICAL', short: 'CentOS EOL', description: 'CentOS 6/7/8 reached End of Life. Migrate to RHEL, AlmaLinux, or Rocky Linux.', grp: 'OS Lifecycle', layers: ['os'] },
+  { field: 'os', pattern: /windows server\s*(2008|2012)/i, eolDate: 'Jan 2020 (2008) / Oct 2023 (2012)', severity: 'CRITICAL', short: 'Windows Server EOL', description: 'Windows Server 2008/2012 reached End of Life. Upgrade to Windows Server 2022.', grp: 'OS Lifecycle', layers: ['os'] },
+  { field: 'os', pattern: /aix\s*[56]/i, eolDate: 'varies (2015–2017)', severity: 'HIGH', short: 'AIX EOL', description: 'AIX 5.x/6.x is past End of Service Life. Upgrade to AIX 7.2 or 7.3.', grp: 'OS Lifecycle', layers: ['os'] },
+  { field: 'os', pattern: /sles\s*1[012]/i, eolDate: 'varies (2019–2022)', severity: 'HIGH', short: 'SLES EOL', description: 'SLES 10/11/12 reached End of General Support. Upgrade to SLES 15.', grp: 'OS Lifecycle', layers: ['os'] },
+  // DB
+  { field: 'db', pattern: /oracle\s*(9|10|11|12)c/i, eolDate: 'varies (2008–2022)', severity: 'CRITICAL', short: 'Oracle DB EOL', description: 'Oracle Database 9i/10g/11g/12c is past Extended Support. Upgrade to Oracle 19c or 21c.', grp: 'Database Lifecycle', layers: ['db'] },
+  { field: 'db', pattern: /mysql\s*[45]\./i, eolDate: 'varies (2018–2023)', severity: 'CRITICAL', short: 'MySQL EOL', description: 'MySQL 4.x/5.x reached End of Life. Upgrade to MySQL 8.0+.', grp: 'Database Lifecycle', layers: ['db'] },
+  { field: 'db', pattern: /postgresql\s*(9|10|11|12|13)\./i, eolDate: 'varies (2019–2025)', severity: 'HIGH', short: 'PostgreSQL EOL', description: 'PostgreSQL 9.x–13.x are at or approaching End of Life. Upgrade to PG 16 or 17.', grp: 'Database Lifecycle', layers: ['db'] },
+  { field: 'db', pattern: /sql server\s*(2008|2012|2014|2016|2017)/i, eolDate: 'varies (2019–2027)', severity: 'HIGH', short: 'SQL Server EOL', description: 'SQL Server 2008–2017 is at or approaching End of Support. Upgrade to SQL Server 2022.', grp: 'Database Lifecycle', layers: ['db'] },
+  { field: 'db', pattern: /sybase\b/i, eolDate: 'Dec 2025 (SAP ASE)', severity: 'HIGH', short: 'Sybase/SAP ASE EOL', description: 'Sybase/SAP ASE approaching End of Mainstream Support. Plan migration to SAP HANA or PostgreSQL.', grp: 'Database Lifecycle', layers: ['db'] },
+  { field: 'db', pattern: /mongodb\s*[234]\./i, eolDate: 'varies (2021–2024)', severity: 'HIGH', short: 'MongoDB EOL', description: 'MongoDB 2.x/3.x/4.x reached End of Life. Upgrade to MongoDB 7.0+.', grp: 'Database Lifecycle', layers: ['db'] },
+  // App/Middleware
+  { field: 'app', pattern: /websphere\s*(6|7|8\.[05])\b/i, eolDate: 'varies (2016–2022)', severity: 'CRITICAL', short: 'WebSphere EOL', description: 'IBM WebSphere Application Server 6.x/7.x/8.0/8.5 reached End of Support. Upgrade to WAS 9.0 or Liberty.', grp: 'Middleware Lifecycle', layers: ['app'] },
+  { field: 'app', pattern: /jboss\s*(4|5|6)\b|jboss eap\s*[456]\b/i, eolDate: 'varies (2014–2019)', severity: 'HIGH', short: 'JBoss EOL', description: 'JBoss AS 4/5/6 / EAP 4/5/6 reached End of Life. Upgrade to JBoss EAP 7.4 or 8.x.', grp: 'Middleware Lifecycle', layers: ['app'] },
+  { field: 'app', pattern: /tomcat\s*[67]\b/i, eolDate: 'Dec 2021 (Tomcat 7)', severity: 'HIGH', short: 'Tomcat EOL', description: 'Apache Tomcat 6/7 reached End of Life. Upgrade to Tomcat 10.x or 11.x.', grp: 'Middleware Lifecycle', layers: ['app'] },
+  { field: 'app', pattern: /weblogic\s*(10|11|12)\b/i, eolDate: 'varies (2019–2024)', severity: 'HIGH', short: 'WebLogic EOL', description: 'Oracle WebLogic 10.x/11g/12c approaching or past Extended Support. Upgrade to WebLogic 14c.', grp: 'Middleware Lifecycle', layers: ['app'] },
+  { field: 'app', pattern: /iis\s*[678]\b/i, eolDate: 'varies (2015–2022)', severity: 'HIGH', short: 'IIS Version EOL', description: 'IIS 6/7/8 reached End of Support (tied to Windows Server lifecycle). Upgrade to IIS 10 on Server 2022.', grp: 'Middleware Lifecycle', layers: ['app'] },
+];
+
+function checkEolForField(field, value) {
+  return EOL_KNOWN.filter(e => e.field === field && e.pattern.test(value));
+}
+
+// Check full stack for any EOL hits
+function checkStackEol(ctx) {
+  const hits = [];
+  const fields = ['hw', 'os', 'db', 'app'];
+  fields.forEach(f => {
+    const v = ctx?.[f];
+    if (v) hits.push(...checkEolForField(f, v));
+  });
+  return hits;
+}
+
 const HW_EXAMPLES = 'Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9, Cisco UCS, Supermicro, Lenovo ThinkSystem';
 const OS_EXAMPLES = 'RHEL 8.6, RHEL 9.2, Ubuntu 22.04 LTS, AIX 7.2, Windows Server 2022, Oracle Linux 8, SLES 15';
 const DB_EXAMPLES = 'Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022, MongoDB 6, MariaDB 10.6';
@@ -123,18 +163,71 @@ export function ruleBasedResponse(message, s, authUser) {
   const m = message.toLowerCase().trim();
   const raw = message.trim();
 
-  // ── Field-setting commands — parse and return with actions ────────────────
+  // ── Field-setting commands — parse and return with actions + EOL detection ─
   const ctxField = parseSetField(raw);
   if (ctxField) {
-    const next = nextPhase1Prompt({ ...s, ctx: { ...s.ctx, [ctxField.field]: ctxField.value } });
-    return {
-      reply: `Got it — ${ctxField.label} set to "${ctxField.value}".${next ? '\n\n' + next : '\n\nAll stack fields are set. Click "Build" in the left panel to continue to AI Smart Scan.'}`,
-      actions: [{
+    const updatedCtx = { ...s.ctx, [ctxField.field]: ctxField.value };
+    const next = nextPhase1Prompt({ ...s, ctx: updatedCtx });
+    const allFilled = !!(updatedCtx.hw && updatedCtx.os && updatedCtx.db && updatedCtx.app);
+
+    // EOL / incompatibility detection
+    const eolHits = checkEolForField(ctxField.field, ctxField.value);
+    const eolWarnings = eolHits.map(h =>
+      `⚠️ EOL DETECTED: "${ctxField.value}" matches "${h.short}" — ${h.description} (EOL: ${h.eolDate})`
+    ).join('\n');
+
+    const actions = [
+      {
         type: 'SET_CTX',
         description: `Set ${ctxField.label} to ${ctxField.value}`,
         params: { key: ctxField.field, value: ctxField.value },
         requiresConfirmation: false,
-      }],
+      },
+    ];
+
+    // Offer to create incidents for each EOL hit
+    eolHits.forEach(h => {
+      const incId = `EOL-${ctxField.field.toUpperCase()}-${Date.now()}`;
+      actions.push({
+        type: 'ADD_INCIDENT',
+        description: `Auto-create EOL incident: ${h.short}`,
+        params: {
+          id: incId,
+          code: incId,
+          short: h.short,
+          txt: h.description,
+          grp: h.grp,
+          sev: h.severity,
+          owner: 'SysAdmin',
+          layers: h.layers,
+        },
+        requiresConfirmation: true,
+        confirmLabel: `Add "${h.short}" incident`,
+      });
+    });
+
+    // Auto-trigger scan if all 4 fields now filled and scan not done
+    if (allFilled && s.isBuilt && !s.scanComplete) {
+      actions.push({
+        type: 'RUN_SCAN',
+        description: 'Auto-run AI Smart Scan (all stack fields complete)',
+        requiresConfirmation: false,
+      });
+    }
+
+    const eolNote = eolHits.length > 0
+      ? `\n\n${eolWarnings}\n\nI can create incident entries for these. Say "yes" to each confirmation below.`
+      : '';
+
+    const nextNote = allFilled && !s.isBuilt
+      ? '\n\nAll stack fields are set. Click "Build" in the left panel to continue to AI Smart Scan.'
+      : allFilled && s.isBuilt && !s.scanComplete
+      ? '\n\nAll stack fields complete — running AI Smart Scan now.'
+      : next ? '\n\n' + next : '';
+
+    return {
+      reply: `Got it — ${ctxField.label} set to "${ctxField.value}".${eolNote}${nextNote}`,
+      actions,
     };
   }
 
@@ -241,7 +334,7 @@ export function ruleBasedResponse(message, s, authUser) {
 
   // ── Help / capabilities ───────────────────────────────────────────────────
   if (/\b(help|what can you do|capabilities|commands|how do i use|what.*do)\b/.test(m)) {
-    return { reply: `I'm your OpsMentor — here's what I can do:\n\n📋 Guide you through all 7 lifecycle phases step by step\n🔧 Set Phase 1 values ("hardware is Dell PowerEdge R750")\n📊 Check build status, RTM, role assignments, stack info\n⚠️ Surface coherence alerts and stale data warnings\n✅ Execute workflow actions with your confirmation\n🎙️ Voice narration for each phase (click ▶ Voice)\n\nTry asking:\n• "What's the current status?"\n• "Who is the Unix Admin?"\n• "Is the RTM ready?"\n• "What's next in the workflow?"\n• "OS is RHEL 8.6"` };
+    return { reply: `I'm your OpsMentor — here's what I can do:\n\n📋 Guide you through all 7 lifecycle phases step by step\n🔧 Set Phase 1 values: "OS is RHEL 8.6", "hardware is Dell PowerEdge R750"\n⚠️ Detect EOL/incompatibilities as you type stack info — auto-create incidents\n🔍 Check full stack compatibility: "check incompatibilities"\n🩺 Add incidents: "add incident: kernel vulnerability"\n📦 Add UUM items: "add upgrade: OpenSSL 3.x"\n📋 Add tasks: "add task: pre-migration backup validation"\n📝 Add to RAID: "add risk: no rollback window confirmed"\n📊 Check status, RTM, alerts, role assignments\n✅ Execute workflow actions with your confirmation\n🎙️ Voice input + Cartesia voice narration\n\nAll incidents, UUM items, and tasks sync to: topology diagram, RTM, Gantt, dependency matrix, and Excel export automatically.\n\nTry: "check incompatibilities" or "what's next?"` };
   }
 
   // ── Status / current state ─────────────────────────────────────────────────
@@ -320,6 +413,78 @@ export function ruleBasedResponse(message, s, authUser) {
   if (/\b(closure|close out|post.?go.?live|closing)\b/.test(m)) {
     if (!s.rtmSigned) return { reply: 'Closure unlocks after RTM sign-off. Complete the RTM tab first.' };
     return { reply: 'Go to the Closure tab to tick off post-go-live checks and add final notes. Once all checks are done, mark the build as promoted.' };
+  }
+
+  // ── Incompatibility / EOL scan ─────────────────────────────────────────────
+  if (/\b(incompatib|eol|end of life|end-of-life|compat|lifecycle|version check|supported)\b/.test(m)) {
+    const { hw, os, db, app } = s.ctx || {};
+    if (!hw && !os && !db && !app) {
+      return { reply: 'No stack defined yet. Tell me the hardware, OS, database, and application first, then I can check compatibility.' };
+    }
+    const hits = checkStackEol(s.ctx);
+    if (hits.length === 0) {
+      return { reply: `Stack compatibility check:\n• HW: ${hw || '—'}\n• OS: ${os || '—'}\n• DB: ${db || '—'}\n• App: ${app || '—'}\n\nNo known EOL or incompatibility issues detected in my local knowledge base. Tip: Run the AI Smart Scan for CVE and patch-level checks.` };
+    }
+    const actions = [];
+    const lines = hits.map(h => {
+      const incId = `EOL-SCAN-${h.field.toUpperCase()}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      actions.push({
+        type: 'ADD_INCIDENT',
+        description: `Create EOL incident: ${h.short}`,
+        params: { id: incId, code: incId, short: h.short, txt: h.description, grp: h.grp, sev: h.severity, owner: 'SysAdmin', layers: h.layers },
+        requiresConfirmation: true,
+        confirmLabel: `Add "${h.short}" incident`,
+      });
+      return `⚠️ ${h.short} [${h.severity}] — ${h.description}`;
+    });
+    return {
+      reply: `Compatibility scan — ${hits.length} issue${hits.length !== 1 ? 's' : ''} found:\n\n${lines.join('\n\n')}\n\nConfirm below to create incidents in the app. These will flow to the topology, RTM, Gantt, and Excel export automatically.`,
+      actions,
+    };
+  }
+
+  // ── Add incident directly ──────────────────────────────────────────────────
+  const addIncMatch = raw.match(/\badd incident[:\s]+(.+)/i) || raw.match(/\bcreate incident[:\s]+(.+)/i) || raw.match(/\bnew incident[:\s]+(.+)/i);
+  if (addIncMatch) {
+    const title = addIncMatch[1].trim();
+    const incId = `INC-MENTOR-${Date.now()}`;
+    return {
+      reply: `Creating incident "${title}" and adding it to the scope. It will appear in the topology, RTM, and Excel export.`,
+      actions: [{
+        type: 'ADD_INCIDENT',
+        description: `Add incident: ${title}`,
+        params: { id: incId, code: incId, short: title, txt: title, grp: 'Custom', sev: 'HIGH', owner: 'PM', layers: [] },
+        requiresConfirmation: false,
+      }, {
+        type: 'NAVIGATE_TAB',
+        description: 'Navigate to Exec Summary to see incidents',
+        params: { tab: 'exec' },
+        requiresConfirmation: false,
+      }],
+    };
+  }
+
+  // ── Add UUM / component item ───────────────────────────────────────────────
+  const addUumMatch = raw.match(/\badd (uum|component|upgrade|migration|patch)[:\s]+(.+)/i);
+  if (addUumMatch) {
+    const typeWord = addUumMatch[1].toLowerCase();
+    const title = addUumMatch[2].trim();
+    const uumId = `UUM-MENTOR-${Date.now()}`;
+    const uumType = typeWord === 'patch' ? 'patch' : typeWord === 'upgrade' ? 'upgrade' : 'migration';
+    return {
+      reply: `Adding "${title}" as a UUM ${uumType} item. It will appear in Gantt tasks, RTM, the dependency matrix, and Excel export.`,
+      actions: [{
+        type: 'ADD_UUM_ITEM',
+        description: `Add UUM item: ${title}`,
+        params: { id: uumId, short: title, txt: title, grp: 'Custom', layer: 'os', type: uumType, layers: ['os'] },
+        requiresConfirmation: false,
+      }, {
+        type: 'NAVIGATE_TAB',
+        description: 'Navigate to Exec Summary',
+        params: { tab: 'exec' },
+        requiresConfirmation: false,
+      }],
+    };
   }
 
   // ── Add task to Gantt ──────────────────────────────────────────────────────

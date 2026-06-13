@@ -57,6 +57,8 @@ export function checkPermission(action, authUser, s) {
     case 'TOGGLE_INC':
     case 'TOGGLE_UUM':
     case 'SET_RTM_ROW':
+    case 'ADD_INCIDENT':
+    case 'ADD_UUM_ITEM':
       // Any assigned role can adjust scope / set RTM rows
       return userRoles.length > 0
         ? { allowed: true }
@@ -137,6 +139,41 @@ export function executeAction(action, store) {
     case 'ADD_RAID_ENTRY':
       store.addCustomRaidEntry(params);
       break;
+
+    case 'ADD_INCIDENT': {
+      // params: { id, code, short, txt, grp, sev, owner, layers }
+      const incId = params.id || params.code || `INC-MENTOR-${Date.now()}`;
+      const incRecord = {
+        id: incId,
+        code: incId,
+        short: params.short || params.title || incId,
+        txt: params.txt || params.description || params.short || '',
+        grp: params.grp || params.group || 'Custom',
+        sev: params.sev || params.severity || 'HIGH',
+        owner: params.owner || 'SysAdmin',
+        layers: params.layers || [],
+      };
+      store.addCustomInc(incRecord);
+      store.toggleInc(incId);
+      break;
+    }
+
+    case 'ADD_UUM_ITEM': {
+      // params: { id, short, txt, grp, layer, type, layers }
+      const uumId = params.id || `UUM-MENTOR-${Date.now()}`;
+      const uumRecord = {
+        id: uumId,
+        short: params.short || params.title || uumId,
+        txt: params.txt || params.description || params.short || '',
+        grp: params.grp || params.group || 'Custom',
+        layer: params.layer || params.primaryLayer || 'os',
+        type: params.type || 'upgrade',
+        layers: params.layers || [params.layer || 'os'],
+      };
+      store.addCustomUUM(uumRecord);
+      store.toggleUUM(uumId);
+      break;
+    }
 
     case 'NAVIGATE_TAB':
       store.setActiveTab(params.tab);

@@ -857,6 +857,8 @@ export default function PhasePanel() {
         sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,
         requirements: s.requirements, emergencyChanges: s.emergencyChanges,
         customInc: s.customInc, customUUM: s.customUUM,
+        customMentorTasks: s.customMentorTasks || [],
+        customRaidEntries: s.customRaidEntries || [],
         rtmRows: s.rtmRows, liveEolData: s.liveEolData,
         isBuilt: s.isBuilt, phase2Active: s.phase2Active,
         cabDeclined: s.cabDeclined, rtmStale: s.rtmStale,

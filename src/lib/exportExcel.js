@@ -169,6 +169,7 @@ export function exportExcel(state) {
     ctx, selInc, selUUM, selFix, promoted, cabApproved, rtmSigned,
     sysDesignData, sdAiTasks, requirements, emergencyChanges,
     customInc = [], customUUM = [],
+    customMentorTasks = [], customRaidEntries = [],
     rtmRows = {}, liveEolData = {},
     isBuilt = true, phase2Active = false,
     cabDeclined = false, rtmStale = false,
@@ -789,6 +790,46 @@ export function exportExcel(state) {
         c(uum.layers?.includes('db') ? 'DBA + SysAdmin' : 'SysAdmin', bg),
       ]);
     });
+    // Custom incidents (EOL / incompatibility hits added by OpsMentor)
+    customInc.forEach((inc, i) => {
+      const fixed = promoted || selFix.includes(inc.id);
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      rows.push([
+        c('ISSUE', typeStyle('ISSUE')),
+        c('[OpsMentor] ' + (inc.short || inc.code), bg),
+        c(fixed ? 'RESOLVED' : (inc.sev || 'HIGH'), fixed ? ST.PASS : ST.FAIL),
+        c(inc.txt || inc.short || '', bg),
+        c(fixed ? 'CLOSED' : 'OPEN', fixed ? ST.PASS : ST.FAIL),
+        c(inc.owner || 'SysAdmin', bg),
+      ]);
+    });
+    // Custom UUM items added via OpsMentor
+    customUUM.forEach((uum, i) => {
+      if (!selUUM.includes(uum.id)) return;
+      const done = promoted;
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      rows.push([
+        c('CHANGE', typeStyle('CHANGE')),
+        c('[OpsMentor] ' + (uum.short || uum.id) + ' [' + (uum.type || 'upgrade').toUpperCase() + ']', bg),
+        c(done ? 'DONE' : 'HIGH', done ? ST.PASS : ST.AMBER_V),
+        c(uum.txt || uum.short || '', bg),
+        c(done ? 'DONE' : 'SCHED', done ? ST.PASS : ST.AMBER_V),
+        c(uum.layers?.includes('db') ? 'DBA + SysAdmin' : 'SysAdmin', bg),
+      ]);
+    });
+    // RAID entries added via OpsMentor chat
+    customRaidEntries.forEach((e, i) => {
+      const sevStyle = e.severity === 'HIGH' || e.severity === 'CRITICAL' ? ST.FAIL : e.severity === 'MED' ? ST.AMBER_V : ST.BODY;
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      rows.push([
+        c(e.type || 'ISSUE', typeStyle(e.type || 'ISSUE')),
+        c('[OpsMentor] ' + (e.description || ''), bg),
+        c(e.severity || 'MED', sevStyle),
+        c(e.mitigation || 'Under review', bg),
+        c(e.status || 'OPEN', e.status === 'CLOSED' ? ST.PASS : ST.AMBER_V),
+        c(e.owner || 'PM', bg),
+      ]);
+    });
     rows.push([c('ASSUMPTION', typeStyle('ASSUMPTION')), c('All function teams available for scheduled change windows', ST.BODY), c('MEDIUM', ST.AMBER_V), c('Confirm attendance at kick-off session', ST.BODY), c('OPEN', ST.AMBER_V), c('Change Manager', ST.BODY)]);
     rows.push([c('ASSUMPTION', typeStyle('ASSUMPTION')), c('Staging environment accurately mirrors production configuration', ST.BODY), c('HIGH', ST.AMBER_V), c('Config diff review: staging vs prod before test', ST.BODY), c('OPEN', ST.AMBER_V), c('Unix Admin', ST.BODY)]);
     rows.push([c('DEPENDENCY', typeStyle('DEPENDENCY')), c('CAB approval required before any production change window confirmed', ST.BODY), c('HIGH', ST.AMBER_V), c('CAB submission 5 business days before change window', ST.BODY), c('OPEN', ST.AMBER_V), c('Change Manager', ST.BODY)]);
@@ -910,7 +951,32 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 14: Closure Summary
+  // SHEET 14: OpsMentor Tasks (custom tasks added via AI chat)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (customMentorTasks.length > 0) {
+    const rows = [
+      [c('OpsMentor Custom Tasks — added via AI chat / voice', ST.H1), '', '', '', ''],
+      [c('Title', ST.H2), c('Notes / Context', ST.H2), c('Est. Hours', ST.H2), c('Added At', ST.H2), c('Status', ST.H2)],
+    ];
+    customMentorTasks.forEach((t, i) => {
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      const addedAt = t.addedAt ? new Date(t.addedAt).toISOString().slice(0, 10) : today;
+      rows.push([
+        c(t.title || '', bg),
+        c(t.notes || '', bg),
+        c(t.est_hours || 2, ctd(bg)),
+        c(addedAt, ctd(bg)),
+        c(t.status || 'OPEN', statusStyle(t.status || 'OPEN')),
+      ]);
+    });
+    const ws = buildSheet(rows);
+    ws['!cols'] = [{ width: 55 }, { width: 60 }, { width: 12 }, { width: 14 }, { width: 12 }];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+    XLSX.utils.book_append_sheet(wb, ws, 'OpsMentor Tasks');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 15: Closure Summary
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 6 }, { width: 95 }, { width: 22 }]);
