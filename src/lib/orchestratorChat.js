@@ -4,6 +4,7 @@
 
 import { CARTESIA_WORKER_URL } from './cartesia.js';
 import { generateScript } from './orchestratorScripts.js';
+import { computeAllRisks, riskScore, riskLabel } from './riskEngine.js';
 
 const CHAT_URL = CARTESIA_WORKER_URL;
 
@@ -524,6 +525,39 @@ export function ruleBasedResponse(message, s, authUser) {
   if (/\b(closure|close out|post.?go.?live|closing)\b/.test(m)) {
     if (!s.rtmSigned) return { reply: 'Closure unlocks after RTM sign-off. Complete the RTM tab first.' };
     return { reply: 'Go to the Closure tab to tick off post-go-live checks and add final notes. Once all checks are done, mark the build as promoted.' };
+  }
+
+  // ── Risk score / risk tracker ──────────────────────────────────────────────
+  if (/\b(risk score|risk tracker|risk level|project risk|how risky|risk posture|show risks|critical risk)\b/.test(m)) {
+    const allRisks = computeAllRisks(s);
+    const score = riskScore(allRisks);
+    const rl    = riskLabel(score);
+    const crits = allRisks.filter(r => r.severity === 'CRITICAL');
+    const highs  = allRisks.filter(r => r.severity === 'HIGH');
+    const openCount = allRisks.filter(r => (s.riskAcknowledgments?.[r.id]?.status ?? 'open') !== 'closed').length;
+    const topRisks = allRisks.slice(0, 3).map(r => `• [${r.severity}] ${r.title}`).join('\n');
+    return {
+      reply: `Risk Score: ${score} — ${rl.label.toUpperCase()}\n${crits.length} critical · ${highs.length} high · ${openCount} total open\n\nTop risks:\n${topRisks || 'None'}\n\nOpen the Risk Tracker tab for full details, action guidance, and acknowledgment controls.`,
+      actions: [{ type: 'NAVIGATE_TAB', description: 'Open Risk Tracker', params: { tab: 'risks' }, requiresConfirmation: false }],
+    };
+  }
+
+  // ── Cost queries ───────────────────────────────────────────────────────────
+  if (/\b(cost|budget|spend|estimate|how much|project cost|over budget|daily rate|team size)\b/.test(m)) {
+    const cfg = s.costConfig || {};
+    if (!cfg.enabled) {
+      return {
+        reply: 'Cost tracking is currently off. Enable it in the Cost tab to get budget tracking, task-hour estimates, and risk-adjusted cost projections.\n\nOnce enabled, you can ask me things like:\n• "are we over budget?"\n• "set budget to 80000"\n• "team size is 8"\n• "what\'s driving cost?"',
+        actions: [{ type: 'NAVIGATE_TAB', description: 'Open Cost tab', params: { tab: 'cost' }, requiresConfirmation: false }],
+      };
+    }
+    // If enabled, give a summary
+    const hpd = s.requirements?.hoursPerDay || 8;
+    const daily = (cfg.dailyRatePerPerson || 800) * (cfg.teamSize || 5);
+    return {
+      reply: `Cost summary:\n• Team: ${cfg.teamSize || 5} people @ ${cfg.currency || 'USD'} ${cfg.dailyRatePerPerson || 800}/day\n• Daily team cost: ${cfg.currency || 'USD'} ${daily.toLocaleString()}\n• Risk contingency: ${cfg.contingencyPct || 20}%\n• Budget: ${cfg.totalBudget > 0 ? (cfg.currency || 'USD') + ' ' + cfg.totalBudget.toLocaleString() : 'not set'}\n\nOpen the Cost tab for full breakdown and budget vs. estimate tracker.`,
+      actions: [{ type: 'NAVIGATE_TAB', description: 'Open Cost tab', params: { tab: 'cost' }, requiresConfirmation: false }],
+    };
   }
 
   // ── Stakeholder discussions ────────────────────────────────────────────────

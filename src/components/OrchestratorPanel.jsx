@@ -5,6 +5,7 @@ import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts
 import { speakScript, CARTESIA_CONFIGURED, CARTESIA_WORKER_URL, VOICE_IDS } from '../lib/cartesia.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
 import { sendChatMessage, ruleBasedResponse } from '../lib/orchestratorChat.js';
+import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
@@ -151,6 +152,10 @@ export default function OrchestratorPanel() {
     vulnRegistry:        store.vulnRegistry        || [],
     stakeholderDiscussions: store.stakeholderDiscussions || [],
     actionAuditLog:      store.actionAuditLog       || [],
+    riskAcknowledgments: store.riskAcknowledgments  || {},
+    costConfig:          store.costConfig            || {},
+    liveEolData:         store.liveEolData           || {},
+    selFix:              store.selFix                || [],
   };
 
   // Primitive extracts for stable dependency arrays
@@ -326,8 +331,13 @@ export default function OrchestratorPanel() {
     isBuilt: false, scanComplete: false, designApplied: false,
     phase2Active: false, cabApproved: false, cabDeclined: false,
     rtmSigned: false, promoted: false, rtmStale: false, tasksStaleReason: null,
-    vulnCount: 0, pendingDiscCount: 0,
+    vulnCount: 0, pendingDiscCount: 0, riskScore: 0,
   });
+
+  // Compute live risk score for proactive warnings
+  const liveRisks = computeAllRisks(s);
+  const liveScore = riskScore(liveRisks);
+  const liveRl    = riskLabel(liveScore);
 
   useEffect(() => {
     const prev = prevState.current;
@@ -377,6 +387,14 @@ export default function OrchestratorPanel() {
       logs.push(`${pendingDisc} stakeholder discussion${pendingDisc !== 1 ? 's' : ''} opened and pending — team/client agreement required. Check the Vulnerabilities tab → Stakeholder Discussions.`);
     }
 
+    // Risk score threshold warnings
+    const prevScore = prev.riskScore || 0;
+    if (prevScore < 10 && liveScore >= 10) {
+      logs.push(`Risk score has reached ${liveScore} (${liveRl.label}). ${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risk(s) need immediate attention. Open the Risk Tracker tab.`);
+    } else if (prevScore < 18 && liveScore >= 18) {
+      logs.push(`Risk score is now ${liveScore} — CRITICAL threshold. Project may be blocked without immediate action. Review the Risk Tracker tab urgently.`);
+    }
+
     if (logs.length > 0) {
       setMessages(m => [...m, ...logs.map(text => ({ id: nextId(), role: 'log', text }))]);
     }
@@ -386,12 +404,12 @@ export default function OrchestratorPanel() {
       phase2Active: s.phase2Active, cabApproved: s.cabApproved, cabDeclined: s.cabDeclined,
       rtmSigned: s.rtmSigned, promoted: s.promoted, rtmStale: s.rtmStale,
       tasksStaleReason: s.tasksStaleReason,
-      vulnCount: activeVulns, pendingDiscCount: pendingDisc,
+      vulnCount: activeVulns, pendingDiscCount: pendingDisc, riskScore: liveScore,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.isBuilt, s.scanComplete, s.designApplied, s.phase2Active, s.cabApproved,
       s.cabDeclined, s.rtmSigned, s.promoted, s.rtmStale, s.tasksStaleReason,
-      s.vulnRegistry?.length, s.stakeholderDiscussions?.length]);
+      s.vulnRegistry?.length, s.stakeholderDiscussions?.length, liveScore]);
 
   // ── Inactivity prompt — if panel open and user idle 3s after last orch message ─
   const inactivityTimerRef = useRef(null);
@@ -505,6 +523,8 @@ export default function OrchestratorPanel() {
       diagram: `You opened Infrastructure Diagram${n}. Switch between Visual, ASCII Map, and Mission Intel views.`,
       cmdb:    `You opened CMDB${n}. Check live end-of-life data for your stack components.`,
       vuln:    `You opened Vulnerabilities${n}. Track CVEs, EOL risks, stakeholder discussions, and the full action audit trail for this build.`,
+      risks:   `You opened Risk Tracker${n}. Risk score is currently ${liveScore} (${liveRl.label}). ${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risks need attention. Use the action buttons on each card to resolve or accept them.`,
+      cost:    `You opened Cost Management${n}. ${s.costConfig?.enabled ? 'Cost tracking is active.' : 'Cost tracking is optional — enable it to estimate project cost from task hours.'}`,
     };
     const hint = tabHints[s.activeTab];
     if (hint) setMessages(m => [...m, { id: nextId(), role: 'log', text: hint }]);
@@ -1147,7 +1167,7 @@ export default function OrchestratorPanel() {
                     "What's next?",
                     (s.vulnRegistry || []).some(v => v.status === 'ACTIVE') ? 'Check vulnerabilities' : 'Show alerts',
                     (s.stakeholderDiscussions || []).some(d => d.status === 'PENDING') ? 'Stakeholder discussions' : 'RTM ready?',
-                    'Check incompatibilities',
+                    liveScore >= 10 ? `Risk score: ${liveScore}` : 'Check incompatibilities',
                   ]
                 : ['Phase 1 fields?', "What's next?", 'Current status?', 'Can I share details here?']
               ).map(q => (

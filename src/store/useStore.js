@@ -252,6 +252,20 @@ export const useStore = create((set, get) => ({
   // status: ACTIVE | PARKED | WORKAROUND | FIXED | ACCEPTED_RISK
   vulnRegistry: [],
 
+  // Risk tracker acknowledgments: { [riskId]: { status, notes, acknowledgedAt } }
+  // Keyed by computed risk id. Not all live risks will have an entry (default is 'open').
+  riskAcknowledgments: {},
+
+  // Cost management config (optional feature — enabled: false by default)
+  costConfig: {
+    enabled: false,
+    currency: 'USD',
+    totalBudget: 0,
+    dailyRatePerPerson: 800,
+    teamSize: 5,
+    contingencyPct: 20,
+  },
+
   // Stakeholder discussion log: [{ id, topic, question, owner, type, status, addedAt, resolvedAt, notes }]
   // type: team-agreement | client-review | acceptance-criteria | compliance-sign-off
   // status: PENDING | IN_DISCUSSION | AGREED | REJECTED
@@ -317,6 +331,7 @@ export const useStore = create((set, get) => ({
     phase2Active: false, cabApproved: false, cabDeclined: false, rtmSigned: false, promoted: false,
     ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [], customUUM: [],
     customMentorTasks: [], customRaidEntries: [],
+    vulnRegistry: [], stakeholderDiscussions: [], actionAuditLog: [], riskAcknowledgments: {},
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
     unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
@@ -372,6 +387,15 @@ export const useStore = create((set, get) => ({
     stakeholderDiscussions: (s.stakeholderDiscussions || []).map(d => d.id === id ? { ...d, ...patch } : d),
     isDirty: true,
   })),
+
+  // Risk acknowledgment
+  acknowledgeRisk: (id, data) => set(s => ({
+    riskAcknowledgments: { ...s.riskAcknowledgments, [id]: data },
+    isDirty: true,
+  })),
+
+  // Cost config
+  setCostConfig: (cfg) => set({ costConfig: cfg, isDirty: true }),
 
   // Action audit log
   logAuditAction: (entry) => set(s => {
@@ -492,6 +516,8 @@ export const useStore = create((set, get) => ({
     vulnRegistry: b.vulnRegistry ?? [],
     stakeholderDiscussions: b.stakeholderDiscussions ?? [],
     actionAuditLog: b.actionAuditLog ?? [],
+    riskAcknowledgments: b.riskAcknowledgments ?? {},
+    costConfig: b.costConfig ?? { enabled: false, currency: 'USD', totalBudget: 0, dailyRatePerPerson: 800, teamSize: 5, contingencyPct: 20 },
     activeTab: 'exec',
     isDirty: false,
   }),

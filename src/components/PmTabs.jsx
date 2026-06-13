@@ -12,6 +12,8 @@ import CmdbTab from './tabs/CmdbTab.jsx';
 import RolesTab from './tabs/RolesTab.jsx';
 import MatrixTab from './tabs/MatrixTab.jsx';
 import VulnTab from './tabs/VulnTab.jsx';
+import RiskTrackerTab from './tabs/RiskTrackerTab.jsx';
+import CostTab from './tabs/CostTab.jsx';
 
 const TABS = [
   {
@@ -83,6 +85,24 @@ const TABS = [
     lockMsg: 'Build environment first',
     staleDot: s => (s.vulnRegistry || []).some(v => v.status === 'ACTIVE'),
   },
+  {
+    id: 'risks',
+    label: 'Risk Tracker',
+    unlocked: () => true,
+    // Amber dot when risk score is high — computed inline
+    staleDot: s => {
+      const crit = (s.coherenceAlerts || []).filter(a => a.severity === 'warn').length > 0;
+      const vuln = (s.vulnRegistry || []).some(v => v.status === 'ACTIVE');
+      const disc = (s.stakeholderDiscussions || []).some(d => d.status === 'PENDING');
+      return crit || vuln || disc || s.rtmStale || !!s.tasksStaleReason || s.cabDeclined;
+    },
+  },
+  {
+    id: 'cost',
+    label: 'Cost',
+    unlocked: () => true,
+    // No staleDot — cost tab is always neutral unless over budget
+  },
 ];
 
 function TabContent({ activeTab }) {
@@ -98,6 +118,8 @@ function TabContent({ activeTab }) {
     case 'roles': return <RolesTab />;
     case 'matrix': return <MatrixTab />;
     case 'vuln':   return <VulnTab />;
+    case 'risks':  return <RiskTrackerTab />;
+    case 'cost':   return <CostTab />;
     default: return <ExecSummaryTab />;
   }
 }
