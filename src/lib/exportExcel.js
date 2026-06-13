@@ -170,6 +170,7 @@ export function exportExcel(state) {
     sysDesignData, sdAiTasks, requirements, emergencyChanges,
     customInc = [], customUUM = [],
     customMentorTasks = [], customRaidEntries = [],
+    vulnRegistry = [], stakeholderDiscussions = [], actionAuditLog = [],
     rtmRows = {}, liveEolData = {},
     isBuilt = true, phase2Active = false,
     cabDeclined = false, rtmStale = false,
@@ -976,7 +977,86 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 15: Closure Summary
+  // SHEET 15: Vulnerability Registry
+  // ══════════════════════════════════════════════════════════════════════════
+  if (vulnRegistry.length > 0 || stakeholderDiscussions.length > 0) {
+    const rows = [
+      [c('Vulnerability & Stakeholder Registry', ST.H1), '', '', '', '', ''],
+    ];
+
+    if (vulnRegistry.length > 0) {
+      rows.push([c('VULNERABILITY REGISTRY', ST.H2), '', '', '', '', '']);
+      rows.push([
+        c('Title', ST.LABEL), c('Component', ST.LABEL), c('Severity', ST.LABEL),
+        c('Status', ST.LABEL), c('Business Decision / Workaround', ST.LABEL), c('Source', ST.LABEL),
+      ]);
+      vulnRegistry.forEach((v, i) => {
+        const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+        const sevStyle = v.severity === 'CRITICAL' ? ST.FAIL : v.severity === 'HIGH' ? ST.AMBER_V : bg;
+        const statStyle = v.status === 'FIXED' ? ST.PASS : v.status === 'ACTIVE' ? ST.FAIL : ST.AMBER_V;
+        rows.push([
+          c(v.title || '', bg),
+          c(v.component || '—', bg),
+          c(v.severity || 'HIGH', ctd(sevStyle)),
+          c((v.status || 'ACTIVE').replace('_', ' '), ctd(statStyle)),
+          c(v.businessDecision || v.workaround || '—', bg),
+          c(v.source || 'manual', ctd(bg)),
+        ]);
+      });
+      rows.push([c('', ST.BLANK), '', '', '', '', '']);
+    }
+
+    if (stakeholderDiscussions.length > 0) {
+      rows.push([c('STAKEHOLDER DISCUSSIONS', ST.H2), '', '', '', '', '']);
+      rows.push([
+        c('Topic', ST.LABEL), c('Question / Criteria', ST.LABEL), c('Owner', ST.LABEL),
+        c('Type', ST.LABEL), c('Status', ST.LABEL), c('Added', ST.LABEL),
+      ]);
+      stakeholderDiscussions.forEach((d, i) => {
+        const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+        const statStyle = d.status === 'AGREED' ? ST.PASS : d.status === 'REJECTED' ? ST.FAIL : ST.AMBER_V;
+        rows.push([
+          c(d.topic || '', bg),
+          c(d.question || '—', bg),
+          c(d.owner || 'PM', ctd(bg)),
+          c(d.type || '—', ctd(bg)),
+          c(d.status || 'PENDING', ctd(statStyle)),
+          c(d.addedAt?.slice(0, 10) || today, ctd(bg)),
+        ]);
+      });
+    }
+
+    const ws = buildSheet(rows);
+    ws['!cols'] = [{ width: 45 }, { width: 25 }, { width: 12 }, { width: 16 }, { width: 55 }, { width: 16 }];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Vulnerability Registry');
+  }
+
+  // Action audit log (if non-empty)
+  if (actionAuditLog.length > 0) {
+    const rows = [
+      [c('Action Audit Log — OpsMentor', ST.H1), '', '', '', ''],
+      [c('Timestamp', ST.H2), c('Action Type', ST.H2), c('Description', ST.H2), c('Phase', ST.H2), c('User', ST.H2)],
+    ];
+    [...actionAuditLog].reverse().forEach((entry, i) => {
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      const statStyle = entry.status === 'executed' ? ST.PASS : entry.status === 'blocked' ? ST.FAIL : ST.AMBER_V;
+      rows.push([
+        c(entry.ts?.slice(0, 19).replace('T', ' ') || '—', ctd(bg)),
+        c((entry.type || '').replace(/_/g, ' '), ctd(statStyle)),
+        c(entry.description || '', bg),
+        c(entry.phase || '—', ctd(bg)),
+        c(entry.user || 'guest', ctd(bg)),
+      ]);
+    });
+    const ws = buildSheet(rows);
+    ws['!cols'] = [{ width: 20 }, { width: 20 }, { width: 65 }, { width: 14 }, { width: 22 }];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Audit Log');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 16: Closure Summary
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 6 }, { width: 95 }, { width: 22 }]);

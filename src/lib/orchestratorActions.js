@@ -179,6 +179,41 @@ export function executeAction(action, store) {
       store.setActiveTab(params.tab);
       break;
 
+    case 'ADD_VULNERABILITY': {
+      const now = new Date().toISOString();
+      store.addVuln({
+        id: params.id || `VULN-${Date.now()}`,
+        title: params.title || params.short || 'Unknown vulnerability',
+        cveId: params.cveId || null,
+        component: params.component || params.field || 'Unknown',
+        severity: params.severity || 'HIGH',
+        description: params.description || params.txt || '',
+        status: params.status || 'ACTIVE',
+        businessDecision: params.businessDecision || '',
+        workaround: params.workaround || '',
+        source: params.source || 'mentor-chat',
+        addedAt: now,
+        updatedAt: now,
+        fixTargetDate: params.fixTargetDate || null,
+      });
+      break;
+    }
+
+    case 'ADD_STAKEHOLDER_DISCUSSION': {
+      store.addStakeholderDiscussion({
+        id: params.id || `DISC-${Date.now()}`,
+        topic: params.topic || '',
+        question: params.question || '',
+        owner: params.owner || 'PM',
+        type: params.type || 'team-agreement',
+        status: params.status || 'PENDING',
+        addedAt: new Date().toISOString(),
+        resolvedAt: null,
+        notes: params.notes || '',
+      });
+      break;
+    }
+
     default:
       console.warn('[Orchestrator] Unknown action type:', type);
   }

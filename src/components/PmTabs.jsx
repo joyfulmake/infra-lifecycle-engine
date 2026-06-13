@@ -11,6 +11,7 @@ import InfraDiagramTab from './tabs/InfraDiagramTab.jsx';
 import CmdbTab from './tabs/CmdbTab.jsx';
 import RolesTab from './tabs/RolesTab.jsx';
 import MatrixTab from './tabs/MatrixTab.jsx';
+import VulnTab from './tabs/VulnTab.jsx';
 
 const TABS = [
   {
@@ -75,6 +76,13 @@ const TABS = [
     unlocked: s => s.phase2Active,
     lockMsg: 'Inject Phase 2 to activate',
   },
+  {
+    id: 'vuln',
+    label: 'Vulnerabilities',
+    unlocked: s => s.isBuilt,
+    lockMsg: 'Build environment first',
+    staleDot: s => (s.vulnRegistry || []).some(v => v.status === 'ACTIVE'),
+  },
 ];
 
 function TabContent({ activeTab }) {
@@ -89,6 +97,7 @@ function TabContent({ activeTab }) {
     case 'closure': return <ClosureTab />;
     case 'roles': return <RolesTab />;
     case 'matrix': return <MatrixTab />;
+    case 'vuln':   return <VulnTab />;
     default: return <ExecSummaryTab />;
   }
 }

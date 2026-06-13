@@ -76,6 +76,60 @@ const EOL_KNOWN = [
   { field: 'app', pattern: /iis\s*[678]\b/i, eolDate: 'varies (2015–2022)', severity: 'HIGH', short: 'IIS Version EOL', description: 'IIS 6/7/8 reached End of Support (tied to Windows Server lifecycle). Upgrade to IIS 10 on Server 2022.', grp: 'Middleware Lifecycle', layers: ['app'] },
 ];
 
+// ── Stakeholder acceptance checks ─────────────────────────────────────────────
+// Required discussions that must happen before a decision is locked in.
+const STAKEHOLDER_CHECKS = [
+  {
+    field: 'os',
+    pattern: /.+/i,
+    topic: 'OS selection approved by Unix Admin and client',
+    question: 'Has the Unix Admin confirmed OS version compatibility with the existing application stack, and has the client agreed to the OS choice and migration timeline?',
+    owner: 'Unix Admin',
+    type: 'team-agreement',
+    decisionText: (v) => `Unix Admin and client acceptance confirmed for OS: ${v}`,
+  },
+  {
+    field: 'db',
+    pattern: /.+/i,
+    topic: 'Database version approved by DBA and application team',
+    question: 'Has the DBA confirmed schema compatibility, backup strategy, and replication config with the App team? Has the client accepted any downtime required for DB migration?',
+    owner: 'DB Admin',
+    type: 'team-agreement',
+    decisionText: (v) => `DBA and app team signed off on DB: ${v}`,
+  },
+  {
+    field: 'app',
+    pattern: /.+/i,
+    topic: 'Middleware/application version signed off by App Admin and business owner',
+    question: 'Has the App Admin verified the middleware version against all deployed applications? Has the business owner accepted any interim service disruption?',
+    owner: 'App Admin',
+    type: 'acceptance-criteria',
+    decisionText: (v) => `App Admin and business owner accepted application platform: ${v}`,
+  },
+  {
+    field: 'os',
+    pattern: /rhel [6-8]|ubuntu (1[468]|20)\.04|centos|windows server 201|aix [567]/i,
+    topic: 'EOL/EOS compliance risk discussed with InfoSec and client',
+    question: 'The selected OS has known lifecycle risk. Has InfoSec reviewed the compliance implications (PCI-DSS, SOX, ISO27001)? Has the client accepted the risk in writing, or agreed to a migration timeline?',
+    owner: 'SecOps',
+    type: 'compliance-sign-off',
+    decisionText: (v) => `InfoSec and client acknowledged lifecycle risk for OS: ${v}`,
+  },
+  {
+    field: 'db',
+    pattern: /oracle (9|10|11|12)c|mysql [45]\.|sql server 201[0-7]/i,
+    topic: 'EOL database risk accepted by client and legal/compliance team',
+    question: 'The selected database is at or past End of Support. Has legal/compliance reviewed the risk? Has the client signed off on continuing operations with this database version or agreed to a migration plan?',
+    owner: 'PM',
+    type: 'compliance-sign-off',
+    decisionText: (v) => `Legal/compliance and client accepted EOL database risk: ${v}`,
+  },
+];
+
+function getStakeholderChecks(field, value) {
+  return STAKEHOLDER_CHECKS.filter(c => c.field === field && c.pattern.test(value));
+}
+
 function checkEolForField(field, value) {
   return EOL_KNOWN.filter(e => e.field === field && e.pattern.test(value));
 }
@@ -185,7 +239,7 @@ export function ruleBasedResponse(message, s, authUser) {
       },
     ];
 
-    // Offer to create incidents for each EOL hit
+    // Offer to create incidents + vulnerabilities for each EOL hit
     eolHits.forEach(h => {
       const incId = `EOL-${ctxField.field.toUpperCase()}-${Date.now()}`;
       actions.push({
@@ -204,6 +258,59 @@ export function ruleBasedResponse(message, s, authUser) {
         requiresConfirmation: true,
         confirmLabel: `Add "${h.short}" incident`,
       });
+      // Also auto-register in vulnerability registry
+      actions.push({
+        type: 'ADD_VULNERABILITY',
+        description: `Register EOL vulnerability: ${h.short}`,
+        params: {
+          id: `VULN-EOL-${ctxField.field.toUpperCase()}-${Date.now()}`,
+          title: h.short,
+          component: ctxField.value,
+          severity: h.severity,
+          description: h.description,
+          status: 'ACTIVE',
+          source: 'eol-detection',
+          field: ctxField.field,
+        },
+        requiresConfirmation: false,
+      });
+    });
+
+    // Stakeholder discussion checks for this field
+    const stakeholderChecks = getStakeholderChecks(ctxField.field, ctxField.value);
+    stakeholderChecks.forEach(sc => {
+      const discId = `DISC-${ctxField.field.toUpperCase()}-${Date.now()}-${Math.random().toString(36).slice(2,5)}`;
+      // Auto-create a DECISION RAID entry
+      const raidId = `RAID-DISC-${discId}`;
+      actions.push({
+        type: 'ADD_RAID_ENTRY',
+        description: `Log stakeholder discussion: ${sc.topic}`,
+        params: {
+          id: raidId,
+          type: 'DECISION',
+          description: `[Stakeholder Discussion Required] ${sc.topic}`,
+          severity: 'HIGH',
+          mitigation: sc.question,
+          status: 'OPEN',
+          owner: sc.owner,
+          addedAt: new Date().toISOString(),
+        },
+        requiresConfirmation: false,
+      });
+      // Also log in stakeholder discussions tracker
+      actions.push({
+        type: 'ADD_STAKEHOLDER_DISCUSSION',
+        description: `Track discussion: ${sc.topic}`,
+        params: {
+          id: discId,
+          topic: sc.topic,
+          question: sc.question,
+          owner: sc.owner,
+          type: sc.type,
+          status: 'PENDING',
+        },
+        requiresConfirmation: false,
+      });
     });
 
     // Auto-trigger scan if all 4 fields now filled and scan not done
@@ -216,7 +323,11 @@ export function ruleBasedResponse(message, s, authUser) {
     }
 
     const eolNote = eolHits.length > 0
-      ? `\n\n${eolWarnings}\n\nI can create incident entries for these. Say "yes" to each confirmation below.`
+      ? `\n\n${eolWarnings}\n\nI can create incident and vulnerability entries for these. Confirm below.`
+      : '';
+
+    const stakeholderNote = stakeholderChecks.length > 0
+      ? `\n\n⬡ Stakeholder discussions opened:\n${stakeholderChecks.map(sc => `• ${sc.owner}: ${sc.topic}`).join('\n')}\nThese appear in the RAID log and Vulnerabilities tab. Mark each as "AGREED" when the team/client confirms.`
       : '';
 
     const nextNote = allFilled && !s.isBuilt
@@ -226,7 +337,7 @@ export function ruleBasedResponse(message, s, authUser) {
       : next ? '\n\n' + next : '';
 
     return {
-      reply: `Got it — ${ctxField.label} set to "${ctxField.value}".${eolNote}${nextNote}`,
+      reply: `Got it — ${ctxField.label} set to "${ctxField.value}".${eolNote}${stakeholderNote}${nextNote}`,
       actions,
     };
   }
@@ -415,6 +526,80 @@ export function ruleBasedResponse(message, s, authUser) {
     return { reply: 'Go to the Closure tab to tick off post-go-live checks and add final notes. Once all checks are done, mark the build as promoted.' };
   }
 
+  // ── Stakeholder discussions ────────────────────────────────────────────────
+  if (/\b(stakeholder|discussion|agreed|agreement|client sign|client accept|team agree|who agreed|pending discussion|acceptance criteria)\b/.test(m)) {
+    const discussions = s.stakeholderDiscussions || [];
+    if (discussions.length === 0) {
+      return { reply: 'No stakeholder discussions logged yet. These are automatically created when you set stack fields, or you can say "add discussion: [topic]" to create one manually.\n\nTip: Open the Vulnerabilities tab to see all pending discussions and update their status.' };
+    }
+    const pending = discussions.filter(d => d.status === 'PENDING' || d.status === 'IN_DISCUSSION');
+    const agreed  = discussions.filter(d => d.status === 'AGREED');
+    const lines   = pending.map(d => `• PENDING — [${d.owner}] ${d.topic}`).join('\n')
+                  + (agreed.length > 0 ? `\n• ${agreed.length} agreed` : '');
+    return {
+      reply: `Stakeholder discussions — ${pending.length} pending, ${agreed.length} agreed:\n\n${lines || 'All discussions resolved.'}\n\nOpen the Vulnerabilities tab to update discussion status. Mark each as AGREED once the team and client have confirmed.`,
+      actions: pending.length > 0 ? [{ type: 'NAVIGATE_TAB', description: 'Go to Vulnerabilities tab', params: { tab: 'vuln' }, requiresConfirmation: false }] : [],
+    };
+  }
+
+  // ── Vulnerability status ───────────────────────────────────────────────────
+  if (/\b(vuln|vulnerability|vulnerabilities|cve|security risk|risk register|known risk)\b/.test(m)) {
+    const vulns = s.vulnRegistry || [];
+    if (vulns.length === 0) {
+      return { reply: 'No vulnerabilities registered yet. They are auto-created when I detect EOL/incompatibility issues. You can also say "add vulnerability: [title]" to register one manually.\n\nSay "check incompatibilities" to scan the current stack.' };
+    }
+    const active   = vulns.filter(v => v.status === 'ACTIVE');
+    const parked   = vulns.filter(v => v.status === 'PARKED');
+    const workaround = vulns.filter(v => v.status === 'WORKAROUND');
+    const fixed    = vulns.filter(v => v.status === 'FIXED');
+    const accepted = vulns.filter(v => v.status === 'ACCEPTED_RISK');
+    const lines = active.map(v => `• ACTIVE [${v.severity}] ${v.title} — ${v.component}`).join('\n');
+    return {
+      reply: `Vulnerability Registry:\n• Active: ${active.length} | Parked: ${parked.length} | Workaround: ${workaround.length} | Fixed: ${fixed.length} | Accepted Risk: ${accepted.length}\n\n${lines || 'No active vulnerabilities.'}\n\nOpen the Vulnerabilities tab to update status, add business decisions, or set workarounds.`,
+      actions: [{ type: 'NAVIGATE_TAB', description: 'Open Vulnerabilities tab', params: { tab: 'vuln' }, requiresConfirmation: false }],
+    };
+  }
+
+  // ── Add vulnerability manually ─────────────────────────────────────────────
+  const addVulnMatch = raw.match(/\badd (vuln|vulnerability)[:\s]+(.+)/i);
+  if (addVulnMatch) {
+    const title = addVulnMatch[2].trim();
+    return {
+      reply: `Registering "${title}" in the vulnerability registry as ACTIVE. Open the Vulnerabilities tab to set severity, workaround, or business decision.`,
+      actions: [{
+        type: 'ADD_VULNERABILITY',
+        description: `Register vulnerability: ${title}`,
+        params: { title, component: s.ctx?.os || 'Unknown', severity: 'HIGH', description: title, status: 'ACTIVE', source: 'manual' },
+        requiresConfirmation: false,
+      }, {
+        type: 'NAVIGATE_TAB',
+        description: 'Open Vulnerabilities tab',
+        params: { tab: 'vuln' },
+        requiresConfirmation: false,
+      }],
+    };
+  }
+
+  // ── Add stakeholder discussion manually ────────────────────────────────────
+  const addDiscMatch = raw.match(/\badd discussion[:\s]+(.+)/i);
+  if (addDiscMatch) {
+    const topic = addDiscMatch[1].trim();
+    return {
+      reply: `Opened discussion: "${topic}". It appears as PENDING in the RAID log and Vulnerabilities tab. Update it to AGREED once the team/client confirms.`,
+      actions: [{
+        type: 'ADD_STAKEHOLDER_DISCUSSION',
+        description: `Track discussion: ${topic}`,
+        params: { topic, question: topic, owner: 'PM', type: 'team-agreement', status: 'PENDING' },
+        requiresConfirmation: false,
+      }, {
+        type: 'ADD_RAID_ENTRY',
+        description: `Log to RAID: ${topic}`,
+        params: { id: `RAID-DISC-${Date.now()}`, type: 'DECISION', description: `[Discussion] ${topic}`, severity: 'MED', mitigation: 'Pending team/client confirmation', status: 'OPEN', owner: 'PM', addedAt: new Date().toISOString() },
+        requiresConfirmation: false,
+      }],
+    };
+  }
+
   // ── Incompatibility / EOL scan ─────────────────────────────────────────────
   if (/\b(incompatib|eol|end of life|end-of-life|compat|lifecycle|version check|supported)\b/.test(m)) {
     const { hw, os, db, app } = s.ctx || {};
@@ -427,7 +612,8 @@ export function ruleBasedResponse(message, s, authUser) {
     }
     const actions = [];
     const lines = hits.map(h => {
-      const incId = `EOL-SCAN-${h.field.toUpperCase()}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      const ts = Date.now() + Math.floor(Math.random() * 100);
+      const incId = `EOL-SCAN-${h.field.toUpperCase()}-${ts}`;
       actions.push({
         type: 'ADD_INCIDENT',
         description: `Create EOL incident: ${h.short}`,
@@ -435,10 +621,16 @@ export function ruleBasedResponse(message, s, authUser) {
         requiresConfirmation: true,
         confirmLabel: `Add "${h.short}" incident`,
       });
+      actions.push({
+        type: 'ADD_VULNERABILITY',
+        description: `Register in vulnerability registry: ${h.short}`,
+        params: { id: `VULN-SCAN-${h.field.toUpperCase()}-${ts}`, title: h.short, component: s.ctx?.[h.field] || h.field, severity: h.severity, description: h.description, status: 'ACTIVE', source: 'eol-detection', field: h.field },
+        requiresConfirmation: false,
+      });
       return `⚠️ ${h.short} [${h.severity}] — ${h.description}`;
     });
     return {
-      reply: `Compatibility scan — ${hits.length} issue${hits.length !== 1 ? 's' : ''} found:\n\n${lines.join('\n\n')}\n\nConfirm below to create incidents in the app. These will flow to the topology, RTM, Gantt, and Excel export automatically.`,
+      reply: `Compatibility scan — ${hits.length} issue${hits.length !== 1 ? 's' : ''} found:\n\n${lines.join('\n\n')}\n\nConfirm below to create incidents. All findings are automatically registered in the Vulnerability Registry (Vulnerabilities tab). They flow to topology, RTM, Gantt, and Excel export.`,
       actions,
     };
   }

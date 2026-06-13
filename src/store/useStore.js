@@ -248,6 +248,19 @@ export const useStore = create((set, get) => ({
   // OpsMentor user-added RAID entries: [{ id, type, description, severity, mitigation, status, owner, addedAt }]
   customRaidEntries: [],
 
+  // Vulnerability registry: [{ id, title, cveId, component, severity, description, status, businessDecision, workaround, source, addedAt, updatedAt, fixTargetDate }]
+  // status: ACTIVE | PARKED | WORKAROUND | FIXED | ACCEPTED_RISK
+  vulnRegistry: [],
+
+  // Stakeholder discussion log: [{ id, topic, question, owner, type, status, addedAt, resolvedAt, notes }]
+  // type: team-agreement | client-review | acceptance-criteria | compliance-sign-off
+  // status: PENDING | IN_DISCUSSION | AGREED | REJECTED
+  stakeholderDiscussions: [],
+
+  // Persistent action audit log: [{ id, ts, type, description, user, phase, status }]
+  // Capped at 500 entries. Persisted to Dexie + Firestore with the build.
+  actionAuditLog: [],
+
   // Active PM tab
   activeTab: 'exec',
 
@@ -344,6 +357,27 @@ export const useStore = create((set, get) => ({
   removeCustomMentorTask: (id) => set(s => ({ customMentorTasks: (s.customMentorTasks || []).filter(t => t.id !== id), isDirty: true })),
   addCustomRaidEntry: (entry) => set(s => ({ customRaidEntries: [...(s.customRaidEntries || []), entry], isDirty: true })),
   removeCustomRaidEntry: (id) => set(s => ({ customRaidEntries: (s.customRaidEntries || []).filter(e => e.id !== id), isDirty: true })),
+
+  // Vulnerability registry actions
+  addVuln: (vuln) => set(s => ({ vulnRegistry: [...(s.vulnRegistry || []), vuln], isDirty: true })),
+  updateVuln: (id, patch) => set(s => ({
+    vulnRegistry: (s.vulnRegistry || []).map(v => v.id === id ? { ...v, ...patch, updatedAt: new Date().toISOString() } : v),
+    isDirty: true,
+  })),
+  removeVuln: (id) => set(s => ({ vulnRegistry: (s.vulnRegistry || []).filter(v => v.id !== id), isDirty: true })),
+
+  // Stakeholder discussion actions
+  addStakeholderDiscussion: (entry) => set(s => ({ stakeholderDiscussions: [...(s.stakeholderDiscussions || []), entry], isDirty: true })),
+  updateStakeholderDiscussion: (id, patch) => set(s => ({
+    stakeholderDiscussions: (s.stakeholderDiscussions || []).map(d => d.id === id ? { ...d, ...patch } : d),
+    isDirty: true,
+  })),
+
+  // Action audit log
+  logAuditAction: (entry) => set(s => {
+    const log = [...(s.actionAuditLog || []), entry];
+    return { actionAuditLog: log.slice(-500), isDirty: true };
+  }),
 
   addCustomUUM: (uum) => set(s => ({ customUUM: [...(s.customUUM || []), uum], isDirty: true })),
   updateCustomUUM: (id, patch) => set(s => ({
@@ -455,6 +489,9 @@ export const useStore = create((set, get) => ({
     tasksStaleReason: b.tasksStaleReason ?? null,
     rtmStale: b.rtmStale ?? false,
     roleAssignments: b.roleAssignments ?? {},
+    vulnRegistry: b.vulnRegistry ?? [],
+    stakeholderDiscussions: b.stakeholderDiscussions ?? [],
+    actionAuditLog: b.actionAuditLog ?? [],
     activeTab: 'exec',
     isDirty: false,
   }),

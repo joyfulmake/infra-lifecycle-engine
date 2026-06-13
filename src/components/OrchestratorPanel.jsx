@@ -148,6 +148,9 @@ export default function OrchestratorPanel() {
     closureChecks:       store.closureChecks,
     sysDesignData:       store.sysDesignData,
     activeTab:           store.activeTab,
+    vulnRegistry:        store.vulnRegistry        || [],
+    stakeholderDiscussions: store.stakeholderDiscussions || [],
+    actionAuditLog:      store.actionAuditLog       || [],
   };
 
   // Primitive extracts for stable dependency arrays
@@ -319,11 +322,11 @@ export default function OrchestratorPanel() {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   // ── Action logging — watch key state transitions and auto-post log entries ──
-  // Each flag is tracked with a prev ref; when it flips we post a chat log.
   const prevState = useRef({
     isBuilt: false, scanComplete: false, designApplied: false,
     phase2Active: false, cabApproved: false, cabDeclined: false,
     rtmSigned: false, promoted: false, rtmStale: false, tasksStaleReason: null,
+    vulnCount: 0, pendingDiscCount: 0,
   });
 
   useEffect(() => {
@@ -362,6 +365,18 @@ export default function OrchestratorPanel() {
       logs.push(`Gantt tasks are stale: ${s.tasksStaleReason}. Open the Gantt tab and click "Regenerate Tasks" to refresh the schedule.`);
     }
 
+    const activeVulns = (s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length;
+    const pendingDisc = (s.stakeholderDiscussions || []).filter(d => d.status === 'PENDING').length;
+
+    if (prev.vulnCount === 0 && activeVulns > 0) {
+      logs.push(`${activeVulns} vulnerability${activeVulns !== 1 ? 'ies' : 'y'} now active in the registry. Open the Vulnerabilities tab to review, set business decisions, or add workarounds.`);
+    } else if (activeVulns > prev.vulnCount && prev.vulnCount > 0) {
+      logs.push(`New vulnerability added (total active: ${activeVulns}). Open the Vulnerabilities tab.`);
+    }
+    if (prev.pendingDiscCount === 0 && pendingDisc > 0) {
+      logs.push(`${pendingDisc} stakeholder discussion${pendingDisc !== 1 ? 's' : ''} opened and pending — team/client agreement required. Check the Vulnerabilities tab → Stakeholder Discussions.`);
+    }
+
     if (logs.length > 0) {
       setMessages(m => [...m, ...logs.map(text => ({ id: nextId(), role: 'log', text }))]);
     }
@@ -371,10 +386,12 @@ export default function OrchestratorPanel() {
       phase2Active: s.phase2Active, cabApproved: s.cabApproved, cabDeclined: s.cabDeclined,
       rtmSigned: s.rtmSigned, promoted: s.promoted, rtmStale: s.rtmStale,
       tasksStaleReason: s.tasksStaleReason,
+      vulnCount: activeVulns, pendingDiscCount: pendingDisc,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.isBuilt, s.scanComplete, s.designApplied, s.phase2Active, s.cabApproved,
-      s.cabDeclined, s.rtmSigned, s.promoted, s.rtmStale, s.tasksStaleReason]);
+      s.cabDeclined, s.rtmSigned, s.promoted, s.rtmStale, s.tasksStaleReason,
+      s.vulnRegistry?.length, s.stakeholderDiscussions?.length]);
 
   // ── Inactivity prompt — if panel open and user idle 3s after last orch message ─
   const inactivityTimerRef = useRef(null);
@@ -487,6 +504,7 @@ export default function OrchestratorPanel() {
       closure: `You opened Closure${n}. Tick off every post-go-live check before exporting to Excel.`,
       diagram: `You opened Infrastructure Diagram${n}. Switch between Visual, ASCII Map, and Mission Intel views.`,
       cmdb:    `You opened CMDB${n}. Check live end-of-life data for your stack components.`,
+      vuln:    `You opened Vulnerabilities${n}. Track CVEs, EOL risks, stakeholder discussions, and the full action audit trail for this build.`,
     };
     const hint = tabHints[s.activeTab];
     if (hint) setMessages(m => [...m, { id: nextId(), role: 'log', text: hint }]);
@@ -510,6 +528,22 @@ export default function OrchestratorPanel() {
 
   // ── Action execution ─────────────────────────────────────────────────────
 
+  function auditLog(action, status) {
+    const currS = sRef.current;
+    const phase = currS.promoted ? 'LIVE' : currS.rtmSigned ? 'RTM_SIGNED' : currS.cabApproved ? 'CAB_APPROVED'
+      : currS.phase2Active ? 'PHASE2' : currS.designApplied ? 'DESIGN' : currS.scanComplete ? 'SCANNED'
+      : currS.isBuilt ? 'BUILT' : 'BLANK';
+    store.logAuditAction({
+      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+      ts: new Date().toISOString(),
+      type: action.type,
+      description: action.description || action.type,
+      user: authUserRef.current?.email || 'guest',
+      phase,
+      status,
+    });
+  }
+
   function applyActions(actions) {
     const blocked = [];
     const done    = [];
@@ -518,9 +552,11 @@ export default function OrchestratorPanel() {
       const perm = checkPermission(action, authUser, s);
       if (!perm.allowed) {
         blocked.push(`${action.description}: ${perm.reason}`);
+        auditLog(action, 'blocked');
         continue;
       }
       executeAction(action, store);
+      auditLog(action, 'executed');
       done.push(action.description);
     }
 
@@ -638,8 +674,13 @@ export default function OrchestratorPanel() {
     const blocked = [], done = [];
     for (const action of actions) {
       const perm = checkPermission(action, currAuth, currS);
-      if (!perm.allowed) { blocked.push(`${action.description}: ${perm.reason}`); continue; }
+      if (!perm.allowed) {
+        blocked.push(`${action.description}: ${perm.reason}`);
+        auditLog(action, 'blocked');
+        continue;
+      }
       executeAction(action, store);
+      auditLog(action, 'executed');
       done.push(action.description);
     }
     if (done.length > 0) setMessages(m => [...m, { id: nextId(), role: 'result', text: `Done: ${done.join(' · ')}` }]);
@@ -1102,7 +1143,12 @@ export default function OrchestratorPanel() {
           {!input && !thinking && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
               {(s.isBuilt
-                ? ["What's next?", 'Show alerts', 'RTM ready?', 'Who is the Unix Admin?']
+                ? [
+                    "What's next?",
+                    (s.vulnRegistry || []).some(v => v.status === 'ACTIVE') ? 'Check vulnerabilities' : 'Show alerts',
+                    (s.stakeholderDiscussions || []).some(d => d.status === 'PENDING') ? 'Stakeholder discussions' : 'RTM ready?',
+                    'Check incompatibilities',
+                  ]
                 : ['Phase 1 fields?', "What's next?", 'Current status?', 'Can I share details here?']
               ).map(q => (
                 <button
