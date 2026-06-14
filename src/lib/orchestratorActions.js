@@ -4,6 +4,7 @@
 import { getUserRolesForBuild, canEditDesignSection, isQATeamLead } from './roleAccess.js';
 import { runSmartScan } from './smartScan.js';
 import { getDefaultDesignValues } from './designDefaults.js';
+import { useStore } from '../store/useStore.js';
 
 // ── Permission check ──────────────────────────────────────────────────────────
 // Returns { allowed: true } or { allowed: false, reason: string }
@@ -91,13 +92,20 @@ export function executeAction(action, store) {
   const { type, params } = action;
 
   switch (type) {
-    case 'SET_CTX':
-      store.setCtx({ ...store.ctx, [params.key]: params.value });
+    case 'SET_CTX': {
+      // Read FRESH ctx from Zustand getState() to avoid stale closure when
+      // multiple SET_CTX actions fire in quick succession (each must see the
+      // previous change, not the render-time snapshot).
+      const freshCtx = useStore.getState().ctx || {};
+      store.setCtx({ ...freshCtx, [params.key]: params.value });
       break;
+    }
 
-    case 'SET_REQUIREMENT':
-      store.setRequirements({ ...store.requirements, [params.key]: params.value });
+    case 'SET_REQUIREMENT': {
+      const freshReqs = useStore.getState().requirements || {};
+      store.setRequirements({ ...freshReqs, [params.key]: params.value });
       break;
+    }
 
     case 'SET_DESIGN_FIELD':
       store.setDesignField(params.section, params.field, params.value);
@@ -120,13 +128,13 @@ export function executeAction(action, store) {
       break;
 
     case 'BUILD': {
-      const ctx = store.ctx;
-      // Use params if provided (e.g. all 4 fields at once), else current store ctx
+      // Always read fresh ctx so we pick up SET_CTX calls made in the same tick
+      const freshCtx = useStore.getState().ctx || {};
       const buildCtx = {
-        hw: params?.hw || ctx?.hw || '',
-        os: params?.os || ctx?.os || '',
-        db: params?.db || ctx?.db || '',
-        app: params?.app || ctx?.app || '',
+        hw: params?.hw || freshCtx.hw || '',
+        os: params?.os || freshCtx.os || '',
+        db: params?.db || freshCtx.db || '',
+        app: params?.app || freshCtx.app || '',
       };
       if (buildCtx.hw && buildCtx.os && buildCtx.db && buildCtx.app) {
         store.build(buildCtx);

@@ -255,6 +255,21 @@ export default function OrchestratorPanel({ docked = false }) {
   const cartesiaPlayingRef = useRef(false);
   const currentAudioRef    = useRef(null);
 
+  // Unlock browser autoplay on the first synchronous user gesture.
+  // HTMLAudioElement.play() is blocked until there's a user gesture, but
+  // the gesture window expires before our async fetch+blob chain completes.
+  // Creating/resuming an AudioContext synchronously in the click handler
+  // permanently enables audio for the session — all subsequent audio.play()
+  // calls succeed without a gesture.
+  function unlockAudio() {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+    } catch {}
+  }
+
   function cleanText(text) {
     return (text || '')
       .replace(/[•★✓✗→←↑↓]\s*/g, '')
@@ -812,6 +827,7 @@ export default function OrchestratorPanel({ docked = false }) {
 
   // ── Chip selection — direct field update without text parsing ─────────────
   function handleChipSelect(field, value) {
+    unlockAudio(); // must be synchronous — call before any await
     setChipsField(null);
     // Log as user message
     setMessages(m => [...m, { id: nextId(), role: 'user', text: value }]);
@@ -1149,6 +1165,7 @@ export default function OrchestratorPanel({ docked = false }) {
   }
 
   function handleMic() {
+    unlockAudio(); // synchronous — before any async
     if (recording) { stopRecording(); return; }
     transcribeFailCountRef.current = 0;
     if (SR) {
@@ -1231,6 +1248,7 @@ export default function OrchestratorPanel({ docked = false }) {
   // ── Send message ─────────────────────────────────────────────────────────
 
   async function handleSend() {
+    unlockAudio(); // must be synchronous — call before any await
     const text = input.trim();
     if (!text || thinking) return;
 
@@ -1285,26 +1303,37 @@ export default function OrchestratorPanel({ docked = false }) {
     // ── Guided field interview ─────────────────────────────────────────────
     const awField = awaitingFieldRef.current;
     if (awField && !awaitingNameRef.current) {
-      awaitingFieldRef.current = null;
-      let syntheticText;
-      if (FIELD_CTX_MAP[awField]) {
-        syntheticText = `${FIELD_CTX_MAP[awField]} is ${text}`;
-      } else if (FIELD_REQ_MAP[awField]) {
-        syntheticText = `${FIELD_REQ_MAP[awField]} is ${text}`;
-      }
-      if (syntheticText) {
-        const result = ruleBasedResponse(syntheticText, sRef.current, authUserRef.current);
-        if (result) {
-          const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
-          if (actions.length > 0) applyActionsWithRefs(actions);
-          // Queue next field question
-          const next = nextFieldPrompt(sRef.current, awField);
-          awaitingFieldRef.current = next;
-          const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields complete! Say "run scan" to continue.';
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply + nextQ }]);
-          return;
+      const tl = text.toLowerCase().trim();
+
+      // Let workflow commands escape the interview (build, skip, run scan, etc.)
+      const isCommand = /^(build|build it|build now|run scan|scan|skip|next|cancel|help|status|what|done|ready)(\s|$)/.test(tl)
+        || /\b(run scan|ai scan|inject|submit cab|sign rtm|go live|promote)\b/.test(tl);
+
+      if (!isCommand) {
+        awaitingFieldRef.current = null;
+        let syntheticText;
+        if (FIELD_CTX_MAP[awField]) {
+          syntheticText = `${FIELD_CTX_MAP[awField]} is ${text}`;
+        } else if (FIELD_REQ_MAP[awField]) {
+          syntheticText = `${FIELD_REQ_MAP[awField]} is ${text}`;
         }
+        if (syntheticText) {
+          const result = ruleBasedResponse(syntheticText, sRef.current, authUserRef.current);
+          if (result) {
+            const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
+            if (actions.length > 0) applyActionsWithRefs(actions);
+            const next = nextFieldPrompt(sRef.current, awField);
+            awaitingFieldRef.current = next;
+            if (next && FIELD_CHIPS[next]) setChipsField(next);
+            const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields complete! Say "run scan" to continue.';
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply + nextQ }]);
+            return;
+          }
+        }
+        // Restore awaitingFieldRef if nothing matched
+        awaitingFieldRef.current = awField;
       }
+      // Fall through to normal rule-based / Groq handling for commands
     }
 
     setThinking(true);
