@@ -17,23 +17,27 @@ export default function App() {
           <PhasePanel />
         </div>
 
-        {/* Right side: overview + tabs */}
+        {/* Centre: executive overview + tabs */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white main-root">
-          {/* Executive overview strip */}
           <div className="flex-shrink-0" style={{ height: '96px' }}>
             <ExecOverview />
           </div>
-
-          {/* PM tabbed interface */}
           <div className="flex-1 min-h-0 overflow-hidden">
             <PmTabs />
           </div>
+        </div>
+
+        {/* OpsMentor — docked right panel, always present, avatar of the app */}
+        <div
+          className="flex-shrink-0 h-full overflow-hidden"
+          style={{ width: '360px', borderLeft: '1px solid rgba(13,148,136,0.18)', background: '#fff' }}
+        >
+          <OrchestratorPanel docked />
         </div>
       </div>
 
       {showAuthModal && <AuthModal reason={authModalReason} onClose={() => setShowAuthModal(false)} />}
       <DemoTour />
-      <OrchestratorPanel />
     </>
   );
 }

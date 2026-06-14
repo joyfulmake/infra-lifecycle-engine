@@ -141,7 +141,7 @@ function WorkflowStrip({ items }) {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export default function OrchestratorPanel() {
+export default function OrchestratorPanel({ docked = false }) {
   const store = useStore();
   const { authUser } = useAuth();
 
@@ -353,13 +353,14 @@ export default function OrchestratorPanel() {
   function buildWelcome() {
     const stack = [s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' / ');
     const sc = generateScript(s);
-    if (stack) {
-      return `OpsMentor activated — picking up your ${stack} build.\n\nCurrent focus: ${sc.nextAction || 'all phases complete'}.\n\nUse the quick action buttons below, type a command, or ask me anything.`;
+    if (stack && s.isBuilt) {
+      return `Picking up your ${stack} build.\n\nCurrent: ${sc.nextAction || 'all phases complete'}.\n\nAsk me anything or use the quick actions.`;
     }
     if (s.isBuilt || s.scanComplete || s.designApplied) {
-      return `OpsMentor activated. Build in progress.\n\nFocus: ${sc.nextAction || 'all phases complete'}.\n\nUse the quick action buttons or type a command.`;
+      return `Build in progress. Focus: ${sc.nextAction || 'all phases complete'}.\n\nAsk me anything or use the quick actions below.`;
     }
-    return `OpsMentor activated — your full infrastructure lifecycle admin.\n\nSet your stack with commands like:\n• "hardware is Dell PowerEdge R750"\n• "OS is RHEL 8.6"\n• "database is Oracle 19c"\n• "application is JBoss EAP 7.4"\n\nOr click the quick action buttons below to begin.`;
+    // Fresh start — kick off the guided interview immediately
+    return `I'm OpsMentor — the AI admin for this infrastructure lifecycle.\n\nYou talk (or type); I'll fill in the app and move you through every phase — provisioning, system design, CAB approval, RTM, and go-live.\n\nLet's start with your platform.\n\nWhat hardware are you deploying?\n(e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9, Cisco UCS)`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -453,10 +454,14 @@ export default function OrchestratorPanel() {
     }
   }
 
-  // Show welcome when OpsMentor activates for the first time
+  // Show welcome + kick off guided interview when OpsMentor first activates
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
+      // Auto-start field interview for blank builds — user just answers; app fills in
+      if (!sRef.current.isBuilt && !sRef.current.ctx?.hw) {
+        awaitingFieldRef.current = 'hw';
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -615,7 +620,13 @@ export default function OrchestratorPanel() {
     setInput(e.target.value);
   }, []);
 
-  // Open when ExecOverview "OpsMentor" button is clicked
+  // When docked, always open immediately — no button needed
+  useEffect(() => {
+    if (docked) { setOpen(true); setPanelVisible(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docked]);
+
+  // Open when ExecOverview "OpsMentor" button is clicked (floating mode)
   useEffect(() => {
     const handler = () => {
       setOpen(true);
@@ -1300,10 +1311,18 @@ export default function OrchestratorPanel() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Docked: fills the right panel column. Floating: fixed-position overlay.
+  const wrapperClass = docked
+    ? 'flex flex-col h-full bg-white overflow-hidden'
+    : 'orchestrator-panel fixed z-50 bg-white flex flex-col overflow-hidden';
+  const wrapperStyle = docked
+    ? {}
+    : { width: 480, maxHeight: 680, bottom: 72, right: 20, display: panelVisible ? 'flex' : 'none', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(13,148,136,0.15)', border: '1px solid rgba(13,148,136,0.1)' };
+
   return (
     <>
-      {/* Floating trigger — branded pill, always visible */}
-      <button
+      {/* Floating trigger — only shown in non-docked (small screen) mode */}
+      {!docked && <button
         onClick={() => {
           if (!open) {
             setOpen(true);
@@ -1335,14 +1354,11 @@ export default function OrchestratorPanel() {
         {hasAlerts && !panelVisible && (
           <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
         )}
-      </button>
+      </button>}
 
-      {/* Panel — shown/hidden via panelVisible, never unmounted once open so voice continues */}
-      {open && (
-        <div
-          className="orchestrator-panel fixed z-50 bg-white flex flex-col overflow-hidden"
-          style={{ width: 480, maxHeight: 680, bottom: 72, right: 20, display: panelVisible ? 'flex' : 'none', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(13,148,136,0.15)', border: '1px solid rgba(13,148,136,0.1)' }}
-        >
+      {/* Panel — docked: always rendered, fills the right column. Floating: shown when open */}
+      {(docked || open) && (
+        <div className={wrapperClass} style={wrapperStyle}>
           {/* Header — premium gradient, full identity */}
           <div
             className="text-white px-4 pt-3 pb-2.5 flex-shrink-0"
@@ -1360,11 +1376,13 @@ export default function OrchestratorPanel() {
                 className="text-xs px-2 py-0.5 rounded font-medium bg-white/10 hover:bg-white/20 text-teal-200 transition-colors flex-shrink-0"
                 title="Stop voice"
               >⏹</button>
-              <button
-                onClick={() => setPanelVisible(false)}
-                className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center text-xl leading-none flex-shrink-0 ml-0.5"
-                title="Minimise (voice continues)"
-              >−</button>
+              {!docked && (
+                <button
+                  onClick={() => setPanelVisible(false)}
+                  className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center text-xl leading-none flex-shrink-0 ml-0.5"
+                  title="Minimise (voice continues)"
+                >−</button>
+              )}
             </div>
             {/* Row 2: Stack context + phase badge */}
             <div className="flex items-center gap-2 mt-1.5 min-w-0">
