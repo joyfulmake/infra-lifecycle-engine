@@ -217,9 +217,10 @@ export default function OrchestratorPanel() {
   const awaitingFieldRef  = useRef(null); // 'hw'|'os'|'db'|'app'|'projectName'|'envType'|'goLiveDate'|null
   const pendingTaskRef    = useRef(null); // { title } waiting for gantt/raid choice
   const recordingRef      = useRef(false);
-  const sRef              = useRef(s);
-  const authUserRef       = useRef(authUser);
-  const messagesRef       = useRef([]);
+  const sRef                  = useRef(s);
+  const authUserRef           = useRef(authUser);
+  const messagesRef           = useRef([]);
+  const transcribeFailCountRef = useRef(0);
   useEffect(() => { sRef.current = s; });
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
   useEffect(() => { recordingRef.current = recording; }, [recording]);
@@ -375,63 +376,74 @@ export default function OrchestratorPanel() {
 
   useEffect(() => {
     const prev = prevState.current;
-    const logs = [];
+    // orc = voiced, prominent messages for major workflow gates
+    // log = compact one-liners for minor events
+    const orc = [];
+    const log = [];
 
     if (!prev.isBuilt && s.isBuilt) {
+      awaitingFieldRef.current = null; // Phase 1 complete — stop field interview
       const { hw, os, db, app } = s.ctx || {};
-      logs.push(`Stack built: ${[hw, os, db, app].filter(Boolean).join(' / ') || 'stack'}. Next: run the AI Smart Scan in the left panel.`);
+      const stack = [hw, os, db, app].filter(Boolean).join(' / ') || 'your stack';
+      orc.push(`${stack} locked in. Now run the AI Smart Scan — click the blue "Run AI Smart Scan" button in the left sidebar. It checks CVEs, EOL status, and compatibility against your stack in under 2 seconds.`);
     }
     if (!prev.scanComplete && s.scanComplete) {
-      logs.push(`AI Smart Scan complete — ${(s.selInc || []).length} incident(s) pre-selected. Next: open the System Design tab and fill in the 8 sections, then click "Generate Task Plan".`);
+      const incCount = (s.selInc || []).length;
+      orc.push(`Scan done — ${incCount} incident${incCount !== 1 ? 's' : ''} pre-selected based on your stack. Next: open the System Design tab, fill all 8 sections, then click "Generate Task Plan" to build the schedule and lock the design.`);
     }
     if (!prev.designApplied && s.designApplied) {
-      logs.push(`System Design locked. Next: scroll to Phase 2 in the left panel and click "Inject Phase 2" to activate incident and UUM scope.`);
+      awaitingFieldRef.current = null; // Design complete — stop any pending interview
+      orc.push(`Tasks generated and design is locked. Next: scroll to Phase 2 in the left sidebar and click "Inject Phase 2". That activates your incident triage scope, UUM task matrix, and unlocks the Gantt and RTM tabs.`);
     }
     if (!prev.phase2Active && s.phase2Active) {
-      logs.push(`Phase 2 active — ${(s.selInc || []).length} incident(s), ${(s.selUUM || []).length} UUM item(s) in scope. Open the Gantt tab to review the auto-generated schedule, then submit to CAB.`);
+      awaitingFieldRef.current = null;
+      const inc = (s.selInc || []).length;
+      const uum = (s.selUUM || []).length;
+      orc.push(`Phase 2 active — ${inc} incident${inc !== 1 ? 's' : ''} and ${uum} UUM item${uum !== 1 ? 's' : ''} in scope. Open the Gantt tab to review the auto-generated schedule. When it looks right, click "Submit to CAB" in the left sidebar.`);
     }
     if (!prev.cabApproved && s.cabApproved) {
-      logs.push(`CAB approved the change. You are cleared for cutover. Open the RTM tab to sign off all requirements before going live.`);
+      orc.push(`CAB approved — cleared for cutover. Open the RTM tab now. Every requirement row needs a PASS or NA before you can sign off. Once signed, the "Promote to Live" button activates.`);
     }
     if (!prev.cabDeclined && s.cabDeclined) {
-      logs.push(`CAB declined the change request. Click "Unlock Tabs for Revision" in the sidebar, address the feedback, then resubmit.`);
+      orc.push(`CAB declined the change. Click "Unlock Tabs for Revision" in the sidebar — that lifts all phase gates so you can update the design, scope, or task schedule. Once corrections are done, resubmit to CAB.`);
     }
     if (!prev.rtmSigned && s.rtmSigned) {
-      logs.push(`RTM signed off. All requirements verified. Proceed to the Closure tab to initiate cutover.`);
+      orc.push(`RTM signed. All requirements verified. Go to the Closure tab and work through the post-go-live checklist. When you're on the outage window, use "Promote to Live" in the sidebar.`);
     }
     if (!prev.promoted && s.promoted) {
-      logs.push(`System is now live. Complete the Closure checklist and export the full audit trail to Excel.`);
+      orc.push(`System is live. Complete the Closure checklist — hypercare monitoring, CMDB updates, lessons-learned — then export the full audit trail to Excel from the sidebar.`);
     }
     if (!prev.rtmStale && s.rtmStale) {
-      logs.push(`RTM has drifted — scope changed after sign-off. Review the RTM tab and re-sign if requirements are still met.`);
+      log.push(`RTM has drifted — scope changed after sign-off. Open the RTM tab, re-review each row, and re-sign if requirements are still fully met.`);
     }
     if (!prev.tasksStaleReason && s.tasksStaleReason) {
-      logs.push(`Gantt tasks are stale: ${s.tasksStaleReason}. Open the Gantt tab and click "Regenerate Tasks" to refresh the schedule.`);
+      log.push(`Gantt tasks are out of date: ${s.tasksStaleReason}. Open the Gantt tab and click "Regenerate Tasks".`);
     }
 
     const activeVulns = (s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length;
     const pendingDisc = (s.stakeholderDiscussions || []).filter(d => d.status === 'PENDING').length;
 
     if (prev.vulnCount === 0 && activeVulns > 0) {
-      logs.push(`${activeVulns} vulnerability${activeVulns !== 1 ? 'ies' : 'y'} now active in the registry. Open the Vulnerabilities tab to review, set business decisions, or add workarounds.`);
+      log.push(`${activeVulns} active vulnerability${activeVulns !== 1 ? 'ies' : 'y'} in the registry. Open the Vulnerabilities tab to review and set dispositions.`);
     } else if (activeVulns > prev.vulnCount && prev.vulnCount > 0) {
-      logs.push(`New vulnerability added (total active: ${activeVulns}). Open the Vulnerabilities tab.`);
+      log.push(`New vulnerability added (active: ${activeVulns}). Check the Vulnerabilities tab.`);
     }
     if (prev.pendingDiscCount === 0 && pendingDisc > 0) {
-      logs.push(`${pendingDisc} stakeholder discussion${pendingDisc !== 1 ? 's' : ''} opened and pending — team/client agreement required. Check the Vulnerabilities tab → Stakeholder Discussions.`);
+      log.push(`${pendingDisc} stakeholder discussion${pendingDisc !== 1 ? 's' : ''} pending — team/client agreement required. Vulnerabilities tab → Stakeholder Discussions.`);
     }
 
-    // Risk score threshold warnings
     const prevScore = prev.riskScore || 0;
     if (prevScore < 10 && liveScore >= 10) {
-      logs.push(`Risk score has reached ${liveScore} (${liveRl.label}). ${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risk(s) need immediate attention. Open the Risk Tracker tab.`);
+      log.push(`Risk score hit ${liveScore} (${liveRl.label}) — ${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risk(s) need attention. Check the Risk Tracker tab.`);
     } else if (prevScore < 18 && liveScore >= 18) {
-      logs.push(`Risk score is now ${liveScore} — CRITICAL threshold. Project may be blocked without immediate action. Review the Risk Tracker tab urgently.`);
+      log.push(`Risk score is ${liveScore} — CRITICAL. Project may be blocked. Review the Risk Tracker tab urgently.`);
     }
 
-    if (logs.length > 0) {
-      setMessages(m => [...m, ...logs.map(text => ({ id: nextId(), role: 'log', text }))]);
-    }
+    const allNew = [
+      ...orc.map(text => ({ id: nextId(), role: 'orchestrator', text })),
+      ...log.map(text => ({ id: nextId(), role: 'log', text })),
+    ];
+    if (allNew.length > 0) setMessages(m => [...m, ...allNew]);
 
     prevState.current = {
       isBuilt: s.isBuilt, scanComplete: s.scanComplete, designApplied: s.designApplied,
@@ -459,10 +471,10 @@ export default function OrchestratorPanel() {
     inactivityTimerRef.current = setTimeout(() => {
       if (nudgeSentRef.current) return;
       nudgeSentRef.current = true;
-      const sc = generateScript(s);
+      const sc = generateScript(sRef.current); // always use latest state
       const nudge = sc.nextAction
-        ? `Still here — next up: ${sc.nextAction}`
-        : 'Build looks complete. Ask me anything or export your full audit trail.';
+        ? `Next up: ${sc.nextAction}`
+        : 'Build looks complete — ask me anything or export your audit trail.';
       setMessages(m => [...m, { id: nextId(), role: 'nudge', text: nudge }]);
     }, 9000);
     return () => clearTimeout(inactivityTimerRef.current);
@@ -538,12 +550,37 @@ export default function OrchestratorPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reqProjectName, reqEnvType, reqGoLiveDate, reqSla]);
 
+  // ── Field interview sync — advance/close interview when user fills via UI ──
+  useEffect(() => {
+    if (!open || awaitingNameRef.current || !awaitingFieldRef.current) return;
+    const currS = sRef.current;
+    const { hw, os, db, app } = currS.ctx || {};
+    const r = currS.requirements || {};
+    const filled = { hw: !!hw, os: !!os, db: !!db, app: !!app,
+      projectName: !!r.projectName, envType: !!r.envType, goLiveDate: !!r.goLiveDate };
+    const curr = awaitingFieldRef.current;
+    if (!filled[curr]) return; // not yet filled
+    const next = nextFieldPrompt(currS, curr);
+    awaitingFieldRef.current = next;
+    if (!next) {
+      const sc = generateScript(currS);
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+        `All Phase 1 fields set. ${sc.nextAction ? `Next: ${sc.nextAction}.` : 'Ready — say "run scan" to continue.'}`
+      }]);
+    } else {
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[next] }]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctxHw, ctxOs, ctxDb, ctxApp, reqProjectName, reqEnvType, reqGoLiveDate, open]);
+
   // ── Tab change logging ────────────────────────────────────────────────────
   const prevActiveTab = useRef('');
   useEffect(() => {
     if (!prevActiveTab.current) { prevActiveTab.current = s.activeTab; return; }
     if (prevActiveTab.current === s.activeTab) return;
     prevActiveTab.current = s.activeTab;
+    // User is navigating the app directly — stop field interview
+    if (!awaitingNameRef.current) awaitingFieldRef.current = null;
     const n = userNameRef.current ? `, ${userNameRef.current}` : '';
     const tabHints = {
       exec:    `You opened Executive Summary${n}. Review incident triage, UUM changes, and the project KPI strip.`,
@@ -866,13 +903,23 @@ export default function OrchestratorPanel() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { transcript } = await res.json();
+      transcribeFailCountRef.current = 0;
       if (transcript?.trim()) {
         setInput('');
         processVoiceInput(transcript.trim());
       }
     } catch (e) {
       console.error('[Whisper STT]', e);
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Could not transcribe — please type your message or check your connection and try again.' }]);
+      transcribeFailCountRef.current++;
+      if (transcribeFailCountRef.current >= 2) {
+        transcribeFailCountRef.current = 0;
+        stopRecording();
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+          `Voice input stopped — the transcription proxy (workers.dev) is being blocked, which happens in Brave private mode.\n\nQuick fix: click the Brave lion icon → Shields Down for this site → reload. Or just type below — I respond exactly the same way.`
+        }]);
+        return;
+      }
+      // First failure — restart silently; likely just noise or a brief hiccup
     }
 
     if (recordingRef.current) restartCapture();
