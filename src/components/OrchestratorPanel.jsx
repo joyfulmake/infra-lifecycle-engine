@@ -7,6 +7,23 @@ import { buildStateContext, checkPermission, executeAction } from '../lib/orches
 import { sendChatMessage, ruleBasedResponse } from '../lib/orchestratorChat.js';
 import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
+// ── Voice helpers — content-aware emotion and speed for Cartesia TTS ─────────
+
+function pickEmotion(text) {
+  const t = (text || '').toLowerCase();
+  if (/critical|blocked|declined|urgent|failed|error|eol|expired|stale|risk|warning|cannot|can't/.test(t))
+    return ['positivity:none', 'anger:low'];
+  if (/approved|signed|complete|live|done|great|perfect|success|excellent|locked/.test(t))
+    return ['positivity:high'];
+  if (/\?|what|which|how|when|why|should|could|would|help|explain|tell me|walk me/.test(t))
+    return ['positivity:medium', 'curiosity:high'];
+  return ['positivity:medium'];
+}
+
+function pickSpeed(text) {
+  return (text || '').length > 220 ? 'slow' : 'normal';
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 
 function Bubble({ msg }) {
@@ -202,9 +219,18 @@ export default function OrchestratorPanel() {
   const recordingRef      = useRef(false);
   const sRef              = useRef(s);
   const authUserRef       = useRef(authUser);
+  const messagesRef       = useRef([]);
   useEffect(() => { sRef.current = s; });
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
   useEffect(() => { recordingRef.current = recording; }, [recording]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  function getHistory(msgs) {
+    return (msgs || [])
+      .filter(m => m.role === 'user' || m.role === 'orchestrator')
+      .slice(-12)
+      .map(m => ({ role: m.role, text: m.text }));
+  }
 
   const script    = generateScript(s);
   const checklist = getWorkflowChecklist(s);
@@ -227,7 +253,7 @@ export default function OrchestratorPanel() {
       .replace(/\n+/g, '. ')
       .replace(/\d+\.\s/g, '')
       .trim()
-      .slice(0, 350);
+      .slice(0, 600);
   }
 
   function stopCartesia() {
@@ -257,8 +283,8 @@ export default function OrchestratorPanel() {
           body: JSON.stringify({
             text,
             voiceId: VOICE_IDS.guide,
-            speed: 'normal',
-            emotion: ['positivity:medium', 'curiosity:low'],
+            speed: pickSpeed(text),
+            emotion: pickEmotion(text),
           }),
         });
         if (res.ok) {
@@ -286,7 +312,7 @@ export default function OrchestratorPanel() {
     if (!played && typeof speechSynthesis !== 'undefined') {
       await new Promise(resolve => {
         const utt = new SpeechSynthesisUtterance(text);
-        utt.rate = 0.88; utt.pitch = 1.0; utt.volume = 1; utt.lang = 'en-US';
+        utt.rate = 1.0; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
         const kv = setInterval(() => { if (speechSynthesis.paused) speechSynthesis.resume(); }, 5000);
         utt.onend  = () => { clearInterval(kv); resolve(); };
         utt.onerror = () => { clearInterval(kv); resolve(); };
@@ -305,7 +331,15 @@ export default function OrchestratorPanel() {
   }
 
   function buildWelcome() {
-    return `Hello! I'm OpsMentor — your AI guide for the entire infrastructure lifecycle.\n\nBefore we begin, what should I call you?`;
+    const stack = [s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' / ');
+    if (stack) {
+      return `OpsMentor activated. Picking up your ${stack} build — I'll keep you on track and flag anything that needs attention.\n\nWhat should I call you?`;
+    }
+    if (s.isBuilt || s.scanComplete || s.designApplied) {
+      const phase = s.promoted ? 'live' : s.rtmSigned ? 'RTM signed off' : s.cabApproved ? 'CAB approved' : s.phase2Active ? 'Phase 2' : s.designApplied ? 'design complete' : s.scanComplete ? 'scan done' : 'Phase 1';
+      return `OpsMentor here. Your build is at ${phase} — I'll guide you through the rest and call out any risks I see.\n\nWhat's your name?`;
+    }
+    return `OpsMentor activated. Tell me your stack and I'll guide you through every phase — from hardware selection all the way to go-live and closure.\n\nWhat should I call you?`;
   }
 
   // Show welcome (name-ask) when OpsMentor activates for the first time
@@ -427,10 +461,10 @@ export default function OrchestratorPanel() {
       nudgeSentRef.current = true;
       const sc = generateScript(s);
       const nudge = sc.nextAction
-        ? `Still here if you need me. Next step: ${sc.nextAction}`
-        : 'Your build looks complete! Ask me anything or export your audit trail.';
+        ? `Still here — next up: ${sc.nextAction}`
+        : 'Build looks complete. Ask me anything or export your full audit trail.';
       setMessages(m => [...m, { id: nextId(), role: 'nudge', text: nudge }]);
-    }, 3000);
+    }, 9000);
     return () => clearTimeout(inactivityTimerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, open]);
@@ -681,10 +715,26 @@ export default function OrchestratorPanel() {
         setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
       }
     } else {
-      setThinking(false);
-      const fallback = ruleBasedResponse('help', currS, currAuth);
-      const fallbackText = typeof fallback === 'string' ? fallback : fallback?.reply;
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fallbackText || 'I can answer questions about your build status, roles, RTM, and guide you through each phase.' }]);
+      // Groq handles free-form voice questions — same path as handleSend
+      (async () => {
+        try {
+          const ctx = buildStateContext(currS, currAuth);
+          const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
+          setThinking(false);
+          const { reply, actions = [], nextPrompt } = result;
+          const replyText = nextPrompt ? `${reply} ${nextPrompt}` : reply;
+          const immediate = actions.filter(a => !a.requiresConfirmation);
+          const needsConfirm = actions.filter(a => a.requiresConfirmation);
+          if (immediate.length > 0) applyActionsWithRefs(immediate);
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText }]);
+          if (needsConfirm.length > 0) {
+            setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
+          }
+        } catch {
+          setThinking(false);
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Having trouble connecting — try again in a moment, or type your question.' }]);
+        }
+      })();
     }
   }
 
@@ -1031,7 +1081,7 @@ export default function OrchestratorPanel() {
 
       // Groq-powered NLP
       const ctx    = buildStateContext(s, authUser);
-      const result = await sendChatMessage(text, ctx);
+      const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
 
       setThinking(false);
 

@@ -32,7 +32,7 @@ function json(data, status = 200) {
 }
 function err(msg, status = 400) { return json({ error: msg }, status); }
 
-async function groqChat(env, messages, maxTokens = 1024) {
+async function groqChat(env, messages, maxTokens = 1024, temperature = 0.3) {
   const model = env.GROQ_MODEL || 'llama-3.3-70b-versatile';
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -40,7 +40,7 @@ async function groqChat(env, messages, maxTokens = 1024) {
       'Authorization': `Bearer ${env.GROQ_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.3 }),
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -338,61 +338,86 @@ async function handleCartesiaTts(req, env) {
 // Requires GROQ_API_KEY. Context is a compact state snapshot from buildStateContext().
 
 async function handleOrchestratorChat(req, env) {
-  const { message, context } = await req.json().catch(() => ({}));
+  const { message, context, history = [] } = await req.json().catch(() => ({}));
   if (!message) return err('message is required');
 
   const rolesDesc = context.userRoles?.length > 0
     ? `User roles in this build: ${context.userRoles.join(', ')}`
     : context.isPM
-      ? 'User is the Project Manager (full access to all actions)'
-      : 'User has no assigned role in this build (read-only access)';
+      ? 'User is the Project Manager — full access to all actions'
+      : 'User has no assigned role in this build (read-only)';
 
-  const prompt = `You are the OpsManifest Expert Orchestrator — an AI that manages enterprise infrastructure lifecycle builds.
+  const systemPrompt = `You are OpsMentor — a hyper-intuitive AI infrastructure expert embedded inside OpsManifest, an enterprise server provisioning lifecycle tool.
+
+Deep expertise:
+- Server hardware: Dell PowerEdge, HPE ProLiant, IBM Power, Cisco UCS — specs, firmware, lifecycle
+- Operating systems: RHEL, AIX, Windows Server, Ubuntu, SLES — patching, EOL/EOS timelines, migration paths
+- Databases: Oracle RAC, PostgreSQL, MySQL, SQL Server, Sybase — migration, upgrade, backup, failover
+- Middleware: WebSphere, JBoss EAP, Tomcat, WebLogic, nginx — clustering, TLS, session replication
+- Change management: CAB approval, RTM traceability, RAID risk logging, FSM task sequencing, go/no-go criteria
+- Compliance: PCI-DSS cipher suites, SOX audit trails, ISO27001 controls, TLS 1.2/1.3 requirements
+- Lifecycle: EOL/EOS risk windows, ESU pricing, batch job migration, DR/HA topology
+
+Personality: warm and direct — like a senior infra architect sitting next to the PM. Reference actual build details (real stack, real project name, real go-live date) rather than placeholders. Proactively flag risks you see in the current state even when not asked. Call out blockers honestly. Practical over fashionable.
 
 CURRENT BUILD STATE:
 Phase: ${context.phase}
 Stack: ${context.stack}
-Project: ${context.project} | Env: ${context.envType}
+Project: ${context.project} | Environment: ${context.envType}
 Go-live: ${context.goLive} | SLA: ${context.sla}
-Incidents in scope: ${context.incidents} | UUM items: ${context.uumItems}
+Incidents in scope: ${context.incidents}
+UUM items: ${context.uumItems}
 RTM rows: ${JSON.stringify(context.rtmCounts)}
 Tasks stale: ${context.tasksStale} | RTM stale: ${context.rtmStale}
-Active coherence alerts: ${(context.alerts || []).join('; ') || 'none'}
+Active alerts: ${(context.alerts || []).join('; ') || 'none'}
 Assigned roles: ${context.assignedRoles || 'none'}
-Filled design sections: ${context.filledDesignSections || 'none'}
+Design sections filled: ${context.filledDesignSections || 'none'}
 
 USER: ${context.userEmail}
 ${rolesDesc}
 
-USER MESSAGE: "${message}"
-
-AVAILABLE ACTIONS (use only what applies):
+AVAILABLE ACTIONS (only include when the user clearly intends to make a change):
 SET_CTX            { key: "hw"|"os"|"db"|"app", value: string }
 SET_REQUIREMENT    { key: "projectName"|"envType"|"goLiveDate"|"sla"|"hoursPerDay"|"projectStartDate", value: string }
 SET_DESIGN_FIELD   { section: "unix"|"web"|"app"|"db"|"storage"|"backup"|"network"|"security", field: string, value: string }
-TOGGLE_INC         { code: string }   — add/remove an incident code
-TOGGLE_UUM         { code: string }   — add/remove a UUM item code
+TOGGLE_INC         { code: string }
+TOGGLE_UUM         { code: string }
 SET_RTM_ROW        { id: string, status: "PASS"|"FAIL"|"NA"|"PENDING" }
-SET_ROLE_ASSIGNMENT { role: string, data: { name: string, email: string, backup: string, raci: string } }
+SET_ROLE_ASSIGNMENT { role: string, data: { name, email, backup, raci } }
 APPLY_DESIGN       {}   requiresConfirmation ALWAYS
 INJECT_PHASE2      {}   requiresConfirmation ALWAYS
 SUBMIT_CAB         {}   requiresConfirmation ALWAYS
 SIGN_RTM           {}   requiresConfirmation ALWAYS
-PROMOTE            {}   requiresConfirmation ALWAYS — critical, irreversible
+PROMOTE            {}   requiresConfirmation ALWAYS (irreversible)
 
-RULES:
-1. reply = 1-2 sentences, professional, action-oriented
-2. Always set requiresConfirmation: true for APPLY_DESIGN, INJECT_PHASE2, SUBMIT_CAB, SIGN_RTM, PROMOTE
-3. Only include actions the user's RACI permits (see rolesDesc above)
-4. Questions about current state → answer in reply, empty actions array
-5. description = brief human-readable summary of what each action will do (shown in confirmation UI)
-6. nextPrompt = short follow-up suggestion (optional, <=10 words)
+RESPONSE RULES:
+1. Be as thorough as the question needs — 2–4 sentences for most replies; more for complex questions. Don't cut yourself short.
+2. Never start a reply with "I". Vary openers: "Sure —", "Your X is...", "Looking at this build...", "That depends on...", "The short answer:", "Worth flagging:", etc.
+3. Questions about current state or concepts → answer in reply, empty actions array.
+4. Only include actions when the user clearly wants to change something.
+5. Always set requiresConfirmation: true for APPLY_DESIGN, INJECT_PHASE2, SUBMIT_CAB, SIGN_RTM, PROMOTE.
+6. description = brief human-readable summary shown in confirmation card.
+7. nextPrompt = short follow-up (optional, ≤12 words). Skip if reply ends at a natural stop.
+8. If you notice a risk or inconsistency in the build state relevant to the question, mention it proactively.
+9. Reference actual stack/project/date from the build state — not generic placeholders.
 
 Return valid JSON only — no markdown, no code fences:
 {"reply":"...","actions":[{"type":"...","params":{},"description":"...","requiresConfirmation":false}],"nextPrompt":"..."}`;
 
+  // Build conversation history
+  const chatHistory = (history || [])
+    .filter(m => m.role === 'user' || m.role === 'orchestrator')
+    .slice(-10)
+    .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...chatHistory,
+    { role: 'user', content: message },
+  ];
+
   try {
-    const groqRes = await groqChat(env, [{ role: 'user', content: prompt }], 900);
+    const groqRes = await groqChat(env, messages, 1200, 0.65);
     const content = groqRes.choices?.[0]?.message?.content || '';
     const match   = content.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in Groq response');

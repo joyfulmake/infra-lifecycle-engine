@@ -10,11 +10,11 @@ const CHAT_URL = CARTESIA_WORKER_URL;
 
 // ── Groq-powered chat ─────────────────────────────────────────────────────────
 
-export async function sendChatMessage(message, stateContext) {
+export async function sendChatMessage(message, stateContext, history = []) {
   const res = await fetch(`${CHAT_URL}/orchestrator-chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, context: stateContext }),
+    body: JSON.stringify({ message, context: stateContext, history }),
   });
 
   if (!res.ok) {
@@ -782,16 +782,6 @@ export function ruleBasedResponse(message, s, authUser) {
     return { reply: `Absolutely — just type it directly. For example:\n• "hardware is Dell PowerEdge R750"\n• "OS is RHEL 8.6"\n• "project name is Server Migration Q3"\n\n${next || 'All Phase 1 fields look complete — ask me anything else.'}` };
   }
 
-  // ── Catch-all — give workflow-aware guidance instead of failing ───────────
-  const script = generateScript(s);
-  const next = nextPhase1Prompt(s);
-  const contextHint = next
-    ? `I'm in Phase 1 guidance mode. ${next}`
-    : script.nextAction
-    ? `Current focus: ${script.nextAction}`
-    : 'Your build is complete — ask me about any tab or phase.';
-
-  return {
-    reply: `I didn't quite catch that. Here are some things I can help with:\n\n• "What's next?" — current workflow step\n• "Phase 1 fields?" — list all build inputs\n• "hardware is [name]" — set a value directly\n• "Show alerts" — coherence warnings\n• "Who is the Unix Admin?" — role lookup\n• "RTM ready?" — sign-off status\n\n${contextHint}`,
-  };
+  // Unrecognised — let Groq handle free-form questions with full context
+  return null;
 }
