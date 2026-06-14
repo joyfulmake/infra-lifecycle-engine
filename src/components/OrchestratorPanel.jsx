@@ -215,7 +215,6 @@ export default function OrchestratorPanel({ docked = false }) {
   const silenceTimerRef  = useRef(null);
   const maxRecTimerRef   = useRef(null);
   const audioCtxRef      = useRef(null); // Whisper MediaRecorder analysis
-  const ttsCtxRef        = useRef(null); // Cartesia TTS AudioContext
   const hasSpeechRef     = useRef(false);
   const audioUnlockedRef = useRef(false);
 
@@ -256,21 +255,20 @@ export default function OrchestratorPanel({ docked = false }) {
   const cartesiaPlayingRef = useRef(false);
   const currentAudioRef    = useRef(null);
 
-  // Unlock browser autoplay on the first synchronous user gesture.
-  // HTMLAudioElement.play() is blocked until there's a user gesture, but
-  // the gesture window expires before our async fetch+blob chain completes.
-  // Creating/resuming an AudioContext synchronously in the click handler
-  // permanently enables audio for the session — all subsequent audio.play()
-  // calls succeed without a gesture.
+  // Playing a tiny silent audio from within a user gesture permanently unlocks
+  // HTMLAudioElement.play() for this browsing session — no need for AudioContext.
+  // This is the standard approach used by game engines (Phaser, Babylon.js) and
+  // audio webapps to bypass Chrome/Brave's media autoplay policy.
+  // Must be called synchronously at the START of a click/key handler (before any await).
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
   function unlockAudio() {
     if (audioUnlockedRef.current) return;
     audioUnlockedRef.current = true;
     try {
-      // Persist the context so TTS playback can use it after async gaps
-      if (!ttsCtxRef.current || ttsCtxRef.current.state === 'closed') {
-        ttsCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (ttsCtxRef.current.state === 'suspended') ttsCtxRef.current.resume();
+      const a = new Audio(SILENT_WAV);
+      a.volume = 0;
+      a.play().catch(() => {});
     } catch {}
   }
 
@@ -285,13 +283,12 @@ export default function OrchestratorPanel({ docked = false }) {
 
   function stopCartesia() {
     if (currentAudioRef.current) {
-      // Stop AudioContext BufferSource or legacy HTMLAudioElement
-      try { currentAudioRef.current.stop(); } catch {}
       try { currentAudioRef.current.pause(); } catch {}
       currentAudioRef.current = null;
     }
     cartesiaQueueRef.current = [];
     cartesiaPlayingRef.current = false;
+    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   }
 
   async function runCartesiaQueue() {
@@ -299,12 +296,19 @@ export default function OrchestratorPanel({ docked = false }) {
       cartesiaPlayingRef.current = false;
       return;
     }
+    // Only speak after the user has unlocked audio with a gesture.
+    // Without a gesture, browser blocks all audio — queue drains silently on page load.
+    if (!audioUnlockedRef.current) {
+      cartesiaQueueRef.current = [];
+      cartesiaPlayingRef.current = false;
+      return;
+    }
     cartesiaPlayingRef.current = true;
     const text = cartesiaQueueRef.current.shift();
 
-    // Use AudioContext (Web Audio API) instead of HTMLAudioElement — AudioContext playback
-    // is not subject to browser autoplay restrictions once the context is running.
-    // ttsCtxRef is created/resumed synchronously in unlockAudio() on the first user gesture.
+    let played = false;
+
+    // Primary: Cartesia Sonic-2 via same-origin Pages Function relay
     if (CARTESIA_CONFIGURED) {
       const ttsBody = JSON.stringify({
         text,
@@ -321,32 +325,42 @@ export default function OrchestratorPanel({ docked = false }) {
             signal: AbortSignal.timeout(10000),
           });
           if (!res.ok) continue;
-          const arrayBuf = await res.arrayBuffer();
-
-          // Ensure AudioContext exists (create on first play if unlockAudio ran; create fresh otherwise)
-          if (!ttsCtxRef.current || ttsCtxRef.current.state === 'closed') {
-            try { ttsCtxRef.current = new (window.AudioContext || window.webkitAudioContext)(); } catch { continue; }
+          const blob = await res.blob();
+          const objUrl = URL.createObjectURL(blob);
+          const audio = new Audio(objUrl);
+          audio.volume = 1;
+          currentAudioRef.current = audio;
+          try {
+            await audio.play();
+            played = true;
+            await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; });
+            break;
+          } catch { /* autoplay blocked — fall through to Web Speech */ }
+          finally {
+            URL.revokeObjectURL(objUrl);
+            currentAudioRef.current = null;
           }
-          const ctx = ttsCtxRef.current;
-          if (ctx.state === 'suspended') await ctx.resume();
-
-          let decoded;
-          try { decoded = await ctx.decodeAudioData(arrayBuf); } catch { continue; }
-
-          await new Promise(resolve => {
-            const source = ctx.createBufferSource();
-            source.buffer = decoded;
-            source.connect(ctx.destination);
-            source.onended = resolve;
-            currentAudioRef.current = source;
-            source.start(0);
-          });
-          currentAudioRef.current = null;
-          break; // played successfully
-        } catch { /* network/decode error — try next */ }
+        } catch { /* network error — try next */ }
       }
     }
-    // No Web Speech fallback — silence is better than a robotic synthetic voice.
+
+    // Fallback: browser built-in speech synthesis (works everywhere, no API key)
+    if (!played && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        speechSynthesis.cancel();
+        await new Promise(resolve => {
+          const utt = new SpeechSynthesisUtterance(text.slice(0, 300));
+          utt.rate = 0.88; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
+          // Prefer a US English voice if available
+          const voices = speechSynthesis.getVoices();
+          const preferred = voices.find(v => v.lang === 'en-US' && !v.name.toLowerCase().includes('google'))
+            || voices.find(v => v.lang.startsWith('en'));
+          if (preferred) utt.voice = preferred;
+          utt.onend = resolve; utt.onerror = resolve;
+          speechSynthesis.speak(utt);
+        });
+      } catch {}
+    }
 
     runCartesiaQueue();
   }
@@ -362,13 +376,13 @@ export default function OrchestratorPanel({ docked = false }) {
     const stack = [s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' / ');
     const sc = generateScript(s);
     if (stack && s.isBuilt) {
-      return `Picking up your ${stack} build.\n\nCurrent: ${sc.nextAction || 'all phases complete'}.\n\nAsk me anything or use the quick actions.`;
+      return `Picking up your ${stack} build.\n\nNext: ${sc.nextAction || 'all phases complete'}.\n\nTap a chip or type to continue — I speak on your first action.`;
     }
     if (s.isBuilt || s.scanComplete || s.designApplied) {
-      return `Build in progress. Focus: ${sc.nextAction || 'all phases complete'}.\n\nAsk me anything or use the quick actions below.`;
+      return `Build in progress. Next: ${sc.nextAction || 'all phases complete'}.\n\nTap a chip or type — I'll guide you through the next steps with voice.`;
     }
-    // Fresh start — kick off the guided interview immediately
-    return `I'm OpsMentor — the AI admin for this infrastructure lifecycle.\n\nYou talk (or type); I'll fill in the app and move you through every phase — provisioning, system design, CAB approval, RTM, and go-live.\n\nLet's start with your platform.\n\nWhat hardware are you deploying?\n(e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9, Cisco UCS)`;
+    // Fresh start — smart, concise kickstart
+    return `I'm OpsMentor.\n\nI run your entire infrastructure lifecycle — provisioning, system design, CAB approval, RTM sign-off, and go-live.\n\nTap a hardware chip below to begin (I'll speak from your first action). Or type your answer directly — "Dell PowerEdge R750", "RHEL 9.2", whatever fits.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -667,10 +681,13 @@ export default function OrchestratorPanel({ docked = false }) {
     return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
   }, []);
 
-  // ── Auto-speak ALL messages via Web Speech queue ──────────────────────────
-  // Voice continues even when panel is minimized (checks `open`, not `panelVisible`).
+  // ── Auto-speak ALL messages via TTS queue ─────────────────────────────────
+  // Skips the very first message (welcome) because no user gesture has happened yet
+  // and browsers block all audio without one. Voice starts from message #2 onward
+  // (which is always triggered by a chip click / typed send / mic — all are gestures).
   useEffect(() => {
     if (!open || messages.length === 0) return;
+    if (messages.length === 1) return; // welcome message — no gesture yet, skip voice
     const last = messages[messages.length - 1];
     if (['user', 'confirm', 'result'].includes(last.role)) return;
     let text;
@@ -1025,25 +1042,35 @@ export default function OrchestratorPanel({ docked = false }) {
 
   const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
+  const srCycleCountRef = useRef(0); // rapid-cycle detector for Brave/Firefox
+  const srStartTimeRef  = useRef(0);
+
   function startNativeSpeech() {
-    if (!SR) return;
+    if (!SR) { startWhisperRecording(); return; }
+    srCycleCountRef.current = 0;
+    srStartTimeRef.current = 0;
+    _startNativeSpeechInner();
+  }
+
+  function _startNativeSpeechInner() {
     const rec = new SR();
     rec.lang = 'en-US';
     rec.continuous = true;       // keep mic open until user clicks stop
-    rec.interimResults = true;   // show live transcript as feedback while speaking
+    rec.interimResults = true;   // show live interim transcript
     rec.maxAlternatives = 1;
     speechRecRef.current = rec;
+    srStartTimeRef.current = Date.now();
 
     rec.onstart = () => { setRecording(true); recordingRef.current = true; setRecStatus('listening…'); };
 
     rec.onresult = (e) => {
+      srCycleCountRef.current = 0; // reset cycle counter on successful result
       const latest = e.results[e.results.length - 1];
       if (latest.isFinal) {
         const t = latest[0].transcript.trim();
         if (t) { setRecStatus('listening…'); processVoiceInput(t); }
       } else {
-        // Show interim transcript so user can see their speech is being picked up
-        setRecStatus(latest[0].transcript.slice(0, 50));
+        setRecStatus(latest[0].transcript.slice(0, 50) + '…');
       }
     };
 
@@ -1054,23 +1081,35 @@ export default function OrchestratorPanel({ docked = false }) {
         speechRecRef.current = null;
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
           'Microphone permission denied. Click the address-bar lock icon → Microphone → Allow, then reload.' }]);
-        return;
       }
-      // no-speech, aborted, network — onend will restart after delay
+      // other errors handled in onend
     };
 
     rec.onend = () => {
-      // Auto-restart with small delay to avoid rapid-fire start/stop loop
-      if (recordingRef.current && speechRecRef.current) {
-        setTimeout(() => {
-          if (recordingRef.current && speechRecRef.current) {
-            try { speechRecRef.current.start(); } catch {}
-          }
-        }, 150);
+      if (!recordingRef.current || !speechRecRef.current) {
+        setRecording(false); recordingRef.current = false; setRecStatus('');
+        speechRecRef.current = null;
         return;
       }
-      setRecording(false); recordingRef.current = false; setRecStatus('');
-      speechRecRef.current = null;
+      const elapsed = Date.now() - srStartTimeRef.current;
+      srCycleCountRef.current += 1;
+      // If SpeechRecognition fires onend within 1.5 s of start with no result 3+ times,
+      // the browser's speech service is blocked (common in Brave with strict shields).
+      // Fall back to Whisper (MediaRecorder → server-side transcription).
+      if (elapsed < 1500 && srCycleCountRef.current >= 3) {
+        recordingRef.current = false;
+        speechRecRef.current = null;
+        setRecStatus('');
+        setMessages(m => [...m, { id: nextId(), role: 'log', text:
+          'Browser speech service unavailable — switching to Whisper transcription.' }]);
+        startWhisperRecording();
+        return;
+      }
+      setTimeout(() => {
+        if (recordingRef.current && speechRecRef.current) {
+          try { speechRecRef.current.start(); } catch { /* fall through */ }
+        }
+      }, 150);
     };
 
     try { rec.start(); } catch { setRecording(false); setRecStatus(''); }
