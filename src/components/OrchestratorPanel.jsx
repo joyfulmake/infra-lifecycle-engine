@@ -214,7 +214,8 @@ export default function OrchestratorPanel({ docked = false }) {
   const audioChunksRef   = useRef([]);
   const silenceTimerRef  = useRef(null);
   const maxRecTimerRef   = useRef(null);
-  const audioCtxRef      = useRef(null);
+  const audioCtxRef      = useRef(null); // Whisper MediaRecorder analysis
+  const ttsCtxRef        = useRef(null); // Cartesia TTS AudioContext
   const hasSpeechRef     = useRef(false);
   const audioUnlockedRef = useRef(false);
 
@@ -265,8 +266,11 @@ export default function OrchestratorPanel({ docked = false }) {
     if (audioUnlockedRef.current) return;
     audioUnlockedRef.current = true;
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === 'suspended') ctx.resume();
+      // Persist the context so TTS playback can use it after async gaps
+      if (!ttsCtxRef.current || ttsCtxRef.current.state === 'closed') {
+        ttsCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (ttsCtxRef.current.state === 'suspended') ttsCtxRef.current.resume();
     } catch {}
   }
 
@@ -281,12 +285,13 @@ export default function OrchestratorPanel({ docked = false }) {
 
   function stopCartesia() {
     if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
+      // Stop AudioContext BufferSource or legacy HTMLAudioElement
+      try { currentAudioRef.current.stop(); } catch {}
+      try { currentAudioRef.current.pause(); } catch {}
       currentAudioRef.current = null;
     }
     cartesiaQueueRef.current = [];
     cartesiaPlayingRef.current = false;
-    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   }
 
   async function runCartesiaQueue() {
@@ -297,8 +302,9 @@ export default function OrchestratorPanel({ docked = false }) {
     cartesiaPlayingRef.current = true;
     const text = cartesiaQueueRef.current.shift();
 
-    // Try Pages Function relay first (same-origin, never blocked by shields),
-    // then worker URL as fallback. If both fail, stay silent — no Web Speech.
+    // Use AudioContext (Web Audio API) instead of HTMLAudioElement — AudioContext playback
+    // is not subject to browser autoplay restrictions once the context is running.
+    // ttsCtxRef is created/resumed synchronously in unlockAudio() on the first user gesture.
     if (CARTESIA_CONFIGURED) {
       const ttsBody = JSON.stringify({
         text,
@@ -312,26 +318,32 @@ export default function OrchestratorPanel({ docked = false }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: ttsBody,
-            signal: AbortSignal.timeout(8000),
+            signal: AbortSignal.timeout(10000),
           });
           if (!res.ok) continue;
-          const blob = await res.blob();
-          const objUrl = URL.createObjectURL(blob);
-          const audio = new Audio(objUrl);
-          currentAudioRef.current = audio;
-          try {
-            await audio.play();
-            await new Promise(resolve => {
-              audio.onended = resolve;
-              audio.onerror = resolve;
-            });
-            break; // played successfully
-          } catch { /* autoplay blocked — try next */ }
-          finally {
-            URL.revokeObjectURL(objUrl);
-            currentAudioRef.current = null;
+          const arrayBuf = await res.arrayBuffer();
+
+          // Ensure AudioContext exists (create on first play if unlockAudio ran; create fresh otherwise)
+          if (!ttsCtxRef.current || ttsCtxRef.current.state === 'closed') {
+            try { ttsCtxRef.current = new (window.AudioContext || window.webkitAudioContext)(); } catch { continue; }
           }
-        } catch { /* network error — try next */ }
+          const ctx = ttsCtxRef.current;
+          if (ctx.state === 'suspended') await ctx.resume();
+
+          let decoded;
+          try { decoded = await ctx.decodeAudioData(arrayBuf); } catch { continue; }
+
+          await new Promise(resolve => {
+            const source = ctx.createBufferSource();
+            source.buffer = decoded;
+            source.connect(ctx.destination);
+            source.onended = resolve;
+            currentAudioRef.current = source;
+            source.start(0);
+          });
+          currentAudioRef.current = null;
+          break; // played successfully
+        } catch { /* network/decode error — try next */ }
       }
     }
     // No Web Speech fallback — silence is better than a robotic synthetic voice.
@@ -1017,18 +1029,22 @@ export default function OrchestratorPanel({ docked = false }) {
     if (!SR) return;
     const rec = new SR();
     rec.lang = 'en-US';
-    rec.continuous = true;    // keep listening until user clicks stop
-    rec.interimResults = false;
+    rec.continuous = true;       // keep mic open until user clicks stop
+    rec.interimResults = true;   // show live transcript as feedback while speaking
     rec.maxAlternatives = 1;
     speechRecRef.current = rec;
 
-    rec.onstart = () => { setRecording(true); recordingRef.current = true; setRecStatus('listening'); };
+    rec.onstart = () => { setRecording(true); recordingRef.current = true; setRecStatus('listening…'); };
 
     rec.onresult = (e) => {
-      // Only process final results
-      const finals = Array.from(e.results).filter(r => r.isFinal);
-      const t = finals.map(r => r[0].transcript).join(' ').trim();
-      if (t) processVoiceInput(t);
+      const latest = e.results[e.results.length - 1];
+      if (latest.isFinal) {
+        const t = latest[0].transcript.trim();
+        if (t) { setRecStatus('listening…'); processVoiceInput(t); }
+      } else {
+        // Show interim transcript so user can see their speech is being picked up
+        setRecStatus(latest[0].transcript.slice(0, 50));
+      }
     };
 
     rec.onerror = (e) => {
@@ -1040,13 +1056,18 @@ export default function OrchestratorPanel({ docked = false }) {
           'Microphone permission denied. Click the address-bar lock icon → Microphone → Allow, then reload.' }]);
         return;
       }
-      // no-speech, aborted, network — browser may auto-stop; onend will restart if still recording
+      // no-speech, aborted, network — onend will restart after delay
     };
 
     rec.onend = () => {
-      // If user hasn't clicked stop, auto-restart so the mic stays active
+      // Auto-restart with small delay to avoid rapid-fire start/stop loop
       if (recordingRef.current && speechRecRef.current) {
-        try { speechRecRef.current.start(); return; } catch { /* fall through to stop */ }
+        setTimeout(() => {
+          if (recordingRef.current && speechRecRef.current) {
+            try { speechRecRef.current.start(); } catch {}
+          }
+        }, 150);
+        return;
       }
       setRecording(false); recordingRef.current = false; setRecStatus('');
       speechRecRef.current = null;

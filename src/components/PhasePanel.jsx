@@ -708,15 +708,33 @@ export default function PhasePanel() {
   const [dbSel, setDbSel] = useState('');
   const [appSel, setAppSel] = useState('');
 
-  // Sync local input state from store when OpsMentor sets ctx values externally
+  // Sync dropdowns + text inputs when OpsMentor sets ctx externally via SET_CTX.
+  // Must update BOTH the <select> value (hwSel) AND the custom text (hwCustom) so the
+  // field is visible — FilteredSuggestInput only renders when sel === '__custom'.
+  useEffect(() => {
+    const v = s.ctx?.hw; if (!v) return;
+    if (HW_OPTIONS.includes(v)) { setHwSel(v); setHwCustom(''); }
+    else { setHwSel('__custom'); setHwCustom(v); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (s.ctx?.hw && s.ctx.hw !== hwCustom) setHwCustom(s.ctx.hw); }, [s.ctx?.hw]);
+  }, [s.ctx?.hw]);
+  useEffect(() => {
+    const v = s.ctx?.os; if (!v) return;
+    if (OS_OPTIONS.includes(v)) { setOsSel(v); setOsCustom(''); }
+    else { setOsSel('__custom'); setOsCustom(v); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (s.ctx?.os && s.ctx.os !== osCustom) setOsCustom(s.ctx.os); }, [s.ctx?.os]);
+  }, [s.ctx?.os]);
+  useEffect(() => {
+    const v = s.ctx?.db; if (!v) return;
+    if (DB_OPTIONS.includes(v)) { setDbSel(v); setDbCustom(''); }
+    else { setDbSel('__custom'); setDbCustom(v); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (s.ctx?.db && s.ctx.db !== dbCustom) setDbCustom(s.ctx.db); }, [s.ctx?.db]);
+  }, [s.ctx?.db]);
+  useEffect(() => {
+    const v = s.ctx?.app; if (!v) return;
+    if (APP_OPTIONS.includes(v)) { setAppSel(v); setAppCustom(''); }
+    else { setAppSel('__custom'); setAppCustom(v); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (s.ctx?.app && s.ctx.app !== appCustom) setAppCustom(s.ctx.app); }, [s.ctx?.app]);
+  }, [s.ctx?.app]);
   const [reqOpen, setReqOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [customIncOpen, setCustomIncOpen] = useState(false);

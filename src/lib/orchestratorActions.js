@@ -169,6 +169,12 @@ export function executeAction(action, store) {
     case 'RUN_SCAN': {
       const results = runSmartScan(store.ctx);
       store.completeScan(results);
+      // Auto-select all suggested incidents and UUM items so the sidebar shows them immediately
+      const fresh = useStore.getState();
+      const curInc = fresh.selInc || [];
+      const curUUM = fresh.selUUM || [];
+      (results.suggestedInc || []).forEach(code => { if (!curInc.includes(code)) store.toggleInc(code); });
+      (results.suggestedUUM || []).forEach(code => { if (!curUUM.includes(code)) store.toggleUUM(code); });
       break;
     }
 
