@@ -256,39 +256,35 @@ export default function OrchestratorPanel({ docked = false }) {
   const currentAudioRef    = useRef(null);
 
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-  const wsUnlockedRef = useRef(false); // Web Speech unlocked separately from HTMLAudio
 
   // Must be called synchronously in a click/key handler (before any await).
-  // Unlocks both HTMLAudioElement and speechSynthesis for the session.
+  // Plays a silent WAV to unlock HTMLAudioElement for the session.
   function unlockAudio() {
     if (!audioUnlockedRef.current) {
       audioUnlockedRef.current = true;
       try { const a = new Audio(SILENT_WAV); a.volume = 0; a.play().catch(() => {}); } catch {}
     }
-    if (!wsUnlockedRef.current) {
-      wsUnlockedRef.current = true;
-      try {
-        const utt = new SpeechSynthesisUtterance(' ');
-        utt.volume = 0;
-        speechSynthesis.speak(utt);
-      } catch {}
-    }
   }
 
-  // Speak text immediately from a user gesture context (no async gap).
-  // Cartesia will cancel this when it arrives; if Cartesia fails, this is the voice.
-  function speakNow(text) {
-    if (typeof speechSynthesis === 'undefined') return;
-    const clean = cleanText(text).slice(0, 280);
-    if (!clean) return;
-    speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(clean);
-    utt.rate = 0.88; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
-    const voices = speechSynthesis.getVoices();
-    const preferred = voices.find(v => /en.US/i.test(v.lang) && !/google/i.test(v.name))
-      || voices.find(v => /^en/i.test(v.lang));
-    if (preferred) utt.voice = preferred;
-    speechSynthesis.speak(utt);
+  // Extract the key question or next-action sentence to speak aloud.
+  // Skips pure confirmation echoes — user can read those, hearing them is redundant.
+  function voiceExcerpt(text) {
+    if (!text) return '';
+    const sentences = (text || '')
+      .replace(/[•★✓✗→←↑↓]\s*/g, '')
+      .replace(/\n+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 8);
+    if (!sentences.length) return text.slice(0, 120);
+    // Prefer the question — most natural to speak aloud
+    const q = sentences.find(s => s.includes('?'));
+    if (q) return q.slice(0, 160);
+    // Skip bare confirmation echoes (single-word value confirmations user just clicked)
+    const bareEcho = /^(hardware set to|os set to|database set to|application set to|environment set to)\s+[^.]+\.?$/i;
+    const meaningful = sentences.find(s => !bareEcho.test(s)) || sentences[sentences.length - 1] || sentences[0];
+    return meaningful.replace(/^(next:|next step:)\s*/i, '').trim().slice(0, 160);
   }
 
   function cleanText(text) {
@@ -351,12 +347,10 @@ export default function OrchestratorPanel({ docked = false }) {
           currentAudioRef.current = audio;
           try {
             await audio.play();
-            // Cartesia won — cancel any Web Speech that started synchronously
-            try { speechSynthesis.cancel(); } catch {}
             played = true;
             await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; });
             break;
-          } catch { /* autoplay blocked — Web Speech fallback continues */ }
+          } catch { /* autoplay blocked — try next URL */ }
           finally {
             URL.revokeObjectURL(objUrl);
             currentAudioRef.current = null;
@@ -365,16 +359,28 @@ export default function OrchestratorPanel({ docked = false }) {
       }
     }
 
-    // Web Speech was already started synchronously via speakNow() in the gesture handler.
-    // If Cartesia played, we cancelled it above. If Cartesia failed, Web Speech continues.
+    // Web Speech fallback — only fires if Cartesia failed entirely.
+    // Text is already voiceExcerpt'd (short question / next-step, not echo of user input).
+    if (!played && typeof speechSynthesis !== 'undefined') {
+      try {
+        speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(text.slice(0, 200));
+        utt.rate = 0.88; utt.pitch = 1.0; utt.volume = 1; utt.lang = 'en-US';
+        const voices = speechSynthesis.getVoices();
+        const preferred = voices.find(v => /en.US/i.test(v.lang) && !/google/i.test(v.name))
+          || voices.find(v => /^en/i.test(v.lang));
+        if (preferred) utt.voice = preferred;
+        await new Promise(resolve => { utt.onend = resolve; utt.onerror = resolve; speechSynthesis.speak(utt); });
+      } catch {}
+    }
 
     runCartesiaQueue();
   }
 
   function speakQueued(text) {
-    const clean = cleanText(text);
-    if (!clean) return;
-    cartesiaQueueRef.current.push(clean);
+    const excerpt = voiceExcerpt(text);
+    if (!excerpt) return;
+    cartesiaQueueRef.current.push(excerpt);
     if (!cartesiaPlayingRef.current) runCartesiaQueue();
   }
 
@@ -382,13 +388,15 @@ export default function OrchestratorPanel({ docked = false }) {
     const stack = [s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' / ');
     const sc = generateScript(s);
     if (stack && s.isBuilt) {
-      return `Picking up your ${stack} build.\n\nNext: ${sc.nextAction || 'all phases complete'}.\n\nTap a chip or type to continue — I speak on your first action.`;
+      return `Welcome back. Your ${stack} build is already in progress.\n\nNext step: ${sc.nextAction || 'all phases complete'}.\n\nSelect a chip or type your next step — I'll take it from here.`;
     }
     if (s.isBuilt || s.scanComplete || s.designApplied) {
-      return `Build in progress. Next: ${sc.nextAction || 'all phases complete'}.\n\nTap a chip or type — I'll guide you through the next steps with voice.`;
+      return `Welcome back. Build in progress — next: ${sc.nextAction || 'all phases complete'}.\n\nType your next step or use the buttons below.`;
     }
-    // Fresh start — smart, concise kickstart
-    return `I'm OpsMentor.\n\nI run your entire infrastructure lifecycle — provisioning, system design, CAB approval, RTM sign-off, and go-live.\n\nTap a hardware chip below to begin (I'll speak from your first action). Or type your answer directly — "Dell PowerEdge R750", "RHEL 9.2", whatever fits.`;
+    // Fresh start — warm, brief, action-oriented
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    return `${greeting}. I'm OpsMentor — your AI infrastructure manager.\n\nI'll guide you through your full server lifecycle: hardware selection, system design, CAB approval, RTM sign-off, and production go-live.\n\nSelect your hardware platform below to get started.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -700,22 +708,17 @@ export default function OrchestratorPanel({ docked = false }) {
     return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
   }, []);
 
-  // ── Auto-speak ALL messages via TTS queue ─────────────────────────────────
-  // Skips the very first message (welcome) because no user gesture has happened yet
-  // and browsers block all audio without one. Voice starts from message #2 onward
-  // (which is always triggered by a chip click / typed send / mic — all are gestures).
+  // ── Auto-speak orchestrator messages via TTS queue ────────────────────────
+  // Only speaks 'orchestrator' role messages — never log entries, nudges, results,
+  // or user messages. Voice starts from message #2 (welcome skipped — no gesture yet).
+  // voiceExcerpt() inside speakQueued ensures we speak the KEY QUESTION or NEXT ACTION,
+  // never an echo of what the user just typed or selected.
   useEffect(() => {
     if (!open || messages.length === 0) return;
-    if (messages.length === 1) return; // welcome message — no gesture yet, skip voice
+    if (messages.length === 1) return; // welcome — no gesture yet, browser blocks audio
     const last = messages[messages.length - 1];
-    if (['user', 'confirm', 'result'].includes(last.role)) return;
-    let text;
-    if (last.role === 'orchestrator') {
-      text = last.text.split('\n').find(l => l.trim().length > 10) || last.text;
-    } else {
-      text = last.text;
-    }
-    speakQueued(text);
+    if (last.role !== 'orchestrator') return;
+    speakQueued(last.text);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, open]);
 
@@ -891,7 +894,6 @@ export default function OrchestratorPanel({ docked = false }) {
       awaitingFieldRef.current = next;
       const envReply = `Environment set to ${value}.${next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll Phase 1 fields done — I\'ll build and scan now.'}`;
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: envReply }]);
-      speakNow(envReply);
       if (!next && !sRef.current.isBuilt) {
         applyActionsWithRefs([
           { type: 'BUILD', description: 'Build environment', requiresConfirmation: false },
@@ -931,7 +933,6 @@ export default function OrchestratorPanel({ docked = false }) {
     }
 
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
-    speakNow(reply); // speak directly from gesture — guaranteed no async gap
   }
 
   // ── Mic / voice input ────────────────────────────────────────────────────
@@ -1416,7 +1417,6 @@ export default function OrchestratorPanel({ docked = false }) {
             const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields complete! Say "run scan" to continue.';
             const fullReply = reply + nextQ;
             setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fullReply }]);
-            speakNow(fullReply);
             return;
           }
         }
@@ -1439,14 +1439,13 @@ export default function OrchestratorPanel({ docked = false }) {
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
         if (immediate.length > 0) applyActions(immediate);
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
-        speakNow(reply); // synchronous from handleSend gesture context
         if (needsConfirm.length > 0) {
           setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
         }
         return;
       }
 
-      // Groq-powered NLP (async — speakQueued handles voice, speakNow already fired for thinking state)
+      // Groq-powered NLP (async — voice via auto-speak useEffect when reply message is added)
       const ctx    = buildStateContext(s, authUser);
       const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
 
