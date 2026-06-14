@@ -255,21 +255,40 @@ export default function OrchestratorPanel({ docked = false }) {
   const cartesiaPlayingRef = useRef(false);
   const currentAudioRef    = useRef(null);
 
-  // Playing a tiny silent audio from within a user gesture permanently unlocks
-  // HTMLAudioElement.play() for this browsing session — no need for AudioContext.
-  // This is the standard approach used by game engines (Phaser, Babylon.js) and
-  // audio webapps to bypass Chrome/Brave's media autoplay policy.
-  // Must be called synchronously at the START of a click/key handler (before any await).
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+  const wsUnlockedRef = useRef(false); // Web Speech unlocked separately from HTMLAudio
 
+  // Must be called synchronously in a click/key handler (before any await).
+  // Unlocks both HTMLAudioElement and speechSynthesis for the session.
   function unlockAudio() {
-    if (audioUnlockedRef.current) return;
-    audioUnlockedRef.current = true;
-    try {
-      const a = new Audio(SILENT_WAV);
-      a.volume = 0;
-      a.play().catch(() => {});
-    } catch {}
+    if (!audioUnlockedRef.current) {
+      audioUnlockedRef.current = true;
+      try { const a = new Audio(SILENT_WAV); a.volume = 0; a.play().catch(() => {}); } catch {}
+    }
+    if (!wsUnlockedRef.current) {
+      wsUnlockedRef.current = true;
+      try {
+        const utt = new SpeechSynthesisUtterance(' ');
+        utt.volume = 0;
+        speechSynthesis.speak(utt);
+      } catch {}
+    }
+  }
+
+  // Speak text immediately from a user gesture context (no async gap).
+  // Cartesia will cancel this when it arrives; if Cartesia fails, this is the voice.
+  function speakNow(text) {
+    if (typeof speechSynthesis === 'undefined') return;
+    const clean = cleanText(text).slice(0, 280);
+    if (!clean) return;
+    speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.rate = 0.88; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
+    const voices = speechSynthesis.getVoices();
+    const preferred = voices.find(v => /en.US/i.test(v.lang) && !/google/i.test(v.name))
+      || voices.find(v => /^en/i.test(v.lang));
+    if (preferred) utt.voice = preferred;
+    speechSynthesis.speak(utt);
   }
 
   function cleanText(text) {
@@ -332,10 +351,12 @@ export default function OrchestratorPanel({ docked = false }) {
           currentAudioRef.current = audio;
           try {
             await audio.play();
+            // Cartesia won — cancel any Web Speech that started synchronously
+            try { speechSynthesis.cancel(); } catch {}
             played = true;
             await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; });
             break;
-          } catch { /* autoplay blocked — fall through to Web Speech */ }
+          } catch { /* autoplay blocked — Web Speech fallback continues */ }
           finally {
             URL.revokeObjectURL(objUrl);
             currentAudioRef.current = null;
@@ -344,23 +365,8 @@ export default function OrchestratorPanel({ docked = false }) {
       }
     }
 
-    // Fallback: browser built-in speech synthesis (works everywhere, no API key)
-    if (!played && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      try {
-        speechSynthesis.cancel();
-        await new Promise(resolve => {
-          const utt = new SpeechSynthesisUtterance(text.slice(0, 300));
-          utt.rate = 0.88; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
-          // Prefer a US English voice if available
-          const voices = speechSynthesis.getVoices();
-          const preferred = voices.find(v => v.lang === 'en-US' && !v.name.toLowerCase().includes('google'))
-            || voices.find(v => v.lang.startsWith('en'));
-          if (preferred) utt.voice = preferred;
-          utt.onend = resolve; utt.onerror = resolve;
-          speechSynthesis.speak(utt);
-        });
-      } catch {}
-    }
+    // Web Speech was already started synchronously via speakNow() in the gesture handler.
+    // If Cartesia played, we cancelled it above. If Cartesia failed, Web Speech continues.
 
     runCartesiaQueue();
   }
@@ -551,8 +557,21 @@ export default function OrchestratorPanel({ docked = false }) {
       orc.push(`${stack} locked in. Now run the AI Smart Scan — click the blue "Run AI Smart Scan" button in the left sidebar. It checks CVEs, EOL status, and compatibility against your stack in under 2 seconds.`);
     }
     if (!prev.scanComplete && s.scanComplete) {
-      const incCount = (s.selInc || []).length;
-      orc.push(`Scan done — ${incCount} incident${incCount !== 1 ? 's' : ''} pre-selected based on your stack. Next: open the System Design tab, fill all 8 sections, then click "Generate Task Plan" to build the schedule and lock the design.`);
+      const incCount  = (s.selInc || []).length;
+      const uumCount  = (s.selUUM || []).length;
+      const findings  = (s.scanResults?.findings || []);
+      const critical  = findings.filter(f => f.sev === 'CRITICAL');
+      const high      = findings.filter(f => f.sev === 'HIGH');
+      const riskLvl   = s.scanResults?.riskLevel || 'UNKNOWN';
+      // Build a scan summary shown as a rich log block
+      const summaryLines = [
+        `Scan complete — Risk: ${riskLvl} · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`,
+        critical.length > 0 ? `CRITICAL: ${critical.map(f => f.component).join(', ')}` : null,
+        high.length > 0 ? `HIGH: ${high.map(f => f.component).join(', ')}` : null,
+        `Auto-selected: ${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} for remediation`,
+      ].filter(Boolean);
+      log.push(summaryLines.join('\n'));
+      orc.push(`Scan done. ${critical.length > 0 ? `${critical.length} CRITICAL finding${critical.length !== 1 ? 's' : ''} detected — ` : ''}${incCount} incident${incCount !== 1 ? 's' : ''} and ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} pre-selected for your stack.\n\nNext: open the System Design tab, fill all 8 sections, then click "Generate Task Plan" to build the schedule and lock the design.`);
     }
     if (!prev.designApplied && s.designApplied) {
       awaitingFieldRef.current = null; // Design complete — stop any pending interview
@@ -870,8 +889,9 @@ export default function OrchestratorPanel({ docked = false }) {
       }]);
       const next = nextFieldPrompt(sRef.current, 'envType');
       awaitingFieldRef.current = next;
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator',
-        text: `Environment set to ${value}.${next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll Phase 1 fields done — I\'ll build and scan now.'}` }]);
+      const envReply = `Environment set to ${value}.${next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll Phase 1 fields done — I\'ll build and scan now.'}`;
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: envReply }]);
+      speakNow(envReply);
       if (!next && !sRef.current.isBuilt) {
         applyActionsWithRefs([
           { type: 'BUILD', description: 'Build environment', requiresConfirmation: false },
@@ -911,6 +931,7 @@ export default function OrchestratorPanel({ docked = false }) {
     }
 
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+    speakNow(reply); // speak directly from gesture — guaranteed no async gap
   }
 
   // ── Mic / voice input ────────────────────────────────────────────────────
@@ -1028,11 +1049,18 @@ export default function OrchestratorPanel({ docked = false }) {
         auditLog(action, 'blocked');
         continue;
       }
+      // Show scan progress BEFORE executing so user gets immediate feedback
+      if (action.type === 'RUN_SCAN') {
+        const stack = [currS.ctx?.hw, currS.ctx?.os, currS.ctx?.db, currS.ctx?.app].filter(Boolean).join(' / ');
+        setMessages(m => [...m, { id: nextId(), role: 'log', text: `Scanning ${stack || 'your stack'} for CVEs, EOL risks, and security issues…` }]);
+      }
       executeAction(action, store);
       auditLog(action, 'executed');
       done.push(action.description);
     }
-    if (done.length > 0) setMessages(m => [...m, { id: nextId(), role: 'result', text: `Done: ${done.join(' · ')}` }]);
+    // Don't show generic "Done:" for RUN_SCAN — the state-change handler shows rich results
+    const nonScan = done.filter((_, i) => actions[i]?.type !== 'RUN_SCAN');
+    if (nonScan.length > 0) setMessages(m => [...m, { id: nextId(), role: 'result', text: `Done: ${nonScan.join(' · ')}` }]);
     if (blocked.length > 0) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Could not complete: ${blocked.join(' ')}` }]);
   }
 
@@ -1386,7 +1414,9 @@ export default function OrchestratorPanel({ docked = false }) {
             awaitingFieldRef.current = next;
             if (next && FIELD_CHIPS[next]) setChipsField(next);
             const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields complete! Say "run scan" to continue.';
-            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply + nextQ }]);
+            const fullReply = reply + nextQ;
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fullReply }]);
+            speakNow(fullReply);
             return;
           }
         }
@@ -1409,13 +1439,14 @@ export default function OrchestratorPanel({ docked = false }) {
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
         if (immediate.length > 0) applyActions(immediate);
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+        speakNow(reply); // synchronous from handleSend gesture context
         if (needsConfirm.length > 0) {
           setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
         }
         return;
       }
 
-      // Groq-powered NLP
+      // Groq-powered NLP (async — speakQueued handles voice, speakNow already fired for thinking state)
       const ctx    = buildStateContext(s, authUser);
       const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
 
@@ -1430,7 +1461,7 @@ export default function OrchestratorPanel({ docked = false }) {
       // Run non-significant actions straight away
       if (immediate.length > 0) applyActions(immediate);
 
-      // Show reply
+      // Show reply — voice via useEffect (gesture is long gone after Groq roundtrip)
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText }]);
 
       // Show confirmation card for significant actions
