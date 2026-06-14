@@ -195,6 +195,7 @@ export default function OrchestratorPanel() {
   const [recording,   setRecording]   = useState(false);
   const [recStatus,   setRecStatus]   = useState('');
   const [userName,    setUserName]    = useState('');
+  const [workerOk,    setWorkerOk]    = useState(null); // null=unknown, true=ok, false=blocked
 
   const abortRef        = useRef(null);
   const inputRef        = useRef(null);
@@ -213,7 +214,7 @@ export default function OrchestratorPanel() {
 
   // Always-current refs to avoid stale closures in mic/timers
   const userNameRef       = useRef('');
-  const awaitingNameRef   = useRef(true);
+  const awaitingNameRef   = useRef(false); // name-asking removed — no gate on commands
   const awaitingFieldRef  = useRef(null); // 'hw'|'os'|'db'|'app'|'projectName'|'envType'|'goLiveDate'|null
   const pendingTaskRef    = useRef(null); // { title } waiting for gantt/raid choice
   const recordingRef      = useRef(false);
@@ -333,23 +334,126 @@ export default function OrchestratorPanel() {
 
   function buildWelcome() {
     const stack = [s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' / ');
+    const sc = generateScript(s);
     if (stack) {
-      return `OpsMentor activated. Picking up your ${stack} build — I'll keep you on track and flag anything that needs attention.\n\nWhat should I call you?`;
+      return `OpsMentor activated — picking up your ${stack} build.\n\nCurrent focus: ${sc.nextAction || 'all phases complete'}.\n\nUse the quick action buttons below, type a command, or ask me anything.`;
     }
     if (s.isBuilt || s.scanComplete || s.designApplied) {
-      const phase = s.promoted ? 'live' : s.rtmSigned ? 'RTM signed off' : s.cabApproved ? 'CAB approved' : s.phase2Active ? 'Phase 2' : s.designApplied ? 'design complete' : s.scanComplete ? 'scan done' : 'Phase 1';
-      return `OpsMentor here. Your build is at ${phase} — I'll guide you through the rest and call out any risks I see.\n\nWhat's your name?`;
+      return `OpsMentor activated. Build in progress.\n\nFocus: ${sc.nextAction || 'all phases complete'}.\n\nUse the quick action buttons or type a command.`;
     }
-    return `OpsMentor activated. Tell me your stack and I'll guide you through every phase — from hardware selection all the way to go-live and closure.\n\nWhat should I call you?`;
+    return `OpsMentor activated — your full infrastructure lifecycle admin.\n\nSet your stack with commands like:\n• "hardware is Dell PowerEdge R750"\n• "OS is RHEL 8.6"\n• "database is Oracle 19c"\n• "application is JBoss EAP 7.4"\n\nOr click the quick action buttons below to begin.`;
   }
 
-  // Show welcome (name-ask) when OpsMentor activates for the first time
+  // ── Quick actions — contextual buttons for the current workflow phase ──────
+
+  function getQuickActions() {
+    if (!s.isBuilt) return [
+      { id: 'set_hw',  label: 'Set Hardware',    fill: !!s.ctx?.hw },
+      { id: 'set_os',  label: 'Set OS',          fill: !!s.ctx?.os },
+      { id: 'set_db',  label: 'Set Database',    fill: !!s.ctx?.db },
+      { id: 'set_app', label: 'Set App / MW',    fill: !!s.ctx?.app },
+    ];
+    if (!s.scanComplete) return [
+      { id: 'run_scan', label: '▶ Run AI Scan', primary: true },
+    ];
+    if (!s.designApplied) return [
+      { id: 'nav_design',    label: 'Open System Design', primary: true },
+      { id: 'apply_design',  label: 'Apply Design' },
+    ];
+    if (!s.phase2Active) return [
+      { id: 'inject_phase2', label: '▶ Inject Phase 2', primary: true },
+    ];
+    if (s.cabDeclined) return [
+      { id: 'unlock_revision', label: 'Unlock for Revision', primary: true },
+      { id: 'nav_design', label: 'Update Design' },
+    ];
+    if (!s.cabApproved && !s.cabDeclined) return [
+      { id: 'nav_gantt',  label: 'Review Gantt' },
+      { id: 'nav_raid',   label: 'RAID Log' },
+      { id: 'submit_cab', label: '▶ Submit to CAB', primary: true },
+    ];
+    if (!s.rtmSigned) return [
+      { id: 'nav_rtm',  label: 'Open RTM', primary: true },
+      { id: 'sign_rtm', label: 'Sign RTM Off' },
+    ];
+    if (!s.promoted) return [
+      { id: 'nav_closure', label: 'Closure Checklist' },
+      { id: 'promote',     label: '▶ Go Live', primary: true },
+    ];
+    return [
+      { id: 'nav_closure', label: 'Closure', primary: true },
+    ];
+  }
+
+  function handleQuickAction(id) {
+    switch (id) {
+      case 'set_hw': case 'set_os': case 'set_db': case 'set_app': {
+        const key = id.replace('set_', '');
+        awaitingFieldRef.current = key;
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[key] }]);
+        setTimeout(() => inputRef.current?.focus(), 50);
+        break;
+      }
+      case 'run_scan':
+        applyActionsWithRefs([{ type: 'RUN_SCAN', params: {}, description: 'Run AI Smart Scan', requiresConfirmation: false }]);
+        break;
+      case 'nav_design':
+        applyActionsWithRefs([{ type: 'NAVIGATE_TAB', params: { tab: 'design' }, description: 'Go to System Design', requiresConfirmation: false }]);
+        break;
+      case 'apply_design':
+        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: [{ type: 'APPLY_DESIGN', params: {}, description: 'Apply System Design — locks design and generates task plan', requiresConfirmation: true }] }]);
+        break;
+      case 'inject_phase2':
+        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: [{ type: 'INJECT_PHASE2', params: {}, description: 'Inject Phase 2 — activates incident / UUM scope and unlocks Gantt + RTM', requiresConfirmation: true }] }]);
+        break;
+      case 'nav_gantt':
+        applyActionsWithRefs([{ type: 'NAVIGATE_TAB', params: { tab: 'gantt' }, description: 'Go to Gantt', requiresConfirmation: false }]);
+        break;
+      case 'nav_raid':
+        applyActionsWithRefs([{ type: 'NAVIGATE_TAB', params: { tab: 'raid' }, description: 'Go to RAID', requiresConfirmation: false }]);
+        break;
+      case 'submit_cab':
+        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: [{ type: 'SUBMIT_CAB', params: {}, description: 'Submit to CAB for change approval', requiresConfirmation: true }] }]);
+        break;
+      case 'unlock_revision':
+        store.setUnlockedForRevision(true);
+        setMessages(m => [...m, { id: nextId(), role: 'result', text: 'All tabs unlocked for revision.' }]);
+        break;
+      case 'nav_rtm':
+        applyActionsWithRefs([{ type: 'NAVIGATE_TAB', params: { tab: 'rtm' }, description: 'Go to RTM', requiresConfirmation: false }]);
+        break;
+      case 'sign_rtm':
+        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: [{ type: 'SIGN_RTM', params: {}, description: 'Sign RTM — locks the requirements baseline for cutover', requiresConfirmation: true }] }]);
+        break;
+      case 'nav_closure':
+        applyActionsWithRefs([{ type: 'NAVIGATE_TAB', params: { tab: 'closure' }, description: 'Go to Closure', requiresConfirmation: false }]);
+        break;
+      case 'promote':
+        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: [{ type: 'PROMOTE', params: {}, description: 'Promote to Live — irreversible, system goes live now', requiresConfirmation: true }] }]);
+        break;
+      default: break;
+    }
+  }
+
+  // Show welcome when OpsMentor activates for the first time
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Worker connectivity check — ping /health when panel opens
+  useEffect(() => {
+    if (!open || workerOk !== null) return;
+    const ctrl = new AbortController();
+    fetch(`${CARTESIA_WORKER_URL}/health`, { signal: ctrl.signal })
+      .then(r => setWorkerOk(r.ok))
+      .catch(() => setWorkerOk(false));
+    const t = setTimeout(() => { ctrl.abort(); setWorkerOk(false); }, 4000);
+    return () => { ctrl.abort(); clearTimeout(t); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, workerOk]);
 
   // Open after tour dismisses every time — also ensure voice starts
   // (override existing handler below)
@@ -965,8 +1069,12 @@ export default function OrchestratorPanel() {
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Your browser does not support audio capture. Please type your message.' }]);
       return;
     }
-    if (recording) stopRecording();
-    else startRecording();
+    if (recording) {
+      stopRecording();
+    } else {
+      transcribeFailCountRef.current = 0; // fresh start on every new recording session
+      startRecording();
+    }
   }
 
   // ── Name reply handler ───────────────────────────────────────────────────
@@ -1229,6 +1337,17 @@ export default function OrchestratorPanel() {
             <WorkflowStrip items={checklist} />
           </div>
 
+          {/* Worker connectivity warning */}
+          {workerOk === false && (
+            <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 flex-shrink-0">
+              <span className="text-xs text-amber-700">
+                ⚠ AI voice / Groq unavailable — workers.dev may be blocked by Brave Shields.
+                {' '}<strong>Fix:</strong> click the Brave lion icon → Shields Down for this site → reload.
+                All text commands work normally without the worker.
+              </span>
+            </div>
+          )}
+
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
             {messages.map(msg =>
@@ -1282,6 +1401,35 @@ export default function OrchestratorPanel() {
             </div>
           )}
 
+          {/* Quick action buttons — contextual per workflow phase */}
+          {(() => {
+            const qa = getQuickActions();
+            if (!qa.length) return null;
+            return (
+              <div className="px-3 py-2.5 border-t border-slate-100 flex-shrink-0 bg-slate-50">
+                <div className="text-xs text-slate-400 mb-1.5 font-semibold uppercase tracking-wide">Quick actions</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {qa.map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => handleQuickAction(a.id)}
+                      className={[
+                        'text-xs px-3 py-1.5 rounded-lg font-semibold border transition-all',
+                        a.fill
+                          ? 'bg-teal-50 border-teal-200 text-teal-700 line-through opacity-50'
+                          : a.primary
+                          ? 'bg-teal-600 border-teal-600 text-white hover:bg-teal-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-teal-400 hover:text-teal-700',
+                      ].join(' ')}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Voice recording status */}
           {recStatus && (
             <div className="px-4 pb-1 flex items-center gap-2 flex-shrink-0">
@@ -1305,19 +1453,24 @@ export default function OrchestratorPanel() {
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
-            {/* Mic button */}
+            {/* Mic button — disabled when worker is unreachable */}
             <button
               onClick={handleMic}
-              disabled={thinking}
-              title={recording ? 'Stop recording' : 'Speak to type'}
+              disabled={thinking || workerOk === false}
+              title={
+                workerOk === false ? 'Voice unavailable — workers.dev blocked. Allow in Brave Shields.' :
+                recording ? 'Stop recording' : 'Speak to type'
+              }
               className={[
                 'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all text-base',
-                recording
+                workerOk === false
+                  ? 'bg-slate-50 text-slate-300 border border-slate-200 cursor-not-allowed'
+                  : recording
                   ? 'bg-red-500 text-white animate-pulse shadow-lg'
                   : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
               ].join(' ')}
             >
-              🎤
+              {workerOk === false ? '🚫' : '🎤'}
             </button>
             {/* Send button */}
             <button
