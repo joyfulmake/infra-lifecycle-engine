@@ -65,15 +65,16 @@ function Bubble({ msg }) {
   return (
     <div className={['flex gap-2.5', isUser ? 'justify-end' : 'justify-start'].join(' ')}>
       {!isUser && (
-        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-sm" style={{ fontSize: 9, fontWeight: 800 }}>
-          AI
-        </div>
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-sm"
+          style={{ fontSize: 9, fontWeight: 800, background: 'linear-gradient(135deg, #0f172a 0%, #0d4f4f 100%)' }}
+        >AI</div>
       )}
       <div className={[
-        'rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%] shadow-sm',
+        'rounded-xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%]',
         isUser
-          ? 'bg-teal-600 text-white rounded-tr-sm'
-          : 'orch-bubble-ai bg-slate-100 text-slate-800 rounded-tl-sm',
+          ? 'bg-gradient-to-br from-teal-600 to-teal-700 text-white rounded-tr-sm shadow-sm'
+          : 'orch-bubble-ai bg-slate-50 text-slate-800 rounded-tl-sm border-l-2 border-teal-500 shadow-sm',
       ].join(' ')}>
         {msg.text}
       </div>
@@ -612,6 +613,17 @@ export default function OrchestratorPanel() {
     clearTimeout(inactivityTimerRef.current);
     nudgeSentRef.current = true; // suppress nudge once typing starts
     setInput(e.target.value);
+  }, []);
+
+  // Open when ExecOverview "OpsMentor" button is clicked
+  useEffect(() => {
+    const handler = () => {
+      setOpen(true);
+      setPanelVisible(true);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    };
+    window.addEventListener('opsmanifest-orchestrator-open', handler);
+    return () => window.removeEventListener('opsmanifest-orchestrator-open', handler);
   }, []);
 
   // Open after tour dismisses
@@ -1290,7 +1302,7 @@ export default function OrchestratorPanel() {
 
   return (
     <>
-      {/* Floating trigger — always visible; pulsing when OpsMentor active but minimized */}
+      {/* Floating trigger — branded pill, always visible */}
       <button
         onClick={() => {
           if (!open) {
@@ -1303,39 +1315,83 @@ export default function OrchestratorPanel() {
           }
         }}
         className={[
-          'fixed bottom-5 right-5 z-50 w-11 h-11 rounded-full shadow-xl',
-          'flex items-center justify-center text-white text-base',
+          'fixed bottom-5 right-5 z-50 rounded-2xl shadow-2xl',
+          'flex items-center gap-2 px-4 py-2.5 text-white text-sm font-bold',
           'transition-all duration-200',
-          open && panelVisible ? 'bg-teal-600 scale-110' :
-          open ? 'bg-teal-500 ring-2 ring-teal-300 animate-pulse' :
-          'bg-slate-700 hover:bg-teal-700',
-          hasAlerts && !panelVisible ? 'ring-2 ring-amber-400 ring-offset-1' : '',
+          hasAlerts && !panelVisible ? 'ring-2 ring-amber-400 ring-offset-2' : '',
         ].join(' ')}
-        title={open && !panelVisible ? 'OpsMentor active — click to restore' : 'OpsMentor'}
+        style={{
+          background: open && panelVisible
+            ? 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)'
+            : 'linear-gradient(135deg, #0f172a 0%, #0d4f4f 100%)',
+        }}
+        title={open && !panelVisible ? 'OpsMentor active — click to restore' : 'Open OpsMentor'}
       >
-        {open && panelVisible ? '×' : '🎯'}
+        <span className={[
+          'w-2 h-2 rounded-full flex-shrink-0 transition-all',
+          open ? 'bg-teal-300 animate-pulse' : 'bg-teal-400',
+        ].join(' ')} />
+        <span>{open && panelVisible ? '× Close' : 'OpsMentor'}</span>
+        {hasAlerts && !panelVisible && (
+          <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+        )}
       </button>
 
       {/* Panel — shown/hidden via panelVisible, never unmounted once open so voice continues */}
       {open && (
         <div
-          className="orchestrator-panel fixed z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
-          style={{ width: 440, maxHeight: 660, bottom: 72, right: 20, display: panelVisible ? 'flex' : 'none' }}
+          className="orchestrator-panel fixed z-50 bg-white flex flex-col overflow-hidden"
+          style={{ width: 480, maxHeight: 680, bottom: 72, right: 20, display: panelVisible ? 'flex' : 'none', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(13,148,136,0.15)', border: '1px solid rgba(13,148,136,0.1)' }}
         >
-          {/* Header */}
-          <div className="bg-slate-800 text-white px-4 py-3 flex items-center gap-2 flex-shrink-0">
-            <div className="w-2 h-2 rounded-full bg-teal-400 animate-pulse flex-shrink-0" />
-            <span className="text-sm font-semibold flex-1 tracking-tight">
-              OpsMentor{userName ? ` · ${userName}` : ''}
-            </span>
-            <button
-              onClick={() => { stopCartesia(); setPlaying(false); abortRef.current?.abort(); }}
-              className="text-xs px-2.5 py-1 rounded font-medium transition-all bg-slate-600 hover:bg-slate-500 text-slate-300"
-              title="Stop voice"
-            >
-              ⏹ Mute
-            </button>
-            <button onClick={() => setPanelVisible(false)} className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center ml-1 text-xl leading-none" title="Minimise (voice continues)">−</button>
+          {/* Header — premium gradient, full identity */}
+          <div
+            className="text-white px-4 pt-3 pb-2.5 flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #0f172a 0%, #0d4f4f 100%)' }}
+          >
+            {/* Row 1: Brand + controls */}
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-extrabold tracking-tight">OpsMentor</span>
+                <span className="text-teal-300 text-xs ml-2 font-medium opacity-90">AI Lifecycle Admin</span>
+              </div>
+              <button
+                onClick={() => { stopCartesia(); setPlaying(false); abortRef.current?.abort(); }}
+                className="text-xs px-2 py-0.5 rounded font-medium bg-white/10 hover:bg-white/20 text-teal-200 transition-colors flex-shrink-0"
+                title="Stop voice"
+              >⏹</button>
+              <button
+                onClick={() => setPanelVisible(false)}
+                className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center text-xl leading-none flex-shrink-0 ml-0.5"
+                title="Minimise (voice continues)"
+              >−</button>
+            </div>
+            {/* Row 2: Stack context + phase badge */}
+            <div className="flex items-center gap-2 mt-1.5 min-w-0">
+              {(s.ctx?.hw || s.ctx?.os || s.ctx?.db || s.ctx?.app) ? (
+                <span className="text-xs text-teal-200/60 font-mono truncate flex-1">
+                  {[s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' · ')}
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400 flex-1 italic">Tell me your platform to begin</span>
+              )}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${
+                s.promoted      ? 'bg-green-500 text-white' :
+                s.rtmSigned     ? 'bg-teal-500 text-white' :
+                s.cabApproved   ? 'bg-blue-500 text-white' :
+                s.phase2Active  ? 'bg-purple-500 text-white' :
+                s.designApplied ? 'bg-amber-500 text-white' :
+                s.isBuilt       ? 'bg-slate-500 text-white' :
+                                  'bg-slate-700 text-slate-300'
+              }`}>
+                {s.promoted      ? 'LIVE' :
+                 s.rtmSigned     ? 'RTM ✓' :
+                 s.cabApproved   ? 'CAB ✓' :
+                 s.phase2Active  ? 'Phase 2' :
+                 s.designApplied ? 'Design ✓' :
+                 s.isBuilt       ? 'Built' : 'Ready'}
+              </span>
+            </div>
           </div>
 
           {/* Checklist */}
@@ -1369,7 +1425,7 @@ export default function OrchestratorPanel() {
             )}
             {thinking && (
               <div className="flex gap-2.5 justify-start">
-                <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-sm" style={{ fontSize: 9, fontWeight: 800 }}>AI</div>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-sm" style={{ fontSize: 9, fontWeight: 800, background: 'linear-gradient(135deg, #0f172a 0%, #0d4f4f 100%)' }}>AI</div>
                 <div className="orch-bubble-ai bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
                   {[0, 0.2, 0.4].map(d => (
                     <div key={d} className="w-2 h-2 rounded-full bg-slate-400" style={{ animation: `splash-pulse 1.2s ease-in-out ${d}s infinite` }} />

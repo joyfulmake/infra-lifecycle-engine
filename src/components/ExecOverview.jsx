@@ -76,8 +76,18 @@ export default function ExecOverview() {
             ))}
           </div>
         </div>
-        {/* User badge */}
-        <div className="flex-shrink-0 ml-6">
+        {/* OpsMentor + User */}
+        <div className="flex-shrink-0 ml-6 flex flex-col items-end gap-2">
+          {/* OpsMentor — always visible in top strip */}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('opsmanifest-orchestrator-open'))}
+            className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-white text-xs font-bold shadow-lg hover:opacity-90 transition-opacity"
+            style={{ background: 'linear-gradient(135deg, #0f172a 0%, #0d9488 100%)' }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-300 animate-pulse flex-shrink-0" />
+            <span>OpsMentor</span>
+            <span className="text-teal-200 font-normal">›</span>
+          </button>
           {authUser ? (
             <button
               onClick={() => openAuthModal('signup')}
@@ -155,6 +165,16 @@ export default function ExecOverview() {
 
       {/* Risk + Milestones + User */}
       <div className="flex flex-col gap-2 flex-shrink-0 min-w-48">
+        {/* OpsMentor — always visible */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('opsmanifest-orchestrator-open'))}
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-white text-xs font-bold hover:opacity-90 transition-opacity w-full"
+          style={{ background: 'linear-gradient(135deg, #0f172a 0%, #0d9488 100%)' }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-teal-300 animate-pulse flex-shrink-0" />
+          <span className="flex-1 text-left">OpsMentor</span>
+          <span className="text-teal-200">›</span>
+        </button>
         {/* Risk bar */}
         <div>
           <div className="flex items-center justify-between mb-1">
