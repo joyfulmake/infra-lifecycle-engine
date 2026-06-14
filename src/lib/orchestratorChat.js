@@ -325,8 +325,19 @@ export function ruleBasedResponse(message, s, authUser) {
       });
     });
 
-    // Auto-trigger scan if all 4 fields now filled and scan not done
-    if (allFilled && s.isBuilt && !s.scanComplete) {
+    // Auto-trigger Build + Scan if all 4 fields now filled
+    if (allFilled && !s.isBuilt) {
+      actions.push({
+        type: 'BUILD',
+        description: 'Build environment from current stack selection',
+        requiresConfirmation: false,
+      });
+      actions.push({
+        type: 'RUN_SCAN',
+        description: 'Auto-run AI Smart Scan',
+        requiresConfirmation: false,
+      });
+    } else if (allFilled && s.isBuilt && !s.scanComplete) {
       actions.push({
         type: 'RUN_SCAN',
         description: 'Auto-run AI Smart Scan (all stack fields complete)',
@@ -343,7 +354,7 @@ export function ruleBasedResponse(message, s, authUser) {
       : '';
 
     const nextNote = allFilled && !s.isBuilt
-      ? '\n\nAll stack fields are set. Click "Build" in the left panel to continue to AI Smart Scan.'
+      ? '\n\nAll stack fields are set — building and running AI Smart Scan now.'
       : allFilled && s.isBuilt && !s.scanComplete
       ? '\n\nAll stack fields complete — running AI Smart Scan now.'
       : next ? '\n\n' + next : '';
@@ -365,6 +376,23 @@ export function ruleBasedResponse(message, s, authUser) {
         params: { key: reqField.field, value: reqField.value },
         requiresConfirmation: false,
       }],
+    };
+  }
+
+  // ── Build environment ─────────────────────────────────────────────────────────
+  if (/\b(build|build env|build environment|build now|build stack|build it)\b/.test(m)) {
+    const { hw, os, db, app } = s.ctx || {};
+    if (!hw || !os || !db || !app) {
+      const next = nextPhase1Prompt(s);
+      return { reply: `Stack isn't complete yet.\n\n${next || 'All 4 fields needed: hardware, OS, database, and application.'}` };
+    }
+    if (s.isBuilt) return { reply: 'Environment is already built. Use "run scan" to continue.' };
+    return {
+      reply: `Building ${[hw, os, db, app].join(' / ')} now — this locks the stack and applies design defaults.`,
+      actions: [
+        { type: 'BUILD', description: `Build environment: ${hw} / ${os} / ${db} / ${app}`, requiresConfirmation: false },
+        { type: 'RUN_SCAN', description: 'Run AI Smart Scan', requiresConfirmation: false },
+      ],
     };
   }
 

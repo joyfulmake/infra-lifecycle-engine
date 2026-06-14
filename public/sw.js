@@ -1,7 +1,7 @@
 // OpsManifest Service Worker
 // Cache-first for static assets; network-first for API and dynamic content.
 
-const CACHE = 'opsmanifest-v2';
+const CACHE = 'opsmanifest-v3';
 
 const PRECACHE = [
   '/',

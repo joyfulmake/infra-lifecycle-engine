@@ -3,6 +3,7 @@
 
 import { getUserRolesForBuild, canEditDesignSection, isQATeamLead } from './roleAccess.js';
 import { runSmartScan } from './smartScan.js';
+import { getDefaultDesignValues } from './designDefaults.js';
 
 // ── Permission check ──────────────────────────────────────────────────────────
 // Returns { allowed: true } or { allowed: false, reason: string }
@@ -35,6 +36,11 @@ export function checkPermission(action, authUser, s) {
     case 'SET_ROLE_ASSIGNMENT':
       if (!s.requirements?.pmEmail) return { allowed: true };
       return { allowed: false, reason: 'Only the PM can assign roles.' };
+
+    case 'BUILD':
+      // Allow in Phase 1 (pre-build) when no PM gate set
+      if (!s.requirements?.pmEmail) return { allowed: true };
+      return isPM ? { allowed: true } : { allowed: false, reason: 'Only the PM can trigger the build.' };
 
     case 'APPLY_DESIGN':
     case 'INJECT_PHASE2':
@@ -112,6 +118,23 @@ export function executeAction(action, store) {
     case 'SET_ROLE_ASSIGNMENT':
       store.setRoleAssignment(params.role, params.data);
       break;
+
+    case 'BUILD': {
+      const ctx = store.ctx;
+      // Use params if provided (e.g. all 4 fields at once), else current store ctx
+      const buildCtx = {
+        hw: params?.hw || ctx?.hw || '',
+        os: params?.os || ctx?.os || '',
+        db: params?.db || ctx?.db || '',
+        app: params?.app || ctx?.app || '',
+      };
+      if (buildCtx.hw && buildCtx.os && buildCtx.db && buildCtx.app) {
+        store.build(buildCtx);
+        const defaults = getDefaultDesignValues(buildCtx);
+        store.setAllDesignFields(defaults);
+      }
+      break;
+    }
 
     case 'APPLY_DESIGN':
       store.applyDesign();

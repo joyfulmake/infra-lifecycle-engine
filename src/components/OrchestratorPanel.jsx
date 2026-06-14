@@ -202,7 +202,9 @@ export default function OrchestratorPanel() {
   const bottomRef       = useRef(null);
   const msgId           = useRef(0);
   const pendingConfirmRef = useRef(null);
-  // MediaRecorder + Whisper STT (replaces SpeechRecognition API)
+  // Speech recognition — browser-native SpeechRecognition first (no network),
+  // MediaRecorder + Whisper as secondary (requires worker proxy)
+  const speechRecRef     = useRef(null);   // native SpeechRecognition instance
   const mediaStreamRef   = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef   = useRef([]);
@@ -918,147 +920,126 @@ export default function OrchestratorPanel() {
     if (blocked.length > 0) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Could not complete: ${blocked.join(' ')}` }]);
   }
 
-  // ── MediaRecorder + Groq Whisper STT ──────────────────────────────────────
-  // Uses MediaRecorder (getUserMedia) — works in ALL browsers including Brave/Edge.
-  // Audio is sent to the CF Worker → Groq Whisper → transcript returned.
-  // No Google/Microsoft speech API involved — zero browser-level blocking.
+  // ── Voice input — browser-native SpeechRecognition (primary, no network needed)
+  // Falls back to MediaRecorder → Whisper proxy if SpeechRecognition unavailable.
+  // SpeechRecognition works in Chrome, Edge, Brave (normal mode) natively.
 
-  function unlockAudio() {
-    if (audioUnlockedRef.current) return;
-    audioUnlockedRef.current = true;
-    try {
-      const ctx = new AudioContext();
-      ctx.resume().then(() => ctx.close()).catch(() => {});
-    } catch {}
+  const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  function startNativeSpeech() {
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    speechRecRef.current = rec;
+
+    rec.onstart = () => { setRecording(true); recordingRef.current = true; setRecStatus('listening'); };
+
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join(' ').trim();
+      if (t) {
+        setRecStatus('');
+        processVoiceInput(t);
+      }
+    };
+
+    rec.onerror = (e) => {
+      setRecording(false); recordingRef.current = false; setRecStatus('');
+      speechRecRef.current = null;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+          'Microphone permission denied. Click the address-bar lock icon → Microphone → Allow, then reload.' }]);
+      }
+      // All other errors (network, aborted, no-speech) — silent fail, user can type
+    };
+
+    rec.onend = () => {
+      setRecording(false); recordingRef.current = false; setRecStatus('');
+      speechRecRef.current = null;
+    };
+
+    try { rec.start(); } catch { setRecording(false); setRecStatus(''); }
   }
 
-  async function startRecording() {
-    if (recording) return;
-    unlockAudio();
+  // Whisper fallback (used only when SpeechRecognition is unavailable)
+  async function startWhisperRecording() {
+    if (!navigator.mediaDevices?.getUserMedia) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       mediaStreamRef.current = stream;
-
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
-        .find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
       const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = rec;
       audioChunksRef.current = [];
       hasSpeechRef.current = false;
-
       rec.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
       rec.start(300);
+      setRecording(true); recordingRef.current = true; setRecStatus('listening');
 
-      setRecording(true);
-      recordingRef.current = true;
-      setRecStatus('listening');
-
-      // Volume analysis for silence detection
-      const audioCtx  = new AudioContext();
+      const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
-      const source  = audioCtx.createMediaStreamSource(stream);
+      const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
       source.connect(analyser);
       const buf = new Uint8Array(analyser.fftSize);
-
       function checkVolume() {
         if (!recordingRef.current) return;
         analyser.getByteTimeDomainData(buf);
         const rms = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length);
-        if (rms > 3.5) { // speech detected
+        if (rms > 3.5) {
           hasSpeechRef.current = true;
           clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = setTimeout(() => {
-            if (recordingRef.current && hasSpeechRef.current) submitAudio();
-          }, 1800);
+          silenceTimerRef.current = setTimeout(() => { if (recordingRef.current && hasSpeechRef.current) submitWhisperAudio(); }, 1800);
         }
         requestAnimationFrame(checkVolume);
       }
       requestAnimationFrame(checkVolume);
-
-      // Safety cap: submit after 30s regardless of silence
-      maxRecTimerRef.current = setTimeout(() => {
-        if (recordingRef.current) submitAudio();
-      }, 30000);
-
+      maxRecTimerRef.current = setTimeout(() => { if (recordingRef.current) submitWhisperAudio(); }, 30000);
     } catch (e) {
-      setRecording(false);
-      recordingRef.current = false;
-      setRecStatus('');
-      const msg =
-        e.name === 'NotAllowedError'  ? 'Microphone access denied.\n\nClick the lock/camera icon in the address bar → Microphone → Allow → reload the page.' :
-        e.name === 'NotFoundError'    ? 'No microphone found. Connect a mic and try again.' :
-        e.name === 'NotReadableError' ? 'Microphone is in use by another app. Close it and try again.' :
-                                        `Mic error: ${e.message}. Try reloading the page.`;
+      setRecording(false); recordingRef.current = false; setRecStatus('');
+      const msg = e.name === 'NotAllowedError' ? 'Microphone access denied. Allow it in your browser settings.'
+        : e.name === 'NotFoundError' ? 'No microphone found.' : `Mic error: ${e.message}`;
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: msg }]);
     }
   }
 
-  async function submitAudio() {
+  async function submitWhisperAudio() {
     clearTimeout(silenceTimerRef.current);
     clearTimeout(maxRecTimerRef.current);
     hasSpeechRef.current = false;
     setRecStatus('processing');
-
     const rec = mediaRecorderRef.current;
     if (rec && rec.state !== 'inactive') {
       await new Promise(resolve => { rec.onstop = resolve; rec.stop(); });
     }
-
-    const blob = new Blob(audioChunksRef.current, {
-      type: mediaRecorderRef.current?.mimeType || 'audio/webm',
-    });
+    const blob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
     audioChunksRef.current = [];
+    if (blob.size < 2000) { if (recordingRef.current) restartWhisperCapture(); return; }
 
-    if (blob.size < 2000) { // too short — noise only
-      if (recordingRef.current) restartCapture();
-      return;
-    }
-
-    // Try worker first, then same-origin Pages Function (bypasses any workers.dev block)
     let transcribed = false;
-    const audioHeaders = {
-      'Content-Type': blob.type || 'audio/webm',
-      'X-Audio-Type':  blob.type || 'audio/webm',
-    };
-    for (const sttUrl of [`${CARTESIA_WORKER_URL}/whisper-transcribe`, '/api/whisper-transcribe']) {
+    for (const url of [`${CARTESIA_WORKER_URL}/whisper-transcribe`, '/api/whisper-transcribe']) {
       if (transcribed) break;
       try {
-        const res = await fetch(sttUrl, {
+        const res = await fetch(url, {
           method: 'POST',
-          headers: audioHeaders,
+          headers: { 'Content-Type': blob.type || 'audio/webm', 'X-Audio-Type': blob.type || 'audio/webm' },
           body: blob,
           signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) continue;
         const { transcript } = await res.json();
-        transcribeFailCountRef.current = 0;
-        if (transcript?.trim()) {
-          setInput('');
-          processVoiceInput(transcript.trim());
-        }
+        if (transcript?.trim()) { setInput(''); processVoiceInput(transcript.trim()); }
         transcribed = true;
+        transcribeFailCountRef.current = 0;
       } catch { /* try next */ }
     }
-
-    if (!transcribed) {
-      transcribeFailCountRef.current++;
-      if (transcribeFailCountRef.current >= 2) {
-        transcribeFailCountRef.current = 0;
-        stopRecording();
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          `Voice input stopped — both transcription endpoints are unreachable from your network.\n\nThis can happen when a firewall or browser policy blocks outbound requests. Everything works exactly the same by typing below — I understand all the same commands.`
-        }]);
-        return;
-      }
-      // First failure — restart silently
-    }
-
-    if (recordingRef.current) restartCapture();
+    if (!transcribed) { transcribeFailCountRef.current++; }
+    if (recordingRef.current) restartWhisperCapture();
   }
 
-  function restartCapture() {
+  function restartWhisperCapture() {
     const stream = mediaStreamRef.current;
     if (!stream || !recordingRef.current) { setRecStatus('listening'); return; }
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
@@ -1069,40 +1050,36 @@ export default function OrchestratorPanel() {
     rec.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
     rec.start(300);
     setRecStatus('listening');
-    maxRecTimerRef.current = setTimeout(() => { if (recordingRef.current) submitAudio(); }, 30000);
+    maxRecTimerRef.current = setTimeout(() => { if (recordingRef.current) submitWhisperAudio(); }, 30000);
   }
 
   function stopRecording() {
+    // Stop native speech
+    if (speechRecRef.current) {
+      try { speechRecRef.current.stop(); } catch {}
+      speechRecRef.current = null;
+    }
+    // Stop whisper recorder
     recordingRef.current = false;
     clearTimeout(silenceTimerRef.current);
     clearTimeout(maxRecTimerRef.current);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
     mediaRecorderRef.current = null;
     audioChunksRef.current = [];
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(t => t.stop());
-      mediaStreamRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close().catch(() => {});
-      audioCtxRef.current = null;
-    }
-    setRecording(false);
-    setRecStatus('');
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
+    setRecording(false); setRecStatus('');
   }
 
   function handleMic() {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Your browser does not support audio capture. Please type your message.' }]);
-      return;
-    }
-    if (recording) {
-      stopRecording();
+    if (recording) { stopRecording(); return; }
+    transcribeFailCountRef.current = 0;
+    if (SR) {
+      // Native speech recognition — no network needed, works in Chrome/Edge/Brave
+      startNativeSpeech();
     } else {
-      transcribeFailCountRef.current = 0; // fresh start on every new recording session
-      startRecording();
+      // Fallback: MediaRecorder → Whisper proxy
+      startWhisperRecording();
     }
   }
 
@@ -1481,28 +1458,23 @@ export default function OrchestratorPanel() {
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
-            {/* Mic button — disabled when worker is unreachable */}
+            {/* Mic button — always available; uses native SpeechRecognition (no network needed) */}
             <button
               onClick={handleMic}
-              disabled={thinking || workerOk === false}
-              title={
-                workerOk === false ? 'Voice unavailable — workers.dev blocked. Allow in Brave Shields.' :
-                recording ? 'Stop recording' : 'Speak to type'
-              }
+              disabled={thinking}
+              title={recording ? `Stop (${recStatus})` : SR ? 'Speak — browser-native, no network needed' : 'Speak — Whisper via proxy'}
               className={[
                 'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all text-base',
-                workerOk === false
-                  ? 'bg-slate-50 text-slate-300 border border-slate-200 cursor-not-allowed'
-                  : recording
+                recording
                   ? 'bg-red-500 text-white animate-pulse shadow-lg'
                   : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
               ].join(' ')}
             >
-              {workerOk === false ? '🚫' : '🎤'}
+              🎤
             </button>
             {/* Send button */}
             <button
-              onClick={() => { unlockAudio(); handleSend(); }}
+              onClick={handleSend}
               disabled={!input.trim() || thinking}
               className="px-4 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 shadow-sm"
             >

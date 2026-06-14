@@ -378,6 +378,7 @@ ${rolesDesc}
 
 AVAILABLE ACTIONS (only include when the user clearly intends to make a change):
 SET_CTX            { key: "hw"|"os"|"db"|"app", value: string }
+BUILD              {}   — triggers after all 4 ctx fields are set; call this + RUN_SCAN together
 SET_REQUIREMENT    { key: "projectName"|"envType"|"goLiveDate"|"sla"|"hoursPerDay"|"projectStartDate", value: string }
 SET_DESIGN_FIELD   { section: "unix"|"web"|"app"|"db"|"storage"|"backup"|"network"|"security", field: string, value: string }
 TOGGLE_INC         { code: string }   — only use when you know the exact catalog code

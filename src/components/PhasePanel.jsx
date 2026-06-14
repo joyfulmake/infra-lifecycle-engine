@@ -707,6 +707,16 @@ export default function PhasePanel() {
   const [osSel, setOsSel] = useState('');
   const [dbSel, setDbSel] = useState('');
   const [appSel, setAppSel] = useState('');
+
+  // Sync local input state from store when OpsMentor sets ctx values externally
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (s.ctx?.hw && s.ctx.hw !== hwCustom) setHwCustom(s.ctx.hw); }, [s.ctx?.hw]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (s.ctx?.os && s.ctx.os !== osCustom) setOsCustom(s.ctx.os); }, [s.ctx?.os]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (s.ctx?.db && s.ctx.db !== dbCustom) setDbCustom(s.ctx.db); }, [s.ctx?.db]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (s.ctx?.app && s.ctx.app !== appCustom) setAppCustom(s.ctx.app); }, [s.ctx?.app]);
   const [reqOpen, setReqOpen] = useState(false);
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [customIncOpen, setCustomIncOpen] = useState(false);
