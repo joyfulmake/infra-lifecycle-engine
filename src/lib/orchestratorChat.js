@@ -6,24 +6,35 @@ import { CARTESIA_WORKER_URL } from './cartesia.js';
 import { generateScript } from './orchestratorScripts.js';
 import { computeAllRisks, riskScore, riskLabel } from './riskEngine.js';
 
-const CHAT_URL = CARTESIA_WORKER_URL;
-
 // ── Groq-powered chat ─────────────────────────────────────────────────────────
+// Tries the CF Worker first; falls back to the Pages Function at /api/orchestrator-chat.
+// The Pages Function relays server-to-server to the worker, bypassing any browser-level
+// shield that blocks *.workers.dev.
+
+const WORKER_CHAT_URL = `${CARTESIA_WORKER_URL}/orchestrator-chat`;
+const PAGES_CHAT_URL  = '/api/orchestrator-chat'; // same-origin — never blocked
 
 export async function sendChatMessage(message, stateContext, history = []) {
-  const res = await fetch(`${CHAT_URL}/orchestrator-chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, context: stateContext, history }),
-  });
+  const body = JSON.stringify({ message, context: stateContext, history });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Worker error ${res.status}`);
+  for (const url of [WORKER_CHAT_URL, PAGES_CHAT_URL]) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 7000);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!res.ok) continue;
+      const data = await res.json();
+      return data.result; // { reply, actions, nextPrompt }
+    } catch { /* try next endpoint */ }
   }
 
-  const data = await res.json();
-  return data.result; // { reply, actions, nextPrompt }
+  throw new Error('AI unavailable — both endpoints failed');
 }
 
 // ── Rule-based mentor — handles all common queries locally ────────────────────

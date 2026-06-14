@@ -277,44 +277,59 @@ export default function OrchestratorPanel() {
     const text = cartesiaQueueRef.current.shift();
 
     let played = false;
+
+    // Try Cartesia via worker first, then same-origin Pages Function relay
     if (CARTESIA_CONFIGURED) {
-      try {
-        const res = await fetch(`${CARTESIA_WORKER_URL}/cartesia-tts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text,
-            voiceId: VOICE_IDS.guide,
-            speed: pickSpeed(text),
-            emotion: pickEmotion(text),
-          }),
-        });
-        if (res.ok) {
+      const ttsBody = JSON.stringify({
+        text,
+        voiceId: VOICE_IDS.guide,
+        speed: pickSpeed(text),
+        emotion: pickEmotion(text),
+      });
+      for (const ttsUrl of [`${CARTESIA_WORKER_URL}/cartesia-tts`, '/api/cartesia-tts']) {
+        if (played) break;
+        try {
+          const res = await fetch(ttsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: ttsBody,
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!res.ok) continue;
           const blob = await res.blob();
-          const url  = URL.createObjectURL(blob);
-          const audio = new Audio(url);
+          const objUrl = URL.createObjectURL(blob);
+          const audio = new Audio(objUrl);
           currentAudioRef.current = audio;
           try {
-            await audio.play(); // throws NotAllowedError if autoplay blocked
+            await audio.play();
             await new Promise(resolve => {
               audio.onended = resolve;
               audio.onerror = resolve;
             });
             played = true;
-          } catch {
-            // Autoplay blocked — fall through to Web Speech
-          } finally {
-            URL.revokeObjectURL(url);
+          } catch { /* autoplay blocked — try next */ }
+          finally {
+            URL.revokeObjectURL(objUrl);
             currentAudioRef.current = null;
           }
-        }
-      } catch { /* network error — fall through */ }
+        } catch { /* network error — try next */ }
+      }
     }
 
+    // Web Speech fallback — pick the best available English voice
     if (!played && typeof speechSynthesis !== 'undefined') {
       await new Promise(resolve => {
         const utt = new SpeechSynthesisUtterance(text);
         utt.rate = 1.0; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
+        const voices = speechSynthesis.getVoices();
+        // Prefer neural/premium English voices; fall back to any en-US
+        const best = voices.find(v => v.lang.startsWith('en') && (
+          v.name.includes('Google') || v.name.includes('Neural') ||
+          v.name.includes('Premium') || v.name.includes('Aria') ||
+          v.name.includes('Jenny') || v.name.includes('Samantha') ||
+          v.name.includes('Karen') || v.name.includes('Daniel')
+        )) || voices.find(v => v.lang === 'en-US') || voices.find(v => v.lang.startsWith('en')) || null;
+        if (best) utt.voice = best;
         const kv = setInterval(() => { if (speechSynthesis.paused) speechSynthesis.resume(); }, 5000);
         utt.onend  = () => { clearInterval(kv); resolve(); };
         utt.onerror = () => { clearInterval(kv); resolve(); };
@@ -443,15 +458,20 @@ export default function OrchestratorPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Worker connectivity check — ping /health when panel opens
+  // Worker connectivity check — try worker, then Pages Function (same-origin, always reachable)
   useEffect(() => {
     if (!open || workerOk !== null) return;
-    const ctrl = new AbortController();
-    fetch(`${CARTESIA_WORKER_URL}/health`, { signal: ctrl.signal })
-      .then(r => setWorkerOk(r.ok))
-      .catch(() => setWorkerOk(false));
-    const t = setTimeout(() => { ctrl.abort(); setWorkerOk(false); }, 4000);
-    return () => { ctrl.abort(); clearTimeout(t); };
+    let cancelled = false;
+    (async () => {
+      for (const url of [`${CARTESIA_WORKER_URL}/health`, '/api/health']) {
+        try {
+          const r = await fetch(url, { signal: AbortSignal.timeout(3500) });
+          if (r.ok && !cancelled) { setWorkerOk(true); return; }
+        } catch { /* try next */ }
+      }
+      if (!cancelled) setWorkerOk(false);
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, workerOk]);
 
@@ -996,34 +1016,43 @@ export default function OrchestratorPanel() {
       return;
     }
 
-    try {
-      const res = await fetch(`${CARTESIA_WORKER_URL}/whisper-transcribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': blob.type || 'audio/webm',
-          'X-Audio-Type':  blob.type || 'audio/webm',
-        },
-        body: blob,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { transcript } = await res.json();
-      transcribeFailCountRef.current = 0;
-      if (transcript?.trim()) {
-        setInput('');
-        processVoiceInput(transcript.trim());
-      }
-    } catch (e) {
-      console.error('[Whisper STT]', e);
+    // Try worker first, then same-origin Pages Function (bypasses any workers.dev block)
+    let transcribed = false;
+    const audioHeaders = {
+      'Content-Type': blob.type || 'audio/webm',
+      'X-Audio-Type':  blob.type || 'audio/webm',
+    };
+    for (const sttUrl of [`${CARTESIA_WORKER_URL}/whisper-transcribe`, '/api/whisper-transcribe']) {
+      if (transcribed) break;
+      try {
+        const res = await fetch(sttUrl, {
+          method: 'POST',
+          headers: audioHeaders,
+          body: blob,
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) continue;
+        const { transcript } = await res.json();
+        transcribeFailCountRef.current = 0;
+        if (transcript?.trim()) {
+          setInput('');
+          processVoiceInput(transcript.trim());
+        }
+        transcribed = true;
+      } catch { /* try next */ }
+    }
+
+    if (!transcribed) {
       transcribeFailCountRef.current++;
       if (transcribeFailCountRef.current >= 2) {
         transcribeFailCountRef.current = 0;
         stopRecording();
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          `Voice input stopped — the transcription proxy (workers.dev) is being blocked, which happens in Brave private mode.\n\nQuick fix: click the Brave lion icon → Shields Down for this site → reload. Or just type below — I respond exactly the same way.`
+          `Voice input stopped — both transcription endpoints are unreachable from your network.\n\nThis can happen when a firewall or browser policy blocks outbound requests. Everything works exactly the same by typing below — I understand all the same commands.`
         }]);
         return;
       }
-      // First failure — restart silently; likely just noise or a brief hiccup
+      // First failure — restart silently
     }
 
     if (recordingRef.current) restartCapture();
@@ -1341,9 +1370,8 @@ export default function OrchestratorPanel() {
           {workerOk === false && (
             <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 flex-shrink-0">
               <span className="text-xs text-amber-700">
-                ⚠ AI voice / Groq unavailable — workers.dev may be blocked by Brave Shields.
-                {' '}<strong>Fix:</strong> click the Brave lion icon → Shields Down for this site → reload.
-                All text commands work normally without the worker.
+                ⚠ Direct AI proxy unreachable — retrying via secure relay. Voice and Groq may take an extra second.
+                All text commands work immediately without any connection.
               </span>
             </div>
           )}
