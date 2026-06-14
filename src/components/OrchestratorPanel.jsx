@@ -197,6 +197,9 @@ export default function OrchestratorPanel({ docked = false }) {
   const [recStatus,   setRecStatus]   = useState('');
   const [userName,    setUserName]    = useState('');
   const [workerOk,    setWorkerOk]    = useState(null); // null=unknown, true=ok, false=blocked
+  const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
+  const [fullscreen,  setFullscreen]  = useState(false);
+  const [collapsed,   setCollapsed]   = useState(false);
 
   const abortRef        = useRef(null);
   const inputRef        = useRef(null);
@@ -279,18 +282,16 @@ export default function OrchestratorPanel({ docked = false }) {
     cartesiaPlayingRef.current = true;
     const text = cartesiaQueueRef.current.shift();
 
-    let played = false;
-
-    // Try Cartesia via worker first, then same-origin Pages Function relay
+    // Try Pages Function relay first (same-origin, never blocked by shields),
+    // then worker URL as fallback. If both fail, stay silent — no Web Speech.
     if (CARTESIA_CONFIGURED) {
       const ttsBody = JSON.stringify({
         text,
-        voiceId: VOICE_IDS.guide,
+        voiceId: VOICE_IDS.learner,  // 694f9389 — "Pilot" clear male presenter
         speed: pickSpeed(text),
         emotion: pickEmotion(text),
       });
-      for (const ttsUrl of [`${CARTESIA_WORKER_URL}/cartesia-tts`, '/api/cartesia-tts']) {
-        if (played) break;
+      for (const ttsUrl of ['/api/cartesia-tts', `${CARTESIA_WORKER_URL}/cartesia-tts`]) {
         try {
           const res = await fetch(ttsUrl, {
             method: 'POST',
@@ -309,7 +310,7 @@ export default function OrchestratorPanel({ docked = false }) {
               audio.onended = resolve;
               audio.onerror = resolve;
             });
-            played = true;
+            break; // played successfully
           } catch { /* autoplay blocked — try next */ }
           finally {
             URL.revokeObjectURL(objUrl);
@@ -318,27 +319,7 @@ export default function OrchestratorPanel({ docked = false }) {
         } catch { /* network error — try next */ }
       }
     }
-
-    // Web Speech fallback — pick the best available English voice
-    if (!played && typeof speechSynthesis !== 'undefined') {
-      await new Promise(resolve => {
-        const utt = new SpeechSynthesisUtterance(text);
-        utt.rate = 1.0; utt.pitch = 1.05; utt.volume = 1; utt.lang = 'en-US';
-        const voices = speechSynthesis.getVoices();
-        // Prefer neural/premium English voices; fall back to any en-US
-        const best = voices.find(v => v.lang.startsWith('en') && (
-          v.name.includes('Google') || v.name.includes('Neural') ||
-          v.name.includes('Premium') || v.name.includes('Aria') ||
-          v.name.includes('Jenny') || v.name.includes('Samantha') ||
-          v.name.includes('Karen') || v.name.includes('Daniel')
-        )) || voices.find(v => v.lang === 'en-US') || voices.find(v => v.lang.startsWith('en')) || null;
-        if (best) utt.voice = best;
-        const kv = setInterval(() => { if (speechSynthesis.paused) speechSynthesis.resume(); }, 5000);
-        utt.onend  = () => { clearInterval(kv); resolve(); };
-        utt.onerror = () => { clearInterval(kv); resolve(); };
-        speechSynthesis.speak(utt);
-      });
-    }
+    // No Web Speech fallback — silence is better than a robotic synthetic voice.
 
     runCartesiaQueue();
   }
@@ -409,8 +390,9 @@ export default function OrchestratorPanel({ docked = false }) {
       case 'set_hw': case 'set_os': case 'set_db': case 'set_app': {
         const key = id.replace('set_', '');
         awaitingFieldRef.current = key;
+        setChipsField(FIELD_CHIPS[key] ? key : null);
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[key] }]);
-        setTimeout(() => inputRef.current?.focus(), 50);
+        if (!FIELD_CHIPS[key]) setTimeout(() => inputRef.current?.focus(), 50);
         break;
       }
       case 'run_scan':
@@ -458,9 +440,16 @@ export default function OrchestratorPanel({ docked = false }) {
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
-      // Auto-start field interview for blank builds — user just answers; app fills in
+      // Auto-start field interview for blank builds — show HW chips immediately
       if (!sRef.current.isBuilt && !sRef.current.ctx?.hw) {
         awaitingFieldRef.current = 'hw';
+        setChipsField('hw');
+      } else if (!sRef.current.isBuilt) {
+        const firstMissing = nextFieldPrompt(sRef.current, null);
+        if (firstMissing) {
+          awaitingFieldRef.current = firstMissing;
+          if (FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -515,6 +504,7 @@ export default function OrchestratorPanel({ docked = false }) {
 
     if (!prev.isBuilt && s.isBuilt) {
       awaitingFieldRef.current = null; // Phase 1 complete — stop field interview
+      setChipsField(null);             // dismiss chips
       const { hw, os, db, app } = s.ctx || {};
       const stack = [hw, os, db, app].filter(Boolean).join(' / ') || 'your stack';
       orc.push(`${stack} locked in. Now run the AI Smart Scan — click the blue "Run AI Smart Scan" button in the left sidebar. It checks CVEs, EOL status, and compatibility against your stack in under 2 seconds.`);
@@ -820,6 +810,64 @@ export default function OrchestratorPanel({ docked = false }) {
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Cancelled — no changes made.' }]);
   }
 
+  // ── Chip selection — direct field update without text parsing ─────────────
+  function handleChipSelect(field, value) {
+    setChipsField(null);
+    // Log as user message
+    setMessages(m => [...m, { id: nextId(), role: 'user', text: value }]);
+
+    if (field === 'envType') {
+      applyActionsWithRefs([{
+        type: 'SET_REQUIREMENT',
+        description: `Set Environment to ${value}`,
+        params: { key: 'envType', value },
+        requiresConfirmation: false,
+      }]);
+      const next = nextFieldPrompt(sRef.current, 'envType');
+      awaitingFieldRef.current = next;
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator',
+        text: `Environment set to ${value}.${next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll Phase 1 fields done — I\'ll build and scan now.'}` }]);
+      if (!next && !sRef.current.isBuilt) {
+        applyActionsWithRefs([
+          { type: 'BUILD', description: 'Build environment', requiresConfirmation: false },
+          { type: 'RUN_SCAN', description: 'Run AI Smart Scan', requiresConfirmation: false },
+        ]);
+      }
+      return;
+    }
+
+    // ctx fields: hw / os / db / app
+    const CTX_LABEL = { hw: 'Hardware', os: 'OS', db: 'Database', app: 'Application' };
+    applyActionsWithRefs([{
+      type: 'SET_CTX',
+      description: `Set ${CTX_LABEL[field] || field} to ${value}`,
+      params: { key: field, value },
+      requiresConfirmation: false,
+    }]);
+
+    const updatedS = { ...sRef.current, ctx: { ...(sRef.current.ctx || {}), [field]: value } };
+    const next = nextFieldPrompt(updatedS, field);
+    awaitingFieldRef.current = next;
+
+    let reply = `${CTX_LABEL[field] || field} set to ${value}.`;
+
+    if (!next && !updatedS.isBuilt) {
+      // All 4 ctx fields set — build + scan
+      applyActionsWithRefs([
+        { type: 'BUILD', description: 'Build environment from stack selection', requiresConfirmation: false },
+        { type: 'RUN_SCAN', description: 'Auto-run AI Smart Scan', requiresConfirmation: false },
+      ]);
+      reply += '\n\nAll stack fields set — building and running AI Smart Scan now.';
+    } else if (next && FIELD_CHIPS[next]) {
+      setChipsField(next);
+      reply += `\n\n${FIELD_QUESTIONS[next]}`;
+    } else if (next) {
+      reply += `\n\n${FIELD_QUESTIONS[next]}`;
+    }
+
+    setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+  }
+
   // ── Mic / voice input ────────────────────────────────────────────────────
   function processVoiceInput(text) {
     // Delegate to handleSend via setInput + synthetic submit to reuse all logic
@@ -950,9 +998,10 @@ export default function OrchestratorPanel({ docked = false }) {
   const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
   function startNativeSpeech() {
+    if (!SR) return;
     const rec = new SR();
     rec.lang = 'en-US';
-    rec.continuous = false;
+    rec.continuous = true;    // keep listening until user clicks stop
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     speechRecRef.current = rec;
@@ -960,24 +1009,29 @@ export default function OrchestratorPanel({ docked = false }) {
     rec.onstart = () => { setRecording(true); recordingRef.current = true; setRecStatus('listening'); };
 
     rec.onresult = (e) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join(' ').trim();
-      if (t) {
-        setRecStatus('');
-        processVoiceInput(t);
-      }
+      // Only process final results
+      const finals = Array.from(e.results).filter(r => r.isFinal);
+      const t = finals.map(r => r[0].transcript).join(' ').trim();
+      if (t) processVoiceInput(t);
     };
 
     rec.onerror = (e) => {
-      setRecording(false); recordingRef.current = false; setRecStatus('');
-      speechRecRef.current = null;
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        recordingRef.current = false;
+        setRecording(false); setRecStatus('');
+        speechRecRef.current = null;
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
           'Microphone permission denied. Click the address-bar lock icon → Microphone → Allow, then reload.' }]);
+        return;
       }
-      // All other errors (network, aborted, no-speech) — silent fail, user can type
+      // no-speech, aborted, network — browser may auto-stop; onend will restart if still recording
     };
 
     rec.onend = () => {
+      // If user hasn't clicked stop, auto-restart so the mic stays active
+      if (recordingRef.current && speechRecRef.current) {
+        try { speechRecRef.current.start(); return; } catch { /* fall through to stop */ }
+      }
       setRecording(false); recordingRef.current = false; setRecStatus('');
       speechRecRef.current = null;
     };
@@ -1110,6 +1164,15 @@ export default function OrchestratorPanel({ docked = false }) {
 
   // Field interview order and questions
   const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'goLiveDate'];
+
+  // Clickable chip options for each field — user picks instead of typing
+  const FIELD_CHIPS = {
+    hw:      ['Dell PowerEdge R750', 'HPE ProLiant DL380', 'IBM Power9', 'Cisco UCS B-Series', 'Supermicro SuperServer'],
+    os:      ['RHEL 9.2', 'RHEL 8.6', 'Ubuntu 22.04 LTS', 'Windows Server 2022', 'AIX 7.2', 'Oracle Linux 8'],
+    db:      ['Oracle 19c', 'PostgreSQL 15', 'MySQL 8.0', 'SQL Server 2022', 'MongoDB 6', 'MariaDB 10.11'],
+    app:     ['WebSphere 9.0', 'JBoss EAP 7.4', 'Apache Tomcat 10', 'nginx 1.24', 'WebLogic 14c', 'IIS 10'],
+    envType: ['Production', 'UAT', 'DR', 'Dev', 'SIT'],
+  };
   const FIELD_QUESTIONS = {
     hw:          'What hardware platform? (e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9, or any custom server)',
     os:          'What operating system? (e.g. RHEL 8.6, Ubuntu 22.04 LTS, AIX 7.2, Windows Server 2022, or any custom OS)',
@@ -1311,11 +1374,35 @@ export default function OrchestratorPanel({ docked = false }) {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  // Docked: fills the right panel column. Floating: fixed-position overlay.
-  const wrapperClass = docked
+  // Collapsed docked mode — thin vertical strip
+  if (docked && collapsed) {
+    return (
+      <div
+        onClick={() => setCollapsed(false)}
+        className="flex flex-col items-center justify-center h-full cursor-pointer select-none"
+        style={{ width: 36, borderLeft: '1px solid rgba(13,148,136,0.18)', background: 'linear-gradient(180deg, #0f172a 0%, #0d4f4f 100%)' }}
+        title="Expand OpsMentor"
+      >
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+          <div className="text-white font-bold" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 11, letterSpacing: 2 }}>
+            OpsMentor
+          </div>
+          <div className="text-teal-300" style={{ fontSize: 14 }}>›</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fullscreen mode — fills entire viewport
+  const wrapperClass = fullscreen
+    ? 'flex flex-col bg-white overflow-hidden fixed z-[200]'
+    : docked
     ? 'flex flex-col h-full bg-white overflow-hidden'
     : 'orchestrator-panel fixed z-50 bg-white flex flex-col overflow-hidden';
-  const wrapperStyle = docked
+  const wrapperStyle = fullscreen
+    ? { inset: 0 }
+    : docked
     ? {}
     : { width: 480, maxHeight: 680, bottom: 72, right: 20, display: panelVisible ? 'flex' : 'none', borderRadius: 16, boxShadow: '0 25px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(13,148,136,0.15)', border: '1px solid rgba(13,148,136,0.1)' };
 
@@ -1371,11 +1458,26 @@ export default function OrchestratorPanel({ docked = false }) {
                 <span className="text-sm font-extrabold tracking-tight">OpsMentor</span>
                 <span className="text-teal-300 text-xs ml-2 font-medium opacity-90">AI Lifecycle Admin</span>
               </div>
+              {/* Stop voice */}
               <button
                 onClick={() => { stopCartesia(); setPlaying(false); abortRef.current?.abort(); }}
                 className="text-xs px-2 py-0.5 rounded font-medium bg-white/10 hover:bg-white/20 text-teal-200 transition-colors flex-shrink-0"
                 title="Stop voice"
               >⏹</button>
+              {/* Fullscreen toggle */}
+              <button
+                onClick={() => setFullscreen(f => !f)}
+                className="text-xs w-6 h-6 rounded font-bold bg-white/10 hover:bg-white/20 text-teal-200 transition-colors flex-shrink-0 flex items-center justify-center"
+                title={fullscreen ? 'Exit full screen' : 'Full screen'}
+              >{fullscreen ? '⊡' : '⊞'}</button>
+              {/* Collapse — docked only */}
+              {docked && !fullscreen && (
+                <button
+                  onClick={() => setCollapsed(true)}
+                  className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center text-sm font-bold flex-shrink-0"
+                  title="Collapse panel"
+                >‹</button>
+              )}
               {!docked && (
                 <button
                   onClick={() => setPanelVisible(false)}
@@ -1454,8 +1556,29 @@ export default function OrchestratorPanel({ docked = false }) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Quick suggestions — always shown when input empty */}
-          {!input && !thinking && (
+          {/* Field chips — shown when OpsMentor is awaiting a specific field selection */}
+          {chipsField && FIELD_CHIPS[chipsField] && (
+            <div className="px-3 py-2.5 border-t border-teal-100 flex-shrink-0 bg-teal-50/60">
+              <div className="text-xs text-teal-700 mb-2 font-semibold uppercase tracking-wide flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 flex-shrink-0" />
+                Select {chipsField === 'envType' ? 'environment' : chipsField.toUpperCase()} — or type your own below
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {FIELD_CHIPS[chipsField].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => handleChipSelect(chipsField, v)}
+                    className="text-xs px-3 py-1.5 rounded-lg font-semibold border bg-white border-teal-200 text-teal-700 hover:bg-teal-600 hover:text-white hover:border-teal-600 transition-all shadow-sm"
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick suggestions — shown when no chips and input empty */}
+          {!chipsField && !input && !thinking && (
             <div className="px-4 pb-2 flex flex-wrap gap-1.5 flex-shrink-0">
               {(s.isBuilt
                 ? [
@@ -1481,7 +1604,7 @@ export default function OrchestratorPanel({ docked = false }) {
           )}
 
           {/* Quick action buttons — contextual per workflow phase */}
-          {(() => {
+          {!chipsField && (() => {
             const qa = getQuickActions();
             if (!qa.length) return null;
             return (
@@ -1509,13 +1632,21 @@ export default function OrchestratorPanel({ docked = false }) {
             );
           })()}
 
-          {/* Voice recording status */}
-          {recStatus && (
+          {/* Voice recording status + live typing indicator */}
+          {(recStatus || input.trim()) && (
             <div className="px-4 pb-1 flex items-center gap-2 flex-shrink-0">
-              <span className={['w-2 h-2 rounded-full', recStatus === 'restarting' ? 'bg-amber-500' : 'bg-red-500 animate-pulse'].join(' ')} />
-              <span className="text-xs text-slate-500">
-                {recStatus === 'listening' ? 'Listening — speak now…' : recStatus === 'restarting' ? 'Mic restarting…' : 'Processing speech…'}
-              </span>
+              {recStatus && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                  <span className="text-xs text-slate-500">Listening — speak now…</span>
+                </>
+              )}
+              {!recStatus && input.trim() && (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse flex-shrink-0" />
+                  <span className="text-xs text-slate-400 italic">typing…</span>
+                </>
+              )}
             </div>
           )}
 
