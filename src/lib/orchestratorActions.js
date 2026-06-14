@@ -64,6 +64,15 @@ export function checkPermission(action, authUser, s) {
         ? { allowed: true }
         : { allowed: false, reason: 'No role assigned for you in this build.' };
 
+    case 'UNLOCK_FOR_REVISION':
+    case 'RESUBMIT_CAB':
+      if (!s.requirements?.pmEmail) return { allowed: true };
+      return { allowed: false, reason: 'Only the PM can manage the CAB revision cycle.' };
+
+    case 'SET_CLOSURE_CHECK':
+      // Anyone on the team can tick closure items
+      return { allowed: true };
+
     default:
       return { allowed: true };
   }
@@ -213,6 +222,18 @@ export function executeAction(action, store) {
       });
       break;
     }
+
+    case 'UNLOCK_FOR_REVISION':
+      store.setUnlockedForRevision(true);
+      break;
+
+    case 'RESUBMIT_CAB':
+      store.resubmitCAB();
+      break;
+
+    case 'SET_CLOSURE_CHECK':
+      store.setClosureCheck(params.id, params.value ?? true);
+      break;
 
     default:
       console.warn('[Orchestrator] Unknown action type:', type);

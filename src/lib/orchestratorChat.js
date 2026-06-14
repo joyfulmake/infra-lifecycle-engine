@@ -426,6 +426,23 @@ export function ruleBasedResponse(message, s, authUser) {
     };
   }
 
+  if (/\b(unlock.*revision|revision.*unlock|unlock.*tabs|open.*tabs|unlock for cab|enable.*revision)\b/.test(m)) {
+    if (!s.cabDeclined) return { reply: 'Unlock for Revision is only available after a CAB decline. CAB has not declined this change.' };
+    if (s.unlockedForRevision) return { reply: 'Tabs are already unlocked for revision. Make your changes, then say "resubmit to CAB" when ready.' };
+    return {
+      reply: 'Unlocking all tabs for revision — you can now update the design, scope, incidents, and task schedule without phase restrictions. Say "resubmit to CAB" when corrections are complete.',
+      actions: [{ type: 'UNLOCK_FOR_REVISION', description: 'Unlock all tabs for post-CAB revision', requiresConfirmation: true }],
+    };
+  }
+
+  if (/\b(resubmit.*cab|re-?submit.*cab|cab.*resubmit|send back to cab|reopen cab)\b/.test(m)) {
+    if (!s.cabDeclined) return { reply: 'Resubmit to CAB is only available after a CAB decline.' };
+    return {
+      reply: 'Resubmitting to CAB — this clears the "declined" status and returns the change to pending review. Make sure all CAB feedback has been addressed before doing this.',
+      actions: [{ type: 'RESUBMIT_CAB', description: 'Resubmit change to CAB for re-review', requiresConfirmation: true }],
+    };
+  }
+
   // ── RTM status (before generic status matcher) ────────────────────────────
   if (/\b(rtm|traceability)\b/.test(m) && /\b(status|done|complete|ready|check)\b/.test(m)) {
     const counts = Object.values(s.rtmRows || {}).reduce((a, v) => { a[v] = (a[v] || 0) + 1; return a; }, {});
