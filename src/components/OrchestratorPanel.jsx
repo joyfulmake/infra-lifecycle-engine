@@ -647,22 +647,85 @@ export default function OrchestratorPanel({ docked = false }) {
     }
   }
 
-  // Show welcome + kick off guided interview when OpsMentor first activates
+  // Opening assessment — LLM for any build with data, static warm welcome only for blank
   useEffect(() => {
-    if (open && messages.length === 0) {
+    if (!open || messages.length !== 0) return;
+    const st = sRef.current;
+    const hasData = !!(st.ctx?.hw || st.isBuilt || st.scanComplete || st.designApplied ||
+                       st.phase2Active || st.cabApproved || st.cabDeclined || st.rtmSigned ||
+                       st.promoted || st.requirements?.projectName);
+
+    if (!hasData) {
+      // Truly blank — static warm intro + hw chips
       setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
-      // Auto-start field interview for blank builds — show HW chips immediately
-      if (!sRef.current.isBuilt && !sRef.current.ctx?.hw) {
-        awaitingFieldRef.current = 'hw';
-        setChipsField('hw');
-      } else if (!sRef.current.isBuilt) {
-        const firstMissing = nextFieldPrompt(sRef.current, null);
-        if (firstMissing) {
-          awaitingFieldRef.current = firstMissing;
-          if (FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
-        }
+      awaitingFieldRef.current = 'hw';
+      setChipsField('hw');
+      return;
+    }
+
+    // Build has data — show field chips for the next missing field while LLM assesses
+    if (!st.isBuilt) {
+      const firstMissing = nextFieldPrompt(st, null);
+      if (firstMissing) {
+        awaitingFieldRef.current = firstMissing;
+        if (FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
       }
     }
+
+    // Generate intelligent opening assessment via LLM
+    setThinking(true);
+    const ctx = buildStateContext(st, authUserRef.current);
+    const stack = [st.ctx?.hw, st.ctx?.os, st.ctx?.db, st.ctx?.app].filter(Boolean).join(' / ');
+    const alertSummary = (st.coherenceAlerts || []).filter(a => a.severity === 'warn').map(a => a.message).join('; ') || 'none';
+    const designFilled = st.sysDesignData ? Object.entries(st.sysDesignData).flatMap(([sec, fields]) =>
+      Object.entries(fields || {}).filter(([, v]) => v).map(([k]) => `${sec}.${k}`)
+    ).length : 0;
+
+    const assessmentPrompt = `INITIAL_ASSESSMENT
+
+You have full visibility into this build. Do NOT narrate what the user has already entered or tell them to do obvious next steps they already know about. Your job is to surface what is non-obvious.
+
+Current build snapshot:
+- Stack: ${stack || 'not yet selected'}
+- Project: ${st.requirements?.projectName || 'unnamed'} | Env: ${st.requirements?.envType || 'not set'}
+- Go-live: ${st.requirements?.goLiveDate || 'not set'} | SLA: ${st.requirements?.sla || 'not set'}
+- Phase: ${ctx.phase}
+- Incidents in scope: ${(st.selInc || []).length} | UUM items: ${(st.selUUM || []).length}
+- Design sections filled: ${designFilled} fields
+- Active warnings: ${alertSummary}
+- Tasks stale: ${!!st.tasksStaleReason} | RTM stale: ${st.rtmStale}
+
+Respond with:
+1. The single most important risk or insight you see RIGHT NOW — be specific to the actual stack, dates, and configuration. Reference real component names and real EOL timelines if you know them.
+2. Whether the build is clear to advance to the next workflow state, or if there is a specific blocker. One sentence.
+3. If design sections are empty or sparse and the stack is known, include 2–3 SET_DESIGN_FIELD actions with specific realistic values derived from the stack — do not leave them as placeholders.
+4. If you see a risk worth logging, include an ADD_RAID_ENTRY action for it.
+5. If there is a critical missing task in the Gantt for this stack/incident combination, include an ADD_CUSTOM_TASK action.
+
+Rules:
+- Do not ask the user what they entered — you can see it.
+- Do not tell the user to "run the scan" if it is already complete, or "open a tab" if the data is already there.
+- If there are no risks and the build looks clean, say so in one sentence and confirm what the natural next action is.
+- Lead with insight, not process narration.
+- Keep the reply to 2–4 sentences max. Let the actions speak for the rest.`;
+
+    sendChatMessage(assessmentPrompt, ctx, [])
+      .then(result => {
+        setThinking(false);
+        const { reply, actions = [] } = result;
+        const msgId_ = nextId();
+        setMessages([{ id: msgId_, role: 'orchestrator', text: reply }]);
+        const immediate = actions.filter(a => !a.requiresConfirmation);
+        const needsConfirm = actions.filter(a => a.requiresConfirmation);
+        if (immediate.length > 0) applyActionsWithRefs(immediate);
+        if (needsConfirm.length > 0) {
+          setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
+        }
+      })
+      .catch(() => {
+        setThinking(false);
+        setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
