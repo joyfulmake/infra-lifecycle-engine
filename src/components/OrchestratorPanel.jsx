@@ -181,10 +181,11 @@ export default function OrchestratorPanel({ docked = false }) {
   const ctxOs  = store.ctx?.os  || '';
   const ctxDb  = store.ctx?.db  || '';
   const ctxApp = store.ctx?.app || '';
-  const reqProjectName = store.requirements?.projectName || '';
-  const reqEnvType     = store.requirements?.envType     || '';
-  const reqGoLiveDate  = store.requirements?.goLiveDate  || '';
-  const reqSla         = store.requirements?.sla         || '';
+  const reqProjectName      = store.requirements?.projectName      || '';
+  const reqEnvType          = store.requirements?.envType          || '';
+  const reqGoLiveDate       = store.requirements?.goLiveDate       || '';
+  const reqSla              = store.requirements?.sla              || '';
+  const reqProjectStartDate = store.requirements?.projectStartDate || '';
 
   const [open,        setOpen]        = useState(false);  // OpsMentor activated
   const [panelVisible, setPanelVisible] = useState(false);  // panel UI shown
@@ -254,15 +255,24 @@ export default function OrchestratorPanel({ docked = false }) {
   const cartesiaQueueRef   = useRef([]);
   const cartesiaPlayingRef = useRef(false);
   const currentAudioRef    = useRef(null);
+  const welcomeSpokenRef   = useRef(false);
 
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
   // Must be called synchronously in a click/key handler (before any await).
-  // Plays a silent WAV to unlock HTMLAudioElement for the session.
+  // Unlocks HTMLAudioElement and — on very first interaction — queues a brief
+  // spoken welcome so the user hears OpsMentor greet them.
   function unlockAudio() {
-    if (!audioUnlockedRef.current) {
+    const wasLocked = !audioUnlockedRef.current;
+    if (wasLocked) {
       audioUnlockedRef.current = true;
       try { const a = new Audio(SILENT_WAV); a.volume = 0; a.play().catch(() => {}); } catch {}
+    }
+    if (wasLocked && !welcomeSpokenRef.current) {
+      welcomeSpokenRef.current = true;
+      const hour = new Date().getHours();
+      const g = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+      speakQueued(`${g}! I'm OpsMentor. Let's build your infrastructure profile.`);
     }
   }
 
@@ -558,11 +568,11 @@ export default function OrchestratorPanel({ docked = false }) {
     const log = [];
 
     if (!prev.isBuilt && s.isBuilt) {
-      awaitingFieldRef.current = null; // Phase 1 complete — stop field interview
-      setChipsField(null);             // dismiss chips
+      awaitingFieldRef.current = null;
+      setChipsField(null);
       const { hw, os, db, app } = s.ctx || {};
       const stack = [hw, os, db, app].filter(Boolean).join(' / ') || 'your stack';
-      orc.push(`${stack} locked in. Now run the AI Smart Scan — click the blue "Run AI Smart Scan" button in the left sidebar. It checks CVEs, EOL status, and compatibility against your stack in under 2 seconds.`);
+      orc.push(`Stack locked in — ${stack}. Now hit the AI Smart Scan in the left sidebar. It checks CVEs, EOL status, and compatibility for your entire stack in under 2 seconds. You'll love what it finds!`);
     }
     if (!prev.scanComplete && s.scanComplete) {
       const incCount  = (s.selInc || []).length;
@@ -571,7 +581,6 @@ export default function OrchestratorPanel({ docked = false }) {
       const critical  = findings.filter(f => f.sev === 'CRITICAL');
       const high      = findings.filter(f => f.sev === 'HIGH');
       const riskLvl   = s.scanResults?.riskLevel || 'UNKNOWN';
-      // Build a scan summary shown as a rich log block
       const summaryLines = [
         `Scan complete — Risk: ${riskLvl} · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`,
         critical.length > 0 ? `CRITICAL: ${critical.map(f => f.component).join(', ')}` : null,
@@ -579,35 +588,36 @@ export default function OrchestratorPanel({ docked = false }) {
         `Auto-selected: ${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} for remediation`,
       ].filter(Boolean);
       log.push(summaryLines.join('\n'));
-      orc.push(`Scan done. ${critical.length > 0 ? `${critical.length} CRITICAL finding${critical.length !== 1 ? 's' : ''} detected — ` : ''}${incCount} incident${incCount !== 1 ? 's' : ''} and ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} pre-selected for your stack.\n\nNext: open the System Design tab, fill all 8 sections, then click "Generate Task Plan" to build the schedule and lock the design.`);
+      const crit = critical.length > 0 ? `${critical.length} CRITICAL issue${critical.length !== 1 ? 's' : ''} flagged — address these first. ` : '';
+      orc.push(`Scan done! ${crit}${incCount} incident${incCount !== 1 ? 's' : ''} and ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} pre-selected for your stack.\n\nOpen System Design now — fill all 8 sections, then click "Generate Task Plan" to lock the design and build the project schedule.`);
     }
     if (!prev.designApplied && s.designApplied) {
-      awaitingFieldRef.current = null; // Design complete — stop any pending interview
-      orc.push(`Tasks generated and design is locked. Next: scroll to Phase 2 in the left sidebar and click "Inject Phase 2". That activates your incident triage scope, UUM task matrix, and unlocks the Gantt and RTM tabs.`);
+      awaitingFieldRef.current = null;
+      orc.push(`Design locked and tasks generated! The schedule is live in the Gantt tab.\n\nNow inject Phase 2 from the sidebar — that activates your incident triage scope, UUM task matrix, and unlocks Gantt and RTM for full editing.`);
     }
     if (!prev.phase2Active && s.phase2Active) {
       awaitingFieldRef.current = null;
       const inc = (s.selInc || []).length;
       const uum = (s.selUUM || []).length;
-      orc.push(`Phase 2 active — ${inc} incident${inc !== 1 ? 's' : ''} and ${uum} UUM item${uum !== 1 ? 's' : ''} in scope. Open the Gantt tab to review the auto-generated schedule. When it looks right, click "Submit to CAB" in the left sidebar.`);
+      orc.push(`Phase 2 is live! ${inc} incident${inc !== 1 ? 's' : ''} and ${uum} UUM item${uum !== 1 ? 's' : ''} in scope. Open the Gantt tab — your auto-generated schedule is ready to review. Once it looks right, submit to CAB from the sidebar.`);
     }
     if (!prev.cabApproved && s.cabApproved) {
-      orc.push(`CAB approved — cleared for cutover. Open the RTM tab now. Every requirement row needs a PASS or NA before you can sign off. Once signed, the "Promote to Live" button activates.`);
+      orc.push(`CAB approved — you're cleared for cutover! Open the RTM tab now and mark every requirement row as PASS or NA. Once every row is signed off, the "Promote to Live" button will activate.`);
     }
     if (!prev.cabDeclined && s.cabDeclined) {
-      orc.push(`CAB declined the change. Click "Unlock Tabs for Revision" in the sidebar — that lifts all phase gates so you can update the design, scope, or task schedule. Once corrections are done, resubmit to CAB.`);
+      orc.push(`CAB declined this change. Not the end — click "Unlock Tabs for Revision" in the sidebar to lift all phase gates. Update the design, adjust scope or schedule, then resubmit. You've got this.`);
     }
     if (!prev.rtmSigned && s.rtmSigned) {
-      orc.push(`RTM signed. All requirements verified. Go to the Closure tab and work through the post-go-live checklist. When you're on the outage window, use "Promote to Live" in the sidebar.`);
+      orc.push(`RTM signed! Every requirement is verified and on record. Head to the Closure tab — work through the post-go-live checklist, then hit "Promote to Live" when you're in the outage window. Almost there!`);
     }
     if (!prev.promoted && s.promoted) {
-      orc.push(`System is live. Complete the Closure checklist — hypercare monitoring, CMDB updates, lessons-learned — then export the full audit trail to Excel from the sidebar.`);
+      orc.push(`System is live! Excellent work. Complete the Closure checklist — hypercare monitoring, CMDB updates, lessons-learned — then export your full audit trail to Excel from the sidebar. You did it!`);
     }
     if (!prev.rtmStale && s.rtmStale) {
-      log.push(`RTM has drifted — scope changed after sign-off. Open the RTM tab, re-review each row, and re-sign if requirements are still fully met.`);
+      log.push(`RTM drifted — scope changed after sign-off. Open RTM, re-review each row, and re-sign if requirements still hold.`);
     }
     if (!prev.tasksStaleReason && s.tasksStaleReason) {
-      log.push(`Gantt tasks are out of date: ${s.tasksStaleReason}. Open the Gantt tab and click "Regenerate Tasks".`);
+      log.push(`Gantt tasks are stale: ${s.tasksStaleReason}. Open Gantt and click Regenerate.`);
     }
 
     const activeVulns = (s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length;
@@ -725,7 +735,7 @@ export default function OrchestratorPanel({ docked = false }) {
   // ── Field change logging ──────────────────────────────────────────────────
   // Watches every ctx and requirements field individually.
   const prevCtx = useRef({ hw: undefined, os: undefined, db: undefined, app: undefined });
-  const prevReqs = useRef({ projectName: undefined, envType: undefined, goLiveDate: undefined, sla: undefined });
+  const prevReqs = useRef({ projectName: undefined, envType: undefined, projectStartDate: undefined, goLiveDate: undefined, sla: undefined });
 
   useEffect(() => {
     const { hw: ph, os: po, db: pd, app: pa } = prevCtx.current;
@@ -742,18 +752,19 @@ export default function OrchestratorPanel({ docked = false }) {
   }, [ctxHw, ctxOs, ctxDb, ctxApp]);
 
   useEffect(() => {
-    const { projectName: pn, envType: pe, goLiveDate: pg, sla: ps } = prevReqs.current;
+    const { projectName: pn, envType: pe, projectStartDate: psd, goLiveDate: pg, sla: ps } = prevReqs.current;
     const name = userNameRef.current;
     const pre = name ? `${name} — ` : '';
     const logs = [];
-    if (pn !== undefined && pn !== reqProjectName && reqProjectName) logs.push(`${pre}Project name: ${reqProjectName}`);
-    if (pe !== undefined && pe !== reqEnvType && reqEnvType) logs.push(`${pre}Environment: ${reqEnvType}`);
-    if (pg !== undefined && pg !== reqGoLiveDate && reqGoLiveDate) logs.push(`${pre}Go-live date: ${reqGoLiveDate}`);
-    if (ps !== undefined && ps !== reqSla && reqSla) logs.push(`${pre}SLA: ${reqSla}`);
+    if (pn  !== undefined && pn  !== reqProjectName      && reqProjectName)      logs.push(`${pre}Project: ${reqProjectName}`);
+    if (pe  !== undefined && pe  !== reqEnvType           && reqEnvType)          logs.push(`${pre}Environment: ${reqEnvType}`);
+    if (psd !== undefined && psd !== reqProjectStartDate  && reqProjectStartDate) logs.push(`${pre}Project start: ${reqProjectStartDate}`);
+    if (pg  !== undefined && pg  !== reqGoLiveDate        && reqGoLiveDate)       logs.push(`${pre}Go-live: ${reqGoLiveDate}`);
+    if (ps  !== undefined && ps  !== reqSla               && reqSla)              logs.push(`${pre}SLA: ${reqSla}`);
     if (logs.length > 0) setMessages(m => [...m, ...logs.map(t => ({ id: nextId(), role: 'log', text: t }))]);
-    prevReqs.current = { projectName: reqProjectName, envType: reqEnvType, goLiveDate: reqGoLiveDate, sla: reqSla };
+    prevReqs.current = { projectName: reqProjectName, envType: reqEnvType, projectStartDate: reqProjectStartDate, goLiveDate: reqGoLiveDate, sla: reqSla };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reqProjectName, reqEnvType, reqGoLiveDate, reqSla]);
+  }, [reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, reqSla]);
 
   // ── Field interview sync — advance/close interview when user fills via UI ──
   useEffect(() => {
@@ -762,7 +773,8 @@ export default function OrchestratorPanel({ docked = false }) {
     const { hw, os, db, app } = currS.ctx || {};
     const r = currS.requirements || {};
     const filled = { hw: !!hw, os: !!os, db: !!db, app: !!app,
-      projectName: !!r.projectName, envType: !!r.envType, goLiveDate: !!r.goLiveDate };
+      projectName: !!r.projectName, envType: !!r.envType,
+      projectStartDate: !!r.projectStartDate, goLiveDate: !!r.goLiveDate };
     const curr = awaitingFieldRef.current;
     if (!filled[curr]) return; // not yet filled
     const next = nextFieldPrompt(currS, curr);
@@ -770,13 +782,13 @@ export default function OrchestratorPanel({ docked = false }) {
     if (!next) {
       const sc = generateScript(currS);
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-        `All Phase 1 fields set. ${sc.nextAction ? `Next: ${sc.nextAction}.` : 'Ready — say "run scan" to continue.'}`
+        `All fields set — you're ready to go! ${sc.nextAction ? sc.nextAction : 'Say "run scan" to kick off the AI Smart Scan.'}`
       }]);
     } else {
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[next] }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctxHw, ctxOs, ctxDb, ctxApp, reqProjectName, reqEnvType, reqGoLiveDate, open]);
+  }, [ctxHw, ctxOs, ctxDb, ctxApp, reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, open]);
 
   // ── Tab change logging ────────────────────────────────────────────────────
   const prevActiveTab = useRef('');
@@ -788,22 +800,23 @@ export default function OrchestratorPanel({ docked = false }) {
     if (!awaitingNameRef.current) awaitingFieldRef.current = null;
     const n = userNameRef.current ? `, ${userNameRef.current}` : '';
     const tabHints = {
-      exec:    `You opened Executive Summary${n}. Review incident triage, UUM changes, and the project KPI strip.`,
-      design:  `You opened System Design${n}. Fill all 8 sections — Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA — then click "Generate Task Plan" to build tasks and lock the design.`,
-      gantt:   `You opened the Gantt chart${n}. Review your auto-generated schedule and critical path.${s.tasksStaleReason ? ' Tasks are stale — click Regenerate.' : ''}`,
-      rtm:     `You opened the RTM${n}. Every requirement row must be PASS or NA before you can sign off.${s.rtmStale ? ' RTM has drifted — re-review required.' : ''}`,
-      matrix:  `You opened Cross-Stack Matrix${n}. View task dependencies across all 8 swimlane layers.`,
-      raid:    `You opened RAID Log${n}. Document Risks, Assumptions, Issues, and Decisions here.`,
-      roles:   `You opened Roles and RACI${n}. Assign your team members to the 20 standard roles.`,
-      closure: `You opened Closure${n}. Tick off every post-go-live check before exporting to Excel.`,
-      diagram: `You opened Infrastructure Diagram${n}. Switch between Visual, ASCII Map, and Mission Intel views.`,
-      cmdb:    `You opened CMDB${n}. Check live end-of-life data for your stack components.`,
-      vuln:    `You opened Vulnerabilities${n}. Track CVEs, EOL risks, stakeholder discussions, and the full action audit trail for this build.`,
-      risks:   `You opened Risk Tracker${n}. Risk score is currently ${liveScore} (${liveRl.label}). ${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risks need attention. Use the action buttons on each card to resolve or accept them.`,
-      cost:    `You opened Cost Management${n}. ${s.costConfig?.enabled ? 'Cost tracking is active.' : 'Cost tracking is optional — enable it to estimate project cost from task hours.'}`,
+      exec:    `Executive Summary${n}. Risk score, KPIs, and incident overview — this is your command dashboard.`,
+      design:  `System Design${n}. Fill all 8 sections — Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA — then click "Generate Task Plan" to lock the design and build your project schedule.`,
+      gantt:   `Gantt chart${n}. Your auto-generated schedule is here — review the critical path and task durations.${s.tasksStaleReason ? ' Tasks are stale — click Regenerate now.' : ''}`,
+      rtm:     `RTM${n}. Every requirement row must be PASS or NA before you can sign off.${s.rtmStale ? ' Scope drifted after sign-off — re-review required!' : ' Work through the rows and get every one green.'}`,
+      matrix:  `Cross-Stack Matrix${n}. See task dependencies across all 8 swimlane layers — great for spotting blocking chains.`,
+      raid:    `RAID Log${n}. Log Risks, Assumptions, Issues, and Decisions here — this becomes your project governance record.`,
+      roles:   `Roles and RACI${n}. Assign your 20-role team, set email contacts, and lock who owns each design section.`,
+      closure: `Closure checklist${n}. Tick off every post-go-live item — hypercare, CMDB updates, lessons-learned — before exporting.`,
+      diagram: `Infrastructure Diagram${n}. Switch between Visual topology, ASCII Map, and Mission Intel to see your architecture from every angle.`,
+      cmdb:    `CMDB live EOL data${n}. Check real-time end-of-life status for every component in your stack.`,
+      vuln:    `Vulnerability Registry${n}. CVEs, EOL risks, stakeholder decisions, and the full action audit trail — all in one place.`,
+      risks:   `Risk Tracker${n}. Current score: ${liveScore} (${liveRl.label}). ${liveRisks.filter(r => r.severity === 'CRITICAL').length > 0 ? `${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risk${liveRisks.filter(r => r.severity === 'CRITICAL').length !== 1 ? 's' : ''} need immediate attention!` : 'Looking good — keep monitoring as scope changes.'}`,
+      cost:    `Cost Management${n}. ${s.costConfig?.enabled ? 'Cost tracking is active — your project cost is being estimated from task hours.' : 'Enable cost tracking to get a real-time project cost estimate from your task schedule.'}`,
     };
     const hint = tabHints[s.activeTab];
-    if (hint) setMessages(m => [...m, { id: nextId(), role: 'log', text: hint }]);
+    // Use orchestrator role for tab hints so voice announces the context
+    if (hint) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: hint }]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.activeTab]);
 
@@ -1268,8 +1281,8 @@ export default function OrchestratorPanel({ docked = false }) {
 
   // ── Name reply handler ───────────────────────────────────────────────────
 
-  // Field interview order and questions
-  const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'goLiveDate'];
+  // Field interview order — projectStartDate comes before goLiveDate (can't set end without start)
+  const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'projectStartDate', 'goLiveDate'];
 
   // Clickable chip options for each field — user picks instead of typing
   const FIELD_CHIPS = {
@@ -1280,19 +1293,21 @@ export default function OrchestratorPanel({ docked = false }) {
     envType: ['Production', 'UAT', 'DR', 'Dev', 'SIT'],
   };
   const FIELD_QUESTIONS = {
-    hw:          'What hardware platform? (e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9, or any custom server)',
-    os:          'What operating system? (e.g. RHEL 8.6, Ubuntu 22.04 LTS, AIX 7.2, Windows Server 2022, or any custom OS)',
-    db:          'What database? (e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022, or any custom DB)',
-    app:         'What application or middleware? (e.g. WebSphere 9.0, JBoss EAP 7.4, Apache Tomcat 10, nginx, or any custom app)',
-    projectName: 'What is the project name? (a short identifier for this build)',
-    envType:     'What environment? (Production, UAT, DR, Dev, or SIT)',
-    goLiveDate:  'What is the target go-live date? (e.g. 2026-09-15)',
+    hw:               'What hardware platform are you running on? (select a chip or type — e.g. Dell PowerEdge R750, HPE ProLiant, IBM Power9)',
+    os:               'What operating system? (e.g. RHEL 9.2, Ubuntu 22.04, Windows Server 2022, AIX 7.2)',
+    db:               'What database engine? (e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022)',
+    app:              'What application or middleware? (e.g. WebSphere 9.0, JBoss EAP 7.4, Tomcat, nginx, IIS)',
+    projectName:      'What should we call this project? (a short name for this build — e.g. "DB Upgrade Q3 2026")',
+    envType:          'What environment type is this? (Production, UAT, DR, Dev, or SIT)',
+    projectStartDate: 'When does this project kick off? (start date — e.g. 2026-07-01)',
+    goLiveDate:       'And when is the target go-live date? (e.g. 2026-09-15)',
   };
   const FIELD_CTX_MAP = {
     hw: 'hardware', os: 'OS', db: 'database', app: 'application',
   };
   const FIELD_REQ_MAP = {
-    projectName: 'project name', envType: 'environment', goLiveDate: 'go-live date',
+    projectName: 'project name', envType: 'environment',
+    projectStartDate: 'project start date', goLiveDate: 'go-live date',
   };
 
   function nextFieldPrompt(currS, afterField) {
@@ -1307,6 +1322,7 @@ export default function OrchestratorPanel({ docked = false }) {
       if (f === 'app' && !app) return f;
       if (f === 'projectName' && !r.projectName) return f;
       if (f === 'envType' && !r.envType) return f;
+      if (f === 'projectStartDate' && !r.projectStartDate) return f;
       if (f === 'goLiveDate' && !r.goLiveDate) return f;
     }
     return null;
