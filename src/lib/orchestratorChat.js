@@ -237,15 +237,15 @@ const APP_EXAMPLES = 'WebSphere 9.0, JBoss EAP 7.4, Apache Tomcat 10, nginx 1.24
 function nextPhase1Prompt(s) {
   const { hw, os, db, app } = s.ctx || {};
   const r = s.requirements || {};
-  if (!hw) return `What is the hardware platform? (e.g. ${HW_EXAMPLES.split(',')[0]})`;
-  if (!os) return `Great! Now the operating system? (e.g. ${OS_EXAMPLES.split(',')[0]})`;
-  if (!db) return `Good. Which database? (e.g. ${DB_EXAMPLES.split(',')[0]})`;
-  if (!app) return `Almost there — which application or middleware? (e.g. ${APP_EXAMPLES.split(',')[0]})`;
-  if (!r.projectName) return `Stack is set. What is the project name?`;
-  if (!r.envType) return `What environment type? (Production, UAT, DR, Dev, SIT)`;
-  if (!r.projectStartDate) return `When does the project kick off? (start date — e.g. today, 2026-07-01)`;
-  if (!r.goLiveDate) return `Target go-live date? (e.g. in 3 months, 2026-09-15)`;
-  if (!r.sla) return `SLA tier? (Tier 1 = 99.99%, Tier 2 = 99.9%, Tier 3 = 99.5%)`;
+  if (!hw) return 'Which hardware platform?';
+  if (!os) return 'Which operating system?';
+  if (!db) return 'Which database engine?';
+  if (!app) return 'Which application or middleware?';
+  if (!r.projectName) return 'What should we call this project?';
+  if (!r.envType) return 'Production, UAT, DR, Dev, or SIT?';
+  if (!r.projectStartDate) return 'When does the project start?';
+  if (!r.goLiveDate) return "What's the target go-live date?";
+  if (!r.sla) return 'SLA tier — Tier 1, 2, or 3?';
   return null;
 }
 

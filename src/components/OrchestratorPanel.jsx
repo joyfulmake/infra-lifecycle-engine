@@ -236,7 +236,6 @@ export default function OrchestratorPanel({ docked = false }) {
   const hasSpeechRef     = useRef(false);
   const audioUnlockedRef = useRef(false);
   const noSpeechTimerRef = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
-  const preferredVoiceRef = useRef(null); // best available Web Speech voice
 
   // Always-current refs to avoid stale closures in mic/timers
   const userNameRef       = useRef('');
@@ -253,29 +252,6 @@ export default function OrchestratorPanel({ docked = false }) {
   useEffect(() => { recordingRef.current = recording; }, [recording]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
-  // Pre-load the best available Web Speech voice — async on Chrome, sync on Edge/Firefox
-  useEffect(() => {
-    if (typeof speechSynthesis === 'undefined') return;
-    const pickVoice = () => {
-      const voices = speechSynthesis.getVoices();
-      preferredVoiceRef.current =
-        // Edge neural voices are excellent (Aria, Jenny, Guy)
-        voices.find(v => /aria|jenny\b/i.test(v.name) && v.lang.startsWith('en')) ||
-        // Any neural/natural/enhanced branded voice
-        voices.find(v => /neural|natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')) ||
-        // Microsoft voices on Windows (generally better than Google)
-        voices.find(v => /microsoft/i.test(v.name) && v.lang === 'en-US') ||
-        voices.find(v => /microsoft/i.test(v.name) && v.lang.startsWith('en')) ||
-        // Google voices
-        voices.find(v => /google.*english/i.test(v.name)) ||
-        voices.find(v => v.lang === 'en-US') ||
-        voices.find(v => v.lang.startsWith('en')) ||
-        null;
-    };
-    pickVoice();
-    speechSynthesis.addEventListener('voiceschanged', pickVoice);
-    return () => speechSynthesis.removeEventListener('voiceschanged', pickVoice);
-  }, []);
 
   function getHistory(msgs) {
     return (msgs || [])
@@ -360,7 +336,6 @@ export default function OrchestratorPanel({ docked = false }) {
     }
     cartesiaQueueRef.current = [];
     cartesiaPlayingRef.current = false;
-    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
   }
 
   async function runCartesiaQueue() {
@@ -414,41 +389,6 @@ export default function OrchestratorPanel({ docked = false }) {
           }
         } catch { /* network error — try next */ }
       }
-    }
-
-    // Final fallback: Web Speech API — zero config, works in every browser
-    if (!played && typeof speechSynthesis !== 'undefined') {
-      try {
-        // Re-attempt voice pick in case voiceschanged hadn't fired yet at mount
-        if (!preferredVoiceRef.current) {
-          const voices = speechSynthesis.getVoices();
-          preferredVoiceRef.current =
-            voices.find(v => /aria|jenny\b/i.test(v.name) && v.lang.startsWith('en')) ||
-            voices.find(v => /neural|natural|online|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')) ||
-            voices.find(v => /microsoft/i.test(v.name) && v.lang === 'en-US') ||
-            voices.find(v => /microsoft/i.test(v.name) && v.lang.startsWith('en')) ||
-            voices.find(v => /google.*english/i.test(v.name)) ||
-            voices.find(v => v.lang === 'en-US') ||
-            voices.find(v => v.lang.startsWith('en')) ||
-            null;
-        }
-        speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance(text);
-        if (preferredVoiceRef.current) {
-          utt.voice = preferredVoiceRef.current;
-          // Neural/Online voices need slightly different tuning
-          const isNeural = /neural|natural|online/i.test(preferredVoiceRef.current.name);
-          utt.rate = isNeural ? 0.92 : 0.88;
-          utt.pitch = isNeural ? 1.0 : 1.05;
-        } else {
-          utt.rate = 0.88;
-          utt.pitch = 1.05;
-        }
-        utt.volume = 1.0;
-        utt.lang = 'en-US';
-        await new Promise(resolve => { utt.onend = resolve; utt.onerror = resolve; speechSynthesis.speak(utt); });
-        played = true;
-      } catch { /* browser TTS unavailable */ }
     }
 
     runCartesiaQueue();
@@ -1033,36 +973,16 @@ Rules:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, open]);
 
-  // ── Field change logging ──────────────────────────────────────────────────
-  // Watches every ctx and requirements field individually.
+  // Field change tracking — refs only, no chat echo
   const prevCtx = useRef({ hw: undefined, os: undefined, db: undefined, app: undefined });
   const prevReqs = useRef({ projectName: undefined, envType: undefined, projectStartDate: undefined, goLiveDate: undefined, sla: undefined });
 
   useEffect(() => {
-    const { hw: ph, os: po, db: pd, app: pa } = prevCtx.current;
-    const name = userNameRef.current;
-    const pre = name ? `${name} — ` : '';
-    const logs = [];
-    if (ph !== undefined && ph !== ctxHw && ctxHw) logs.push(`${pre}Hardware set to: ${ctxHw}`);
-    if (po !== undefined && po !== ctxOs && ctxOs) logs.push(`${pre}OS set to: ${ctxOs}`);
-    if (pd !== undefined && pd !== ctxDb && ctxDb) logs.push(`${pre}Database set to: ${ctxDb}`);
-    if (pa !== undefined && pa !== ctxApp && ctxApp) logs.push(`${pre}Application set to: ${ctxApp}`);
-    if (logs.length > 0) setMessages(m => [...m, ...logs.map(t => ({ id: nextId(), role: 'log', text: t }))]);
     prevCtx.current = { hw: ctxHw, os: ctxOs, db: ctxDb, app: ctxApp };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctxHw, ctxOs, ctxDb, ctxApp]);
 
   useEffect(() => {
-    const { projectName: pn, envType: pe, projectStartDate: psd, goLiveDate: pg, sla: ps } = prevReqs.current;
-    const name = userNameRef.current;
-    const pre = name ? `${name} — ` : '';
-    const logs = [];
-    if (pn  !== undefined && pn  !== reqProjectName      && reqProjectName)      logs.push(`${pre}Project: ${reqProjectName}`);
-    if (pe  !== undefined && pe  !== reqEnvType           && reqEnvType)          logs.push(`${pre}Environment: ${reqEnvType}`);
-    if (psd !== undefined && psd !== reqProjectStartDate  && reqProjectStartDate) logs.push(`${pre}Project start: ${reqProjectStartDate}`);
-    if (pg  !== undefined && pg  !== reqGoLiveDate        && reqGoLiveDate)       logs.push(`${pre}Go-live: ${reqGoLiveDate}`);
-    if (ps  !== undefined && ps  !== reqSla               && reqSla)              logs.push(`${pre}SLA: ${reqSla}`);
-    if (logs.length > 0) setMessages(m => [...m, ...logs.map(t => ({ id: nextId(), role: 'log', text: t }))]);
     prevReqs.current = { projectName: reqProjectName, envType: reqEnvType, projectStartDate: reqProjectStartDate, goLiveDate: reqGoLiveDate, sla: reqSla };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, reqSla]);
@@ -1326,7 +1246,10 @@ Rules:
               if (actions.length > 0) applyActionsWithRefs(actions);
               const next = nextFieldPrompt(sRef.current, awField);
               awaitingFieldRef.current = next;
-              setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply + (next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields done! Say "run scan" to continue.') }]);
+              const nextQ = next ? FIELD_QUESTIONS[next] : 'All fields done — say "run scan" to continue.';
+              const hasRisk = reply && (reply.includes('⚠️') || reply.includes('⬡') || reply.includes('EOL') || reply.includes('Stakeholder'));
+              const fullReply = hasRisk ? `${reply}\n\n${nextQ}` : nextQ;
+              setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fullReply }]);
               return;
             }
           }
@@ -1646,15 +1569,15 @@ Rules:
     sla:     ['Tier 1 (99.99%)', 'Tier 2 (99.9%)', 'Tier 3 (99.5%)'],
   };
   const FIELD_QUESTIONS = {
-    hw:               'Hardware platform? (e.g. Dell PowerEdge R750, HPE ProLiant, IBM Power9)',
-    os:               'Operating system? (e.g. RHEL 9.2, Ubuntu 22.04, Windows Server 2022)',
-    db:               'Database engine? (e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0)',
-    app:              'Application or middleware? (e.g. WebSphere 9.0, JBoss EAP 7.4, Tomcat, nginx)',
-    projectName:      'Project name? (e.g. "DB Upgrade Q3 2026")',
-    envType:          'Environment type? (Production, UAT, DR, Dev, or SIT)',
-    projectStartDate: 'Project start date? (e.g. today, 2026-07-01, or "in 2 weeks")',
-    goLiveDate:       'Target go-live date? (e.g. in 3 months, 2026-09-15, Q3 2026)',
-    sla:              'SLA tier? (Tier 1 = 99.99%, Tier 2 = 99.9%, Tier 3 = 99.5%)',
+    hw:               'Which hardware platform?',
+    os:               'Which operating system?',
+    db:               'Which database engine?',
+    app:              'Which application or middleware?',
+    projectName:      'What should we call this project?',
+    envType:          'Production, UAT, DR, Dev, or SIT?',
+    projectStartDate: 'When does the project start?',
+    goLiveDate:       "What's the target go-live date?",
+    sla:              'SLA tier — Tier 1, 2, or 3?',
   };
   const FIELD_CTX_MAP = {
     hw: 'hardware', os: 'OS', db: 'database', app: 'application',
