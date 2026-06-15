@@ -601,6 +601,7 @@ function ScanModal({ onClose, onComplete }) {
   const [stage, setStage] = useState(0);
   const [done, setDone] = useState(false);
   const [result, setResult] = useState(null);
+  const [autoCloseIn, setAutoCloseIn] = useState(null); // countdown seconds
   const { ctx } = useStore();
 
   useEffect(() => {
@@ -621,6 +622,18 @@ function ScanModal({ onClose, onComplete }) {
     const t = setTimeout(tick, 250);
     return () => clearTimeout(t);
   }, []);
+
+  // Auto-apply results after 4 s so the modal never traps the user
+  useEffect(() => {
+    if (!done || !result) return;
+    setAutoCloseIn(4);
+    const iv = setInterval(() => setAutoCloseIn(n => {
+      if (n <= 1) { clearInterval(iv); onComplete(result, result.suggestedInc || [], result.suggestedUUM || []); return 0; }
+      return n - 1;
+    }), 1000);
+    return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done]);
 
   const riskBadge = result
     ? { CRITICAL: 'bg-red-700 text-white', HIGH: 'bg-orange-600 text-white', MEDIUM: 'bg-amber-500 text-white', LOW: 'bg-green-600 text-white' }[result.riskLevel]
@@ -682,7 +695,7 @@ function ScanModal({ onClose, onComplete }) {
               )}
               <div className="flex gap-2">
                 <button className="btn-teal flex-1" onClick={() => onComplete(result, result.suggestedInc || [], result.suggestedUUM || [])}>
-                  Apply Results &amp; Unlock Design
+                  Apply Results &amp; Unlock Design{autoCloseIn > 0 ? ` (${autoCloseIn}s)` : ''}
                 </button>
                 <button className="btn-primary px-3 w-auto" onClick={onClose}>Close</button>
               </div>

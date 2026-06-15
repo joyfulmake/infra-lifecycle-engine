@@ -231,11 +231,15 @@ export default function OrchestratorPanel({ docked = false }) {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef   = useRef([]);
   const silenceTimerRef  = useRef(null);
-  const maxRecTimerRef   = useRef(null);
-  const audioCtxRef      = useRef(null); // Whisper MediaRecorder analysis
-  const hasSpeechRef     = useRef(false);
-  const audioUnlockedRef = useRef(false);
-  const noSpeechTimerRef = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
+  const maxRecTimerRef      = useRef(null);
+  const audioCtxRef         = useRef(null); // Whisper MediaRecorder analysis
+  const hasSpeechRef        = useRef(false);
+  const audioUnlockedRef    = useRef(false);
+  const noSpeechTimerRef    = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
+  const lastVoiceTextRef    = useRef('');   // dedup: ignore repeated transcripts within 3s
+  const lastVoiceTimeRef    = useRef(0);
+  const lastSpokenExcerptRef = useRef('');  // dedup: don't speak same TTS text within 8s
+  const lastSpokenExcerpTimeRef = useRef(0);
 
   // Always-current refs to avoid stale closures in mic/timers
   const userNameRef       = useRef('');
@@ -401,6 +405,10 @@ export default function OrchestratorPanel({ docked = false }) {
           source.buffer = decoded;
           source.connect(ctx.destination);
           currentAudioSourceRef.current = source;
+          // Pause SpeechRecognition during TTS to prevent acoustic feedback loop
+          if (speechRecRef.current && recordingRef.current) {
+            try { speechRecRef.current.stop(); } catch {} // onend restarts it after TTS
+          }
           await new Promise((resolve) => { source.onended = resolve; source.start(0); });
           currentAudioSourceRef.current = null;
           break; // success — move to next queue item
@@ -414,6 +422,11 @@ export default function OrchestratorPanel({ docked = false }) {
   function speakQueued(text) {
     const excerpt = voiceExcerpt(text);
     if (!excerpt) return;
+    // Never speak identical text twice within 8 s — prevents TTS loops from repeated messages
+    const now = Date.now();
+    if (excerpt === lastSpokenExcerptRef.current && now - lastSpokenExcerpTimeRef.current < 8000) return;
+    lastSpokenExcerptRef.current = excerpt;
+    lastSpokenExcerpTimeRef.current = now;
     cartesiaQueueRef.current.push(excerpt);
     if (!cartesiaPlayingRef.current) runCartesiaQueue();
   }
@@ -1149,7 +1162,7 @@ Rules:
       }]);
       const next = nextFieldPrompt(sRef.current, 'envType');
       awaitingFieldRef.current = next;
-      const envReply = `Environment set to ${value}.${next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll Phase 1 fields done — I\'ll build and scan now.'}`;
+      const envReply = next ? FIELD_QUESTIONS[next] : "All Phase 1 fields done — building and running AI Smart Scan now.";
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: envReply }]);
       if (!next && !sRef.current.isBuilt) {
         applyActionsWithRefs([
@@ -1173,7 +1186,7 @@ Rules:
     const next = nextFieldPrompt(updatedS, field);
     awaitingFieldRef.current = next;
 
-    let reply = `${CTX_LABEL[field] || field} set to ${value}.`;
+    let reply = '';
 
     if (!next && !updatedS.isBuilt) {
       // All 4 ctx fields set — build + scan
@@ -1181,12 +1194,11 @@ Rules:
         { type: 'BUILD', description: 'Build environment from stack selection', requiresConfirmation: false },
         { type: 'RUN_SCAN', description: 'Auto-run AI Smart Scan', requiresConfirmation: false },
       ]);
-      reply += '\n\nAll stack fields set — building and running AI Smart Scan now.';
+      reply = 'All stack fields set — building and running AI Smart Scan now.';
     } else if (next && FIELD_CHIPS[next]) {
-      setChipsField(next);
-      reply += `\n\n${FIELD_QUESTIONS[next]}`;
+      reply = FIELD_QUESTIONS[next];
     } else if (next) {
-      reply += `\n\n${FIELD_QUESTIONS[next]}`;
+      reply = FIELD_QUESTIONS[next];
     }
 
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
@@ -1194,8 +1206,14 @@ Rules:
 
   // ── Mic / voice input ────────────────────────────────────────────────────
   function processVoiceInput(text) {
-    // Delegate to handleSend via setInput + synthetic submit to reuse all logic
-    // We set input and immediately call the send logic inline (avoids state timing issues)
+    // Drop input if TTS is currently playing — prevents acoustic feedback loop
+    if (currentAudioSourceRef.current) return;
+    // Dedup: same transcript within 3 s means the recogniser fired twice for one utterance
+    const now = Date.now();
+    if (text === lastVoiceTextRef.current && now - lastVoiceTimeRef.current < 3000) return;
+    lastVoiceTextRef.current = text;
+    lastVoiceTimeRef.current = now;
+
     const currS    = sRef.current;
     const currAuth = authUserRef.current;
 
@@ -1727,9 +1745,14 @@ Rules:
     if (awField && !awaitingNameRef.current) {
       const tl = text.toLowerCase().trim();
 
-      // Let workflow commands escape the interview (build, skip, run scan, etc.)
+      // Let workflow commands AND free-form content commands escape the field interview
       const isCommand = /^(build|build it|build now|run scan|scan|skip|next|cancel|help|status|what|done|ready)(\s|$)/.test(tl)
-        || /\b(run scan|ai scan|inject|submit cab|sign rtm|go live|promote)\b/.test(tl);
+        || /\b(run scan|ai scan|inject|submit cab|sign rtm|go live|promote)\b/.test(tl)
+        // Dynamic content: user is adding/setting something to a specific section
+        || /\b(add|set|update|log|record|note|track|create|insert)\b.{0,30}\b(risk|task|issue|decision|assumption|gantt|raid|design|incident|uum|field|section|network|storage|backup|security|server|firewall|load balancer|tls|ssl|certificate|patch|monitoring|alert|sla|rto|rpo)\b/.test(tl)
+        || /\b(add to|update in|set in|change in)\b.{0,20}\b(gantt|raid|design|rtm|system|closure|exec)\b/.test(tl)
+        // Raw free-form commands like "add a task for load testing"
+        || /^(add|set|update|log|note|create)\b/.test(tl) && tl.length > 10;
 
       if (!isCommand) {
         // Date fields — check for compound range first ("from today to 3 months")
