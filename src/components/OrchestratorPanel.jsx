@@ -174,6 +174,9 @@ export default function OrchestratorPanel({ docked = false }) {
     costConfig:          store.costConfig            || {},
     liveEolData:         store.liveEolData           || {},
     selFix:              store.selFix                || [],
+    scanResults:         store.scanResults           || {},
+    raidLog:             store.raidLog               || [],
+    aiTasks:             store.aiTasks               || [],
   };
 
   // Primitive extracts for stable dependency arrays
@@ -187,6 +190,19 @@ export default function OrchestratorPanel({ docked = false }) {
   const reqSla              = store.requirements?.sla              || '';
   const reqProjectStartDate = store.requirements?.projectStartDate || '';
 
+  // Stable primitives for deep state sync — each drives a separate useEffect dependency
+  const selIncCount        = (store.selInc  || []).length;
+  const selUumCount        = (store.selUUM  || []).length;
+  const rtmPassCount       = Object.values(store.rtmRows || {}).filter(v => v === 'PASS').length;
+  const rtmFailCount       = Object.values(store.rtmRows || {}).filter(v => v === 'FAIL').length;
+  const rtmNaCount         = Object.values(store.rtmRows || {}).filter(v => v === 'NA').length;
+  const closureCheckCount  = Object.values(store.closureChecks || {}).filter(Boolean).length;
+  const closureTotalCount  = Object.keys(store.closureChecks || {}).length;
+  const rolesFilledCount   = Object.values(store.roleAssignments || {}).filter(v => v?.name).length;
+  const coherenceWarnCount = (store.coherenceAlerts || []).filter(a => a.severity === 'warn').length;
+  const raidCount          = (store.raidLog || []).length;
+  const rtmTotalCount      = Object.keys(store.rtmRows || {}).length;
+
   const [open,        setOpen]        = useState(false);  // OpsMentor activated
   const [panelVisible, setPanelVisible] = useState(false);  // panel UI shown
   const [messages,    setMessages]    = useState([]);
@@ -198,6 +214,7 @@ export default function OrchestratorPanel({ docked = false }) {
   const [recStatus,   setRecStatus]   = useState('');
   const [userName,    setUserName]    = useState('');
   const [workerOk,    setWorkerOk]    = useState(null); // null=unknown, true=ok, false=blocked
+  const [ttsVoice,    setTtsVoice]    = useState(null); // 'cartesia'|'elevenlabs'|'none'|null
   const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
   const [fullscreen,  setFullscreen]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(false);
@@ -515,7 +532,7 @@ export default function OrchestratorPanel({ docked = false }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Worker connectivity check — try worker, then Pages Function (same-origin, always reachable)
+  // Worker connectivity + TTS capability check
   useEffect(() => {
     if (!open || workerOk !== null) return;
     let cancelled = false;
@@ -523,7 +540,14 @@ export default function OrchestratorPanel({ docked = false }) {
       for (const url of [`${CARTESIA_WORKER_URL}/health`, '/api/health']) {
         try {
           const r = await fetch(url, { signal: AbortSignal.timeout(3500) });
-          if (r.ok && !cancelled) { setWorkerOk(true); return; }
+          if (r.ok && !cancelled) {
+            setWorkerOk(true);
+            try {
+              const data = await r.json();
+              setTtsVoice(data.tts?.voice || null);
+            } catch { setTtsVoice(null); }
+            return;
+          }
         } catch { /* try next */ }
       }
       if (!cancelled) setWorkerOk(false);
@@ -548,6 +572,11 @@ export default function OrchestratorPanel({ docked = false }) {
     phase2Active: false, cabApproved: false, cabDeclined: false,
     rtmSigned: false, promoted: false, rtmStale: false, tasksStaleReason: null,
     vulnCount: 0, pendingDiscCount: 0, riskScore: 0,
+    // Deep sync tracking
+    selIncCount: 0, selUumCount: 0,
+    rtmPassCount: 0, rtmFailCount: 0, rtmNaCount: 0, rtmTotalCount: 0,
+    closureCheckCount: 0, closureTotalCount: 0,
+    rolesFilledCount: 0, coherenceWarnCount: 0, raidCount: 0,
   });
 
   // Compute live risk score for proactive warnings
@@ -634,6 +663,69 @@ export default function OrchestratorPanel({ docked = false }) {
       log.push(`Risk score is ${liveScore} — CRITICAL. Project may be blocked. Review the Risk Tracker tab urgently.`);
     }
 
+    // ── Deep sync: incident / UUM scope changes (Phase 2 only) ───────────────
+    if (s.phase2Active && prev.selIncCount !== undefined) {
+      if (selIncCount > prev.selIncCount) {
+        log.push(`+${selIncCount - prev.selIncCount} incident — scope: ${selIncCount} incident${selIncCount !== 1 ? 's' : ''} total.`);
+      } else if (selIncCount < prev.selIncCount && prev.selIncCount > 0) {
+        log.push(`Incident removed — scope: ${selIncCount} incident${selIncCount !== 1 ? 's' : ''} total.`);
+      }
+      if (selUumCount > prev.selUumCount) {
+        log.push(`+${selUumCount - prev.selUumCount} UUM item — scope: ${selUumCount} UUM item${selUumCount !== 1 ? 's' : ''} total.`);
+      } else if (selUumCount < prev.selUumCount && prev.selUumCount > 0) {
+        log.push(`UUM item removed — scope: ${selUumCount} item${selUumCount !== 1 ? 's' : ''} total.`);
+      }
+    }
+
+    // ── Deep sync: RTM progress ───────────────────────────────────────────────
+    if (s.cabApproved && !s.rtmSigned && rtmTotalCount > 0) {
+      const prevPassed = (prev.rtmPassCount || 0) + (prev.rtmNaCount || 0);
+      const nowPassed  = rtmPassCount + rtmNaCount;
+      if (nowPassed > prevPassed) {
+        if (nowPassed >= rtmTotalCount) {
+          orc.push(`All ${rtmTotalCount} RTM rows are verified — every requirement shows PASS or NA. Ready to sign off! Say "sign RTM" or use the sidebar to lock the baseline.`);
+        } else if (nowPassed % 5 === 0 || nowPassed === Math.floor(rtmTotalCount / 2)) {
+          log.push(`RTM: ${nowPassed}/${rtmTotalCount} rows verified (${Math.round(nowPassed / rtmTotalCount * 100)}%).`);
+        }
+      }
+      if (rtmFailCount > (prev.rtmFailCount || 0)) {
+        log.push(`RTM: ${rtmFailCount} FAIL row${rtmFailCount !== 1 ? 's' : ''} — must be resolved before sign-off.`);
+      }
+    }
+
+    // ── Deep sync: RAID entries added outside OpsMentor ──────────────────────
+    if (raidCount > (prev.raidCount || 0) && prev.raidCount !== undefined) {
+      const delta = raidCount - prev.raidCount;
+      log.push(`+${delta} RAID entr${delta !== 1 ? 'ies' : 'y'} added — ${raidCount} total on record.`);
+    }
+
+    // ── Deep sync: Closure checklist progress ─────────────────────────────────
+    if (s.rtmSigned && closureCheckCount > (prev.closureCheckCount || 0)) {
+      if (closureTotalCount > 0 && closureCheckCount >= closureTotalCount) {
+        orc.push(`Closure checklist complete — all post-go-live items are done! Export your full audit trail to Excel from the sidebar when ready.`);
+      } else if (closureCheckCount % 3 === 0 && closureCheckCount > 0 && closureTotalCount > 0) {
+        log.push(`Closure: ${closureCheckCount}/${closureTotalCount} items done.`);
+      }
+    }
+
+    // ── Deep sync: Team RACI filling up ──────────────────────────────────────
+    if (rolesFilledCount > (prev.rolesFilledCount || 0)) {
+      if (rolesFilledCount >= 20 && prev.rolesFilledCount < 20) {
+        orc.push(`All 20 roles assigned — the full RACI team is on record! Open the Roles tab to confirm email contacts and backup coverage.`);
+      } else if (rolesFilledCount === 10 && (prev.rolesFilledCount || 0) < 10) {
+        log.push(`Team halfway there — ${rolesFilledCount}/20 roles assigned in the Roles tab.`);
+      }
+    }
+
+    // ── Deep sync: New coherence warnings ────────────────────────────────────
+    if (coherenceWarnCount > (prev.coherenceWarnCount || 0)) {
+      const warns = (s.coherenceAlerts || []).filter(a => a.severity === 'warn');
+      if (warns.length > 0) {
+        const latest = warns[warns.length - 1];
+        log.push(`Coherence alert: ${latest.message}${latest.action ? ' — ' + latest.action : ''}`);
+      }
+    }
+
     const allNew = [
       ...orc.map(text => ({ id: nextId(), role: 'orchestrator', text })),
       ...log.map(text => ({ id: nextId(), role: 'log', text })),
@@ -646,11 +738,17 @@ export default function OrchestratorPanel({ docked = false }) {
       rtmSigned: s.rtmSigned, promoted: s.promoted, rtmStale: s.rtmStale,
       tasksStaleReason: s.tasksStaleReason,
       vulnCount: activeVulns, pendingDiscCount: pendingDisc, riskScore: liveScore,
+      selIncCount, selUumCount,
+      rtmPassCount, rtmFailCount, rtmNaCount, rtmTotalCount,
+      closureCheckCount, closureTotalCount,
+      rolesFilledCount, coherenceWarnCount, raidCount,
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.isBuilt, s.scanComplete, s.designApplied, s.phase2Active, s.cabApproved,
       s.cabDeclined, s.rtmSigned, s.promoted, s.rtmStale, s.tasksStaleReason,
-      s.vulnRegistry?.length, s.stakeholderDiscussions?.length, liveScore]);
+      s.vulnRegistry?.length, s.stakeholderDiscussions?.length, liveScore,
+      selIncCount, selUumCount, rtmPassCount, rtmFailCount, rtmNaCount, rtmTotalCount,
+      closureCheckCount, closureTotalCount, rolesFilledCount, coherenceWarnCount, raidCount]);
 
   // ── Inactivity prompt — if panel open and user idle 3s after last orch message ─
   const inactivityTimerRef = useRef(null);
@@ -1661,7 +1759,14 @@ export default function OrchestratorPanel({ docked = false }) {
             <WorkflowStrip items={checklist} />
           </div>
 
-          {/* Worker connectivity warning */}
+          {/* Worker connectivity / TTS availability warnings */}
+          {ttsVoice === 'none' && workerOk === true && (
+            <div className="px-3 py-2 bg-slate-900 border-b border-slate-700 flex-shrink-0">
+              <span className="text-xs text-slate-300">
+                Voice is silent — no TTS key in the worker. To activate: add <strong className="text-white">ELEVENLABS_API_KEY</strong> in Cloudflare dashboard → Workers → opsmanifest-ai → Settings → Variables. Free tier gives 10k chars/month.
+              </span>
+            </div>
+          )}
           {workerOk === false && (
             <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 flex-shrink-0">
               <span className="text-xs text-amber-700">
@@ -1779,8 +1884,14 @@ export default function OrchestratorPanel({ docked = false }) {
             <div className="px-4 pb-1 flex items-center gap-2 flex-shrink-0">
               {recStatus && (
                 <>
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-                  <span className="text-xs text-slate-500">Listening — speak now…</span>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${recStatus === 'processing' ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
+                  <span className="text-xs text-slate-500 truncate max-w-xs">
+                    {recStatus === 'processing'
+                      ? 'Transcribing…'
+                      : (recStatus === 'listening' || recStatus === 'listening…')
+                      ? 'Listening — speak now…'
+                      : recStatus /* show live interim transcript */}
+                  </span>
                 </>
               )}
               {!recStatus && input.trim() && (

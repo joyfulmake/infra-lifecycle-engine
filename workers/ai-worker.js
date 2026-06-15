@@ -476,7 +476,16 @@ export default {
     }
 
     if (url.pathname === '/health') {
-      return json({ ok: true, model: env.GROQ_MODEL || 'llama-3.3-70b-versatile' });
+      return json({
+        ok: true,
+        model: env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+        tts: {
+          cartesia:   !!env.CARTESIA_API_KEY,
+          elevenlabs: !!env.ELEVENLABS_API_KEY,
+          voice: env.ELEVENLABS_API_KEY ? 'elevenlabs' : env.CARTESIA_API_KEY ? 'cartesia' : 'none',
+        },
+        stt: { whisper: !!env.GROQ_API_KEY },
+      });
     }
 
     // Cartesia TTS — checked before the Groq key guard
