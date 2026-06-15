@@ -218,6 +218,7 @@ export default function OrchestratorPanel({ docked = false }) {
   const audioCtxRef      = useRef(null); // Whisper MediaRecorder analysis
   const hasSpeechRef     = useRef(false);
   const audioUnlockedRef = useRef(false);
+  const noSpeechTimerRef = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
 
   // Always-current refs to avoid stale closures in mic/timers
   const userNameRef       = useRef('');
@@ -369,20 +370,7 @@ export default function OrchestratorPanel({ docked = false }) {
       }
     }
 
-    // Web Speech fallback — only fires if Cartesia failed entirely.
-    // Text is already voiceExcerpt'd (short question / next-step, not echo of user input).
-    if (!played && typeof speechSynthesis !== 'undefined') {
-      try {
-        speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance(text.slice(0, 200));
-        utt.rate = 0.88; utt.pitch = 1.0; utt.volume = 1; utt.lang = 'en-US';
-        const voices = speechSynthesis.getVoices();
-        const preferred = voices.find(v => /en.US/i.test(v.lang) && !/google/i.test(v.name))
-          || voices.find(v => /^en/i.test(v.lang));
-        if (preferred) utt.voice = preferred;
-        await new Promise(resolve => { utt.onend = resolve; utt.onerror = resolve; speechSynthesis.speak(utt); });
-      } catch {}
-    }
+    // No Web Speech fallback — human voice only. Silent if TTS provider unavailable.
 
     runCartesiaQueue();
   }
@@ -460,9 +448,16 @@ export default function OrchestratorPanel({ docked = false }) {
         if (!FIELD_CHIPS[key]) setTimeout(() => inputRef.current?.focus(), 50);
         break;
       }
-      case 'run_scan':
-        applyActionsWithRefs([{ type: 'RUN_SCAN', params: {}, description: 'Run AI Smart Scan', requiresConfirmation: false }]);
+      case 'run_scan': {
+        const stack = [sRef.current.ctx?.hw, sRef.current.ctx?.os, sRef.current.ctx?.db, sRef.current.ctx?.app].filter(Boolean).join(' / ');
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+          `Running AI Smart Scan on ${stack || 'your stack'} — checking CVEs, EOL status, and compatibility…` }]);
+        // Defer scan by one frame so the message renders before the synchronous scan runs
+        setTimeout(() => {
+          applyActionsWithRefs([{ type: 'RUN_SCAN', params: {}, description: 'Run AI Smart Scan', requiresConfirmation: false }]);
+        }, 60);
         break;
+      }
       case 'nav_design':
         applyActionsWithRefs([{ type: 'NAVIGATE_TAB', params: { tab: 'design' }, description: 'Go to System Design', requiresConfirmation: false }]);
         break;
@@ -1103,31 +1098,47 @@ export default function OrchestratorPanel({ docked = false }) {
     speechRecRef.current = rec;
     srStartTimeRef.current = Date.now();
 
-    rec.onstart = () => { setRecording(true); recordingRef.current = true; setRecStatus('listening…'); };
+    rec.onstart = () => {
+      setRecording(true); recordingRef.current = true; setRecStatus('listening…');
+      // If no speech result arrives in 10 s, the browser speech service isn't working.
+      // Escape to Whisper (Groq) which is network-independent of browser speech service.
+      clearTimeout(noSpeechTimerRef.current);
+      noSpeechTimerRef.current = setTimeout(() => {
+        if (!recordingRef.current) return;
+        try { speechRecRef.current?.stop(); } catch {}
+        speechRecRef.current = null;
+        recordingRef.current = false;
+        setMessages(m => [...m, { id: nextId(), role: 'log', text:
+          'Switching to Whisper — browser speech service returned nothing. Speak after the mic indicator turns blue.' }]);
+        startWhisperRecording();
+      }, 10000);
+    };
 
     rec.onresult = (e) => {
-      srCycleCountRef.current = 0; // reset cycle counter on successful result
+      clearTimeout(noSpeechTimerRef.current); // got a result — cancel the escape timer
+      srCycleCountRef.current = 0;
       const latest = e.results[e.results.length - 1];
       if (latest.isFinal) {
         const t = latest[0].transcript.trim();
         if (t) { setRecStatus('listening…'); processVoiceInput(t); }
       } else {
-        setRecStatus(latest[0].transcript.slice(0, 50) + '…');
+        setRecStatus(latest[0].transcript.slice(0, 60) + '…');
       }
     };
 
     rec.onerror = (e) => {
+      clearTimeout(noSpeechTimerRef.current);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         recordingRef.current = false;
         setRecording(false); setRecStatus('');
         speechRecRef.current = null;
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          'Microphone permission denied. Click the address-bar lock icon → Microphone → Allow, then reload.' }]);
+          'Mic permission denied — click the address-bar lock icon → Microphone → Allow, then reload.' }]);
       }
-      // other errors handled in onend
     };
 
     rec.onend = () => {
+      clearTimeout(noSpeechTimerRef.current);
       if (!recordingRef.current || !speechRecRef.current) {
         setRecording(false); recordingRef.current = false; setRecStatus('');
         speechRecRef.current = null;
@@ -1135,26 +1146,23 @@ export default function OrchestratorPanel({ docked = false }) {
       }
       const elapsed = Date.now() - srStartTimeRef.current;
       srCycleCountRef.current += 1;
-      // If SpeechRecognition fires onend within 1.5 s of start with no result 3+ times,
-      // the browser's speech service is blocked (common in Brave with strict shields).
-      // Fall back to Whisper (MediaRecorder → server-side transcription).
       if (elapsed < 1500 && srCycleCountRef.current >= 3) {
         recordingRef.current = false;
         speechRecRef.current = null;
         setRecStatus('');
         setMessages(m => [...m, { id: nextId(), role: 'log', text:
-          'Browser speech service unavailable — switching to Whisper transcription.' }]);
+          'Browser speech service blocked — switching to Whisper transcription.' }]);
         startWhisperRecording();
         return;
       }
       setTimeout(() => {
         if (recordingRef.current && speechRecRef.current) {
-          try { speechRecRef.current.start(); } catch { /* fall through */ }
+          try { speechRecRef.current.start(); } catch {}
         }
       }, 150);
     };
 
-    try { rec.start(); } catch { setRecording(false); setRecStatus(''); }
+    try { rec.start(); } catch { clearTimeout(noSpeechTimerRef.current); setRecording(false); setRecStatus(''); }
   }
 
   // Whisper fallback (used only when SpeechRecognition is unavailable)
@@ -1249,12 +1257,11 @@ export default function OrchestratorPanel({ docked = false }) {
   }
 
   function stopRecording() {
-    // Stop native speech
+    clearTimeout(noSpeechTimerRef.current);
     if (speechRecRef.current) {
       try { speechRecRef.current.stop(); } catch {}
       speechRecRef.current = null;
     }
-    // Stop whisper recorder
     recordingRef.current = false;
     clearTimeout(silenceTimerRef.current);
     clearTimeout(maxRecTimerRef.current);

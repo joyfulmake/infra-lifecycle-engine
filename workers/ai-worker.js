@@ -282,55 +282,79 @@ Return ONLY valid JSON (no markdown, no code fences):
   }
 }
 
-// ── Cartesia Sonic-2 TTS proxy ────────────────────────────────────────────────
-// Keeps CARTESIA_API_KEY out of the browser.
-// Required worker env var: CARTESIA_API_KEY
-// Voice IDs must be full UUIDs from the Cartesia dashboard.
+// ── TTS proxy — Cartesia Sonic-2 primary, ElevenLabs fallback ────────────────
+//
+// Worker env vars:
+//   CARTESIA_API_KEY   — optional; Cartesia Sonic-2 (credits-based)
+//   ELEVENLABS_API_KEY — optional; ElevenLabs free tier (10k chars/month)
+//   ELEVENLABS_VOICE   — ElevenLabs voice ID (default: Josh — TxGEqnHWrfWFTfGW9XjX)
+//
+// Tries Cartesia first; falls back to ElevenLabs on any failure (credits exhausted,
+// network error, key missing). Returns 503 only if both providers are unavailable.
+
+async function tryCartesiaTts(text, voiceId, speed, emotion, env) {
+  if (!env.CARTESIA_API_KEY) return null;
+  try {
+    const res = await fetch('https://api.cartesia.ai/tts/bytes', {
+      method: 'POST',
+      headers: {
+        'Cartesia-Version': '2024-06-10',
+        'Authorization':    `Bearer ${env.CARTESIA_API_KEY}`,
+        'Content-Type':     'application/json',
+      },
+      body: JSON.stringify({
+        model_id:  'sonic-2',
+        transcript: text,
+        voice: {
+          mode: 'id',
+          id:   voiceId || '694f9389-aac1-45b6-b726-9d9369183238',
+          __experimental_controls: { speed: speed || 'normal', emotion: emotion || [] },
+        },
+        output_format: { container: 'mp3', encoding: 'mp3', sample_rate: 44100 },
+        language: 'en',
+      }),
+    });
+    if (!res.ok) return null; // 402 credits, 4xx/5xx — fall through to ElevenLabs
+    const audio = await res.arrayBuffer();
+    return new Response(audio, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/mpeg' } });
+  } catch { return null; }
+}
+
+async function tryElevenLabsTts(text, env) {
+  if (!env.ELEVENLABS_API_KEY) return null;
+  // Josh — warm, confident, natural male voice; override via ELEVENLABS_VOICE env var
+  const voiceId = env.ELEVENLABS_VOICE || 'TxGEqnHWrfWFTfGW9XjX';
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key':   env.ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+        'Accept':       'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: { stability: 0.48, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true },
+      }),
+    });
+    if (!res.ok) return null;
+    const audio = await res.arrayBuffer();
+    return new Response(audio, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/mpeg' } });
+  } catch { return null; }
+}
 
 async function handleCartesiaTts(req, env) {
-  if (!env.CARTESIA_API_KEY) return err('CARTESIA_API_KEY not configured', 500);
-
   const { text, voiceId, speed, emotion } = await req.json().catch(() => ({}));
-  if (!text)    return err('text is required');
-  if (!voiceId) return err('voiceId is required');
+  if (!text) return err('text is required');
 
-  const res = await fetch('https://api.cartesia.ai/tts/bytes', {
-    method: 'POST',
-    headers: {
-      'Cartesia-Version': '2024-06-10',
-      'Authorization':    `Bearer ${env.CARTESIA_API_KEY}`,
-      'Content-Type':     'application/json',
-    },
-    body: JSON.stringify({
-      model_id:  'sonic-2',
-      transcript: text,
-      voice: {
-        mode: 'id',
-        id:   voiceId,
-        __experimental_controls: {
-          speed:   speed   || 'normal',
-          emotion: emotion || [],
-        },
-      },
-      output_format: {
-        container:   'mp3',
-        encoding:    'mp3',
-        sample_rate: 44100,
-      },
-      language: 'en',
-    }),
-  });
+  const cartesia = await tryCartesiaTts(text, voiceId, speed, emotion, env);
+  if (cartesia) return cartesia;
 
-  if (!res.ok) {
-    const body = await res.text();
-    return err(`Cartesia API ${res.status}: ${body}`, 502);
-  }
+  const eleven = await tryElevenLabsTts(text, env);
+  if (eleven) return eleven;
 
-  const audio = await res.arrayBuffer();
-  return new Response(audio, {
-    status: 200,
-    headers: { ...CORS, 'Content-Type': 'audio/mpeg' },
-  });
+  return err('No TTS provider available — add ELEVENLABS_API_KEY or top up Cartesia credits', 503);
 }
 
 // ── Orchestrator chat ─────────────────────────────────────────────────────────
