@@ -387,7 +387,22 @@ export default function OrchestratorPanel({ docked = false }) {
       }
     }
 
-    // No Web Speech fallback — human voice only. Silent if TTS provider unavailable.
+    // Final fallback: Web Speech API — zero config, works in every browser
+    if (!played && typeof speechSynthesis !== 'undefined') {
+      try {
+        speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(text);
+        const voices = speechSynthesis.getVoices();
+        const preferred =
+          voices.find(v => /neural|natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')) ||
+          voices.find(v => /microsoft|google/i.test(v.name) && v.lang.startsWith('en')) ||
+          voices.find(v => v.lang.startsWith('en'));
+        if (preferred) utt.voice = preferred;
+        utt.rate = 0.92; utt.pitch = 1.0; utt.volume = 1.0;
+        await new Promise(resolve => { utt.onend = resolve; utt.onerror = resolve; speechSynthesis.speak(utt); });
+        played = true;
+      } catch { /* browser TTS unavailable */ }
+    }
 
     runCartesiaQueue();
   }
@@ -1057,6 +1072,21 @@ export default function OrchestratorPanel({ docked = false }) {
     const currS    = sRef.current;
     const currAuth = authUserRef.current;
 
+    // ── Auto-confirm/cancel pending ConfirmCard ───────────────────────────
+    const pendingConfirm = messagesRef.current.find(m => m.role === 'confirm');
+    if (pendingConfirm) {
+      if (/^(yes|yeah|yep|sure|ok|okay|go ahead|add|confirm|do it|proceed|apply|run it|add it|add them|add all|sounds good|absolutely|correct|right|affirmative|please do|go on|do that)(\s|$|[,!.])/i.test(text)) {
+        setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
+        handleConfirm(pendingConfirm.actions);
+        return;
+      }
+      if (/^(no|nope|cancel|abort|never mind|skip|not now|stop|discard|ignore)(\s|$|[,!.])/i.test(text)) {
+        setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
+        handleCancel();
+        return;
+      }
+    }
+
     if (awaitingNameRef.current) {
       setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
       handleNameReply(text);
@@ -1221,7 +1251,7 @@ export default function OrchestratorPanel({ docked = false }) {
         setMessages(m => [...m, { id: nextId(), role: 'log', text:
           'Switching to Whisper — browser speech service returned nothing. Speak after the mic indicator turns blue.' }]);
         startWhisperRecording();
-      }, 10000);
+      }, 3000);
     };
 
     rec.onresult = (e) => {
@@ -1238,12 +1268,21 @@ export default function OrchestratorPanel({ docked = false }) {
 
     rec.onerror = (e) => {
       clearTimeout(noSpeechTimerRef.current);
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      if (e.error === 'not-allowed') {
         recordingRef.current = false;
         setRecording(false); setRecStatus('');
         speechRecRef.current = null;
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          'Mic permission denied — click the address-bar lock icon → Microphone → Allow, then reload.' }]);
+          'Mic access denied — click the lock icon in the address bar → Microphone → Allow, then try again.' }]);
+      } else {
+        // service-not-allowed (Brave Shields), network, or other service errors → fall back to Whisper
+        try { speechRecRef.current?.stop(); } catch {}
+        speechRecRef.current = null;
+        recordingRef.current = false;
+        setRecStatus('');
+        setMessages(m => [...m, { id: nextId(), role: 'log', text:
+          'Browser speech service unavailable — switching to Whisper transcription.' }]);
+        startWhisperRecording();
       }
     };
 
@@ -1481,6 +1520,21 @@ export default function OrchestratorPanel({ docked = false }) {
       setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
       handleNameReply(text);
       return;
+    }
+
+    // ── Auto-confirm/cancel pending ConfirmCard ───────────────────────────
+    const pendingConfirm = messagesRef.current.find(m => m.role === 'confirm');
+    if (pendingConfirm) {
+      if (/^(yes|yeah|yep|sure|ok|okay|go ahead|add|confirm|do it|proceed|apply|run it|add it|add them|add all|sounds good|absolutely|correct|right|affirmative|please do|go on|do that)(\s|$|[,!.])/i.test(text)) {
+        setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
+        handleConfirm(pendingConfirm.actions);
+        return;
+      }
+      if (/^(no|nope|cancel|abort|never mind|skip|not now|stop|discard|ignore)(\s|$|[,!.])/i.test(text)) {
+        setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
+        handleCancel();
+        return;
+      }
     }
 
     setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
