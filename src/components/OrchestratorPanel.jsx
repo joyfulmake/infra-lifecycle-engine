@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext.jsx';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
 import { speakScript, CARTESIA_CONFIGURED, CARTESIA_WORKER_URL, VOICE_IDS } from '../lib/cartesia.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
-import { sendChatMessage, ruleBasedResponse, parseRelativeDate } from '../lib/orchestratorChat.js';
+import { sendChatMessage, ruleBasedResponse, parseRelativeDate, parseCompoundDateRange } from '../lib/orchestratorChat.js';
 import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
 // ── Voice helpers — content-aware emotion and speed for Cartesia TTS ─────────
@@ -1463,15 +1463,18 @@ Rules:
         setRecording(false); setRecStatus('');
         speechRecRef.current = null;
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          'Mic access denied — click the lock icon in the address bar → Microphone → Allow, then try again.' }]);
+          'Microphone access denied. Click the lock icon in the browser address bar → Microphone → Allow, then click the mic button again.' }]);
+      } else if (e.error === 'no-speech') {
+        // No audio detected — restart quietly without falling through to Whisper
+        try { speechRecRef.current?.stop(); } catch {}
       } else {
-        // service-not-allowed (Brave Shields), network, or other service errors → fall back to Whisper
+        // service-not-allowed (Brave Shields), network, or other — fall back to Whisper
         try { speechRecRef.current?.stop(); } catch {}
         speechRecRef.current = null;
         recordingRef.current = false;
         setRecStatus('');
         setMessages(m => [...m, { id: nextId(), role: 'log', text:
-          'Browser speech service unavailable — switching to Whisper transcription.' }]);
+          'Browser speech service unavailable — switching to Whisper transcription. Speak after the indicator turns active.' }]);
         startWhisperRecording();
       }
     };
@@ -1506,7 +1509,10 @@ Rules:
 
   // Whisper fallback (used only when SpeechRecognition is unavailable)
   async function startWhisperRecording() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Microphone access is not available in this browser context. Use Chrome or Edge over HTTPS, then allow microphone access when prompted.' }]);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       mediaStreamRef.current = stream;
@@ -1779,25 +1785,41 @@ Rules:
         || /\b(run scan|ai scan|inject|submit cab|sign rtm|go live|promote)\b/.test(tl);
 
       if (!isCommand) {
-        // Date fields — parse relative dates directly before going through ruleBasedResponse
+        // Date fields — check for compound range first ("from today to 3 months")
+        if (awField === 'projectStartDate') {
+          const range = parseCompoundDateRange(text);
+          if (range) {
+            awaitingFieldRef.current = null;
+            applyActionsWithRefs([
+              { type: 'SET_REQUIREMENT', description: `Set start to ${range.start}`, params: { key: 'projectStartDate', value: range.start }, requiresConfirmation: false },
+              { type: 'SET_REQUIREMENT', description: `Set go-live to ${range.end}`,  params: { key: 'goLiveDate',        value: range.end   }, requiresConfirmation: false },
+            ]);
+            const updatedReqs = { ...sRef.current.requirements, projectStartDate: range.start, goLiveDate: range.end };
+            const next = nextFieldPrompt({ ...sRef.current, requirements: updatedReqs }, 'goLiveDate');
+            awaitingFieldRef.current = next;
+            if (next && FIELD_CHIPS[next]) setChipsField(next);
+            const nextQ = next ? FIELD_QUESTIONS[next] : 'All fields set — say "build" to continue.';
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: nextQ }]);
+            return;
+          }
+        }
+
+        // Single date parse
         if (awField === 'projectStartDate' || awField === 'goLiveDate') {
           const parsed = parseRelativeDate(text) || parseRelativeDate(text.replace(/^.*?\s+(?:is|:)\s+/i, ''));
           if (parsed) {
             awaitingFieldRef.current = null;
-            const label = awField === 'projectStartDate' ? 'Project start' : 'Go-live';
             applyActionsWithRefs([{
               type: 'SET_REQUIREMENT',
-              description: `Set ${label} to ${parsed}`,
               params: { key: awField, value: parsed },
               requiresConfirmation: false,
             }]);
             const updatedReqs = { ...sRef.current.requirements, [awField]: parsed };
-            const updatedS = { ...sRef.current, requirements: updatedReqs };
-            const next = nextFieldPrompt(updatedS, awField);
+            const next = nextFieldPrompt({ ...sRef.current, requirements: updatedReqs }, awField);
             awaitingFieldRef.current = next;
             if (next && FIELD_CHIPS[next]) setChipsField(next);
-            const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields set — say "run scan" to continue.';
-            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `${label}: ${parsed}.${nextQ}` }]);
+            const nextQ = next ? FIELD_QUESTIONS[next] : 'All fields set — say "build" to continue.';
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: nextQ }]);
             return;
           }
         }
@@ -1817,8 +1839,10 @@ Rules:
             const next = nextFieldPrompt(sRef.current, awField);
             awaitingFieldRef.current = next;
             if (next && FIELD_CHIPS[next]) setChipsField(next);
-            const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields complete! Say "run scan" to continue.';
-            const fullReply = reply + nextQ;
+            // Only show reply if it has risk/warning content — never echo what user typed
+            const hasRisk = reply && (reply.includes('⚠️') || reply.includes('⬡') || reply.includes('EOL') || reply.includes('Stakeholder'));
+            const nextQ = next ? FIELD_QUESTIONS[next] : 'All fields complete — say "build" to continue.';
+            const fullReply = hasRisk ? `${reply}\n\n${nextQ}` : nextQ;
             setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fullReply }]);
             return;
           }

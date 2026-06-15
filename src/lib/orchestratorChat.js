@@ -17,7 +17,8 @@ export function parseRelativeDate(text) {
   // "in/after N days/weeks/months" or "N days/weeks/months from now/today"
   const rel = t.match(/(?:in|after|within)\s+(\d+)\s+(day|week|month)/i)
     || t.match(/(\d+)\s+(day|week|month)s?\s+from\s+(?:now|today)/i)
-    || t.match(/(\d+)\s+(day|week|month)s?\s+(?:later|out|hence)/i);
+    || t.match(/(\d+)\s+(day|week|month)s?\s+(?:later|out|hence)/i)
+    || t.match(/(?:to|till|until|for)\s+(\d+)\s+(day|week|month)/i);  // "to 3 months"
   if (rel) {
     const n = parseInt(rel[1]);
     const unit = rel[2].toLowerCase();
@@ -49,6 +50,31 @@ export function parseRelativeDate(text) {
   const mdy = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`;
 
+  return null;
+}
+
+// ── Compound date range — "from today to 3 months", "today to Q3", etc. ──────
+// Returns { start: ISO, end: ISO } or null.
+export function parseCompoundDateRange(text) {
+  if (!text) return null;
+  const t = text.toLowerCase().trim();
+
+  // "from X to Y" / "X to Y" / "start X end Y" / "start X for N months"
+  // Anchor words for start: today, now, immediately, asap, ISO date
+  const startAnchor = /(?:from\s+)?(today|now|immediately|asap|\d{4}-\d{2}-\d{2})/i;
+  const endAnchor   = /(?:to|till|until|through|ending|end)\s+(.+)/i;
+
+  const sm = t.match(startAnchor);
+  const em = t.match(endAnchor);
+  if (!sm || !em) return null;
+
+  const startRaw = sm[1];
+  const endRaw   = em[1].replace(/[,!.]+$/, '').trim();
+
+  const start = parseRelativeDate(startRaw);
+  const end   = parseRelativeDate(endRaw);
+
+  if (start && end && end > start) return { start, end };
   return null;
 }
 
@@ -404,30 +430,31 @@ export function ruleBasedResponse(message, s, authUser) {
     }
 
     const eolNote = eolHits.length > 0
-      ? `\n\n${eolWarnings}\n\nI can create incident and vulnerability entries for these. Confirm below.`
+      ? `${eolWarnings}\n\nConfirm below to register incident and vulnerability entries.`
       : '';
 
     const stakeholderNote = stakeholderChecks.length > 0
-      ? `\n\n⬡ Stakeholder discussions opened:\n${stakeholderChecks.map(sc => `• ${sc.owner}: ${sc.topic}`).join('\n')}\nThese appear in the RAID log and Vulnerabilities tab. Mark each as "AGREED" when the team/client confirms.`
+      ? `Stakeholder sign-offs needed:\n${stakeholderChecks.map(sc => `• ${sc.owner}: ${sc.topic}`).join('\n')}\nLogged in RAID and Vulnerabilities tab.`
       : '';
 
     const nextNote = allFilled && !s.isBuilt
-      ? '\n\nAll stack fields are set — building and running AI Smart Scan now.'
+      ? 'All stack fields are set — building and running AI Smart Scan now.'
       : allFilled && s.isBuilt && !s.scanComplete
-      ? '\n\nAll stack fields complete — running AI Smart Scan now.'
-      : next ? '\n\n' + next : '';
+      ? 'Stack complete — running AI Smart Scan now.'
+      : next || '';
 
-    return {
-      reply: `Got it — ${ctxField.label} set to "${ctxField.value}".${eolNote}${stakeholderNote}${nextNote}`,
-      actions,
-    };
+    // Only echo if there is risk content — never repeat what the user just typed
+    const riskContent = [eolNote, stakeholderNote].filter(Boolean).join('\n\n');
+    const reply = riskContent || nextNote || '';
+
+    return { reply, actions };
   }
 
   const reqField = parseSetRequirement(raw);
   if (reqField) {
     const next = nextPhase1Prompt({ ...s, requirements: { ...s.requirements, [reqField.field]: reqField.value } });
     return {
-      reply: `${reqField.label} set to "${reqField.value}".${next ? '\n\n' + next : '\n\nAll Phase 1 fields are complete. Click "Build" in the left panel.'}`,
+      reply: next || 'All Phase 1 fields are complete. Click "Build" in the left panel.',
       actions: [{
         type: 'SET_REQUIREMENT',
         description: `Set ${reqField.label} to ${reqField.value}`,

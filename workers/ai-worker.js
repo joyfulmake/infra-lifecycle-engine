@@ -375,11 +375,13 @@ async function handleCartesiaTts(req, env) {
   const { text, voiceId, speed, emotion } = await req.json().catch(() => ({}));
   if (!text) return err('text is required');
 
-  const cartesia = await tryCartesiaTts(text, voiceId, speed, emotion, env);
-  if (cartesia) return cartesia;
-
+  // Azure Neural TTS is primary — free tier, natural human voice, no credit consumption
   const azure = await tryAzureTts(text, env);
   if (azure) return azure;
+
+  // Cartesia Sonic-2 fallback (credits-based)
+  const cartesia = await tryCartesiaTts(text, voiceId, speed, emotion, env);
+  if (cartesia) return cartesia;
 
   const eleven = await tryElevenLabsTts(text, env);
   if (eleven) return eleven;
