@@ -190,7 +190,7 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v1.7.0.0 ready to build — service worker disabled in MSIX context + unhandledrejection guard.
+**Current status:** v1.8.0.0 ready to build — OpsMentor agent-first UX complete: Azure Neural TTS (Web Audio API), no echo, no voice loops, scan modal auto-closes.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
@@ -202,6 +202,7 @@ Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 - v1.5.0.0 — MSIX: StartPage gets trailing slash, explicit root ACUR rule added alongside wildcard; root React error boundary added (no blank screen on crash); 12s splash fallback shows retry instead of forever-spinner when JS bundle fails to load; service worker offline response returns branded error page; MissionHelp architecture intelligence added (ASCII Map + Mission Intel views in InfraDiagramTab); TLS/cipher and custom-entry compatibility coherence checks added; Excel export gains Mission Intel sheet (signals/RTM/layers/next steps + ASCII maps) and custom UUM rows; submitted 2026-06-11; failed (12s fallback fired — "Unable to load. Please check your connection." — `pages.dev` unreachable from lab, same root cause as v1.3–v1.4)
 - v1.6.0.0 — **Architecture change: fully packaged web app.** Build workflow now runs `npm ci && npm run build`, copies `dist/` into the MSIX package root, and sets `StartPage="index.html"`. App loads from `ms-appx-web:///` with zero network dependency. ACUR updated to `ms-appx-web:///` rules. Firebase/Groq `fetch()` calls still hit the internet at runtime — only the app shell load is offline. Eliminates every CDN-reachability failure permanently. **Submitted 2026-06-15; failed — crash at launch on OS build 26200.8116 (Windows 11 24H2). JS bundle ran but service worker intercepted ms-appx-web: scheme fetch events, crashing WebView2 renderer.**
 - v1.7.0.0 — **Service worker disabled in ms-appx-web context.** `main.jsx` skips SW registration when `window.location.href` starts with `ms-appx-web:`. `sw.js` no-ops all event listeners when `self.location.protocol === 'ms-appx-web:'`. Global `unhandledrejection` handler added to `main.jsx` — prevents async API failures (Firebase, IndexedDB) from terminating the WebView2 renderer on Win 11 24H2+.
+- v1.8.0.0 — **OpsMentor agent-first UX.** Azure Neural TTS (Jenny Neural) via Web Audio API (`AudioContext.decodeAudioData` + `BufferSourceNode`) — eliminates CSP blob: block that was silently killing audio; Web Speech API fallback removed entirely. Field interview echo eliminated: chips and voice input no longer repeat user selections back; only show next question. Voice feedback loop fixed: SpeechRecognition pauses during TTS playback + 3s dedup on identical transcripts + 8s dedup on TTS. ScanModal auto-closes 4s after completion (countdown on button) — modal can never trap the user while OpsMentor is waiting for input. LLM-generated opening assessment on builds with data (INITIAL_ASSESSMENT pattern). CSP `media-src 'self' blob:` added. `isCommand` escape expanded for free-form content commands (add risk/task/design field).
 
 **Root cause of blank screen / "unable to load" (v1.3–v1.5)**: Microsoft's certification lab cannot reach `*.netlify.app` or `*.pages.dev` CDN subdomains. For a hosted web app MSIX, the entire app shell (HTML + JS bundle) must be fetched from the CDN every launch — if the CDN is unreachable, nothing loads. v1.5 improved the UX (retry message instead of infinite spinner) but did not fix the root cause. v1.6 eliminates the dependency entirely by bundling the app into the MSIX package itself.
 
@@ -260,7 +261,7 @@ OpsMentor is the app's embedded AI agent. Key behavioral contract:
 - **Opening assessment**: when opened on any build with data, calls `/orchestrator-chat` with a special `INITIAL_ASSESSMENT` prompt. Treats all entered data as approved. Surfaces only non-obvious risks, EOL windows, or gaps. Never narrates what the user already did.
 - **Proactive actions**: the opening LLM response includes `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, and `SET_DESIGN_FIELD` actions without the user asking. These are applied immediately (no confirmation needed).
 - **Blank builds only**: static warm welcome + hardware chips shown when truly nothing is entered.
-- **Voice**: Azure Neural TTS (free tier) via `AZURE_TTS_KEY` + `AZURE_TTS_REGION` worker env vars. Falls back to Web Speech. `/cartesia-tts` endpoint handles both Azure and Cartesia.
+- **Voice**: Azure Neural TTS (Jenny Neural, free tier) is the ONLY voice. No Web Speech fallback. Uses Web Audio API (`AudioContext.decodeAudioData` + `BufferSourceNode`) — avoids CSP `blob:` media restrictions. `unlockAudio()` creates and resumes a shared `AudioContext` in the gesture handler (gesture context required). SpeechRecognition is paused during TTS playback to prevent acoustic feedback. TTS dedup: same excerpt skipped within 8s. Voice input dedup: same transcript skipped within 3s. Worker: `/cartesia-tts` endpoint tries Azure first, then Cartesia, then ElevenLabs.
 - **System Design from Phase 1**: when design is empty but stack is known, the opening assessment suggests specific `SET_DESIGN_FIELD` values derived from the hw/os/db/app configuration.
 - `buildWelcome()` and `buildVoicePrompt()` are fallback-only now — only used when the LLM call fails or on a blank build.
 
@@ -279,7 +280,7 @@ Worker routes relevant to OpsMentor:
 - **Model**: `llama-3.3-70b-versatile` (overridable via `GROQ_MODEL` worker env var)
 - **UI**: "✦ AI Deepen — Groq" button appears in the Gantt FSM panel and Matrix FSM detail panel when configured; AI-enhanced fields shown with teal "✦ AI" badge; adds CVE Risks + Best Practice fields
 - **To activate**:
-  1. `wrangler deploy workers/ai-worker.js --name opsmanifest-ai --compatibility-date 2026-06-15`
+  1. `wrangler deploy workers/ai-worker.js --name opsmanifest-ai --compatibility-date 2026-06-15` (use this date — 2026-06-16 causes API errors)
   2. Set `GROQ_API_KEY`, `AZURE_TTS_KEY`, `AZURE_TTS_REGION` in Cloudflare Workers → Settings → Variables
   3. Set `GROQ_WORKER_URL` + `GROQ_CONFIGURED = true` in `src/lib/groqConfig.js`
   4. Build and deploy
