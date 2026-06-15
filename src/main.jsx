@@ -4,12 +4,21 @@ import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './lib/AuthContext.jsx'
 
-// Register service worker for PWA / offline support
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA / offline support.
+// Skip in MSIX packaged context (ms-appx-web:) — the app is already bundled
+// offline, and the SW's fetch handler can crash WebView2 on newer Windows builds
+// when it intercepts ms-appx-web: scheme navigations.
+if ('serviceWorker' in navigator && !window.location.href.startsWith('ms-appx-web:')) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+// Prevent unhandled promise rejections from terminating the WebView2 renderer.
+// Firebase, IndexedDB, and other async APIs may reject on restricted origins.
+window.addEventListener('unhandledrejection', (e) => {
+  e.preventDefault();
+});
 
 // Root error boundary — prevents a React render crash from showing a blank screen
 class AppErrorBoundary extends Component {

@@ -313,9 +313,13 @@ export default function OrchestratorPanel({ docked = false }) {
     }
     if (wasLocked && !welcomeSpokenRef.current) {
       welcomeSpokenRef.current = true;
-      const hour = new Date().getHours();
-      const g = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-      speakQueued(`${g}! I'm OpsMentor. Let's build your infrastructure profile.`);
+      const sc = generateScript(sRef.current);
+      // Speak only the next required action — skip the intro on returning builds
+      if (sc.nextAction && sRef.current.isBuilt) {
+        speakQueued(sc.nextAction);
+      } else {
+        speakQueued(`OpsMentor ready. What hardware platform?`);
+      }
     }
   }
 
@@ -653,25 +657,25 @@ export default function OrchestratorPanel({ docked = false }) {
     }
     if (!prev.designApplied && s.designApplied) {
       awaitingFieldRef.current = null;
-      orc.push(`Design locked and tasks generated! The schedule is live in the Gantt tab.\n\nNow inject Phase 2 from the sidebar — that activates your incident triage scope, UUM task matrix, and unlocks Gantt and RTM for full editing.`);
+      orc.push(`Design locked. Next: inject Phase 2 from the sidebar.`);
     }
     if (!prev.phase2Active && s.phase2Active) {
       awaitingFieldRef.current = null;
       const inc = (s.selInc || []).length;
       const uum = (s.selUUM || []).length;
-      orc.push(`Phase 2 is live! ${inc} incident${inc !== 1 ? 's' : ''} and ${uum} UUM item${uum !== 1 ? 's' : ''} in scope. Open the Gantt tab — your auto-generated schedule is ready to review. Once it looks right, submit to CAB from the sidebar.`);
+      orc.push(`Phase 2 active — ${inc} incidents, ${uum} UUM items in scope. Open Gantt, review the schedule, then submit to CAB.`);
     }
     if (!prev.cabApproved && s.cabApproved) {
-      orc.push(`CAB approved — you're cleared for cutover! Open the RTM tab now and mark every requirement row as PASS or NA. Once every row is signed off, the "Promote to Live" button will activate.`);
+      orc.push(`CAB approved. Open RTM — mark every row PASS or NA, then sign off.`);
     }
     if (!prev.cabDeclined && s.cabDeclined) {
-      orc.push(`CAB declined this change. Not the end — click "Unlock Tabs for Revision" in the sidebar to lift all phase gates. Update the design, adjust scope or schedule, then resubmit. You've got this.`);
+      orc.push(`CAB declined. Click "Unlock Tabs for Revision" in the sidebar, update scope or design, then resubmit.`);
     }
     if (!prev.rtmSigned && s.rtmSigned) {
-      orc.push(`RTM signed! Every requirement is verified and on record. Head to the Closure tab — work through the post-go-live checklist, then hit "Promote to Live" when you're in the outage window. Almost there!`);
+      orc.push(`RTM signed. Open Closure tab — complete the checklist, then promote to live.`);
     }
     if (!prev.promoted && s.promoted) {
-      orc.push(`System is live! Excellent work. Complete the Closure checklist — hypercare monitoring, CMDB updates, lessons-learned — then export your full audit trail to Excel from the sidebar. You did it!`);
+      orc.push(`System is live. Complete the Closure checklist, then export the audit trail.`);
     }
     if (!prev.rtmStale && s.rtmStale) {
       log.push(`RTM drifted — scope changed after sign-off. Open RTM, re-review each row, and re-sign if requirements still hold.`);
@@ -862,13 +866,15 @@ export default function OrchestratorPanel({ docked = false }) {
   // ── Auto-speak orchestrator messages via TTS queue ────────────────────────
   // Only speaks 'orchestrator' role messages — never log entries, nudges, results,
   // or user messages. Voice starts from message #2 (welcome skipped — no gesture yet).
-  // voiceExcerpt() inside speakQueued ensures we speak the KEY QUESTION or NEXT ACTION,
-  // never an echo of what the user just typed or selected.
+  // Voice the most recent orchestrator message we haven't spoken yet.
+  // Uses a ref to avoid re-speaking when log entries are appended after it.
+  const lastSpokenIdRef = useRef(0);
   useEffect(() => {
-    if (!open || messages.length === 0) return;
-    if (messages.length === 1) return; // welcome — no gesture yet, browser blocks audio
-    const last = messages[messages.length - 1];
-    if (last.role !== 'orchestrator') return;
+    if (!open || messages.length <= 1) return; // skip welcome — no gesture yet
+    const orcMsgs = messages.filter(m => m.role === 'orchestrator');
+    const last = orcMsgs[orcMsgs.length - 1];
+    if (!last || last.id <= lastSpokenIdRef.current) return;
+    lastSpokenIdRef.current = last.id;
     speakQueued(last.text);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, open]);

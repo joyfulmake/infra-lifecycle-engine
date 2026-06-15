@@ -1,5 +1,10 @@
 // OpsManifest Service Worker
 // Cache-first for static assets; network-first for API and dynamic content.
+// No-op when running from ms-appx-web: (MSIX packaged context) — the app is
+// already offline-capable from the bundle and the SW fetch handler can crash
+// WebView2 when intercepting ms-appx-web: scheme requests on Win 11 24H2+.
+if (self.location.protocol === 'ms-appx-web:') { /* no-op */ }
+else {
 
 const CACHE = 'opsmanifest-v3';
 
@@ -90,3 +95,5 @@ self.addEventListener('fetch', event => {
     );
   }
 });
+
+} // end ms-appx-web guard
