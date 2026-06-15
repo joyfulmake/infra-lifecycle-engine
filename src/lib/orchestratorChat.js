@@ -6,6 +6,52 @@ import { CARTESIA_WORKER_URL } from './cartesia.js';
 import { generateScript } from './orchestratorScripts.js';
 import { computeAllRisks, riskScore, riskLabel } from './riskEngine.js';
 
+// ── Relative date parser — understands natural language date inputs ────────────
+// Returns ISO "YYYY-MM-DD" string or null if not recognised.
+export function parseRelativeDate(text) {
+  if (!text) return null;
+  const t = text.toLowerCase().replace(/[,!.]+$/, '').trim();
+
+  if (/^(today|now|immediately|asap)$/.test(t)) return new Date().toISOString().slice(0, 10);
+
+  // "in/after N days/weeks/months" or "N days/weeks/months from now/today"
+  const rel = t.match(/(?:in|after|within)\s+(\d+)\s+(day|week|month)/i)
+    || t.match(/(\d+)\s+(day|week|month)s?\s+from\s+(?:now|today)/i)
+    || t.match(/(\d+)\s+(day|week|month)s?\s+(?:later|out|hence)/i);
+  if (rel) {
+    const n = parseInt(rel[1]);
+    const unit = rel[2].toLowerCase();
+    const d = new Date();
+    if (unit === 'day')   d.setDate(d.getDate() + n);
+    else if (unit === 'week')  d.setDate(d.getDate() + n * 7);
+    else if (unit === 'month') d.setMonth(d.getMonth() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  if (/next month/.test(t))   { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 10); }
+  if (/next quarter/.test(t)) { const d = new Date(); d.setMonth(d.getMonth() + 3); return d.toISOString().slice(0, 10); }
+  if (/next year/.test(t))    { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10); }
+
+  if (/end of (the |this )?year/.test(t)) return `${new Date().getFullYear()}-12-31`;
+
+  // Q1–Q4 with optional year
+  const qm = t.match(/q([1-4])\s*(?:of\s+)?(\d{4})?/);
+  if (qm) {
+    const yr = qm[2] ? parseInt(qm[2]) : new Date().getFullYear();
+    return ({ 1: `${yr}-03-31`, 2: `${yr}-06-30`, 3: `${yr}-09-30`, 4: `${yr}-12-31` })[qm[1]];
+  }
+
+  // ISO date already embedded
+  const iso = t.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (iso) return iso[1];
+
+  // MM/DD/YYYY
+  const mdy = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`;
+
+  return null;
+}
+
 // ── Groq-powered chat ─────────────────────────────────────────────────────────
 // Tries the CF Worker first; falls back to the Pages Function at /api/orchestrator-chat.
 // The Pages Function relays server-to-server to the worker, bypassing any browser-level
@@ -170,9 +216,10 @@ function nextPhase1Prompt(s) {
   if (!db) return `Good. Which database? (e.g. ${DB_EXAMPLES.split(',')[0]})`;
   if (!app) return `Almost there — which application or middleware? (e.g. ${APP_EXAMPLES.split(',')[0]})`;
   if (!r.projectName) return `Stack is set. What is the project name?`;
-  if (!r.envType) return `What is the environment type? (Production, UAT, DR, Dev, SIT)`;
-  if (!r.goLiveDate) return `What is the target go-live date? (e.g. 2026-09-15)`;
-  if (!r.sla) return `What SLA tier applies? (Tier 1 = 99.99%, Tier 2 = 99.9%, Tier 3 = 99.5%)`;
+  if (!r.envType) return `What environment type? (Production, UAT, DR, Dev, SIT)`;
+  if (!r.projectStartDate) return `When does the project kick off? (start date — e.g. today, 2026-07-01)`;
+  if (!r.goLiveDate) return `Target go-live date? (e.g. in 3 months, 2026-09-15)`;
+  if (!r.sla) return `SLA tier? (Tier 1 = 99.99%, Tier 2 = 99.9%, Tier 3 = 99.5%)`;
   return null;
 }
 
@@ -212,10 +259,21 @@ function parseSetRequirement(m) {
     const v = m.match(/\b(env|environment|env type)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
     if (v) return { field: 'envType', value: v, label: 'Environment Type' };
   }
+  // Project start date
+  if (/\b(project start|start date|kick.?off date)\b.{0,15}(?:is|:|=|to|of)?\s+(.+)/i.test(m)) {
+    const raw = m.match(/\b(project start|start date|kick.?off date)\b.{0,15}(?:is|:|=|to|of)?\s+(.+)/i)?.[2]?.trim();
+    if (raw) {
+      const v = parseRelativeDate(raw) || raw;
+      return { field: 'projectStartDate', value: v, label: 'Project Start Date' };
+    }
+  }
   // Go-live date
   if (/\b(go.?live|go live date|cutover date|target date)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
-    const v = m.match(/\b(go.?live|go live date|cutover date|target date)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
-    if (v) return { field: 'goLiveDate', value: v, label: 'Go-Live Date' };
+    const raw = m.match(/\b(go.?live|go live date|cutover date|target date)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
+    if (raw) {
+      const v = parseRelativeDate(raw) || raw;
+      return { field: 'goLiveDate', value: v, label: 'Go-Live Date' };
+    }
   }
   // SLA
   if (/\b(sla|service level)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
@@ -480,7 +538,9 @@ export function ruleBasedResponse(message, s, authUser) {
   }
 
   // ── Phase 1 guidance ──────────────────────────────────────────────────────
-  if (/\b(phase 1|phase1|build requirements|start|begin|get started|what do i enter|where do i start)\b/.test(m)) {
+  // Guard: don't fire when user is answering a field prompt (parseSet* already handles that)
+  if (/\b(phase 1|phase1|build requirements|get started|what do i enter|where do i start|how do i start|how to begin)\b/.test(m)
+      && !parseSetRequirement(raw) && !parseSetField(raw)) {
     return { reply: PHASE1_FIELDS };
   }
 

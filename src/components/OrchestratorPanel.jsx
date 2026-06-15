@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext.jsx';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
 import { speakScript, CARTESIA_CONFIGURED, CARTESIA_WORKER_URL, VOICE_IDS } from '../lib/cartesia.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
-import { sendChatMessage, ruleBasedResponse } from '../lib/orchestratorChat.js';
+import { sendChatMessage, ruleBasedResponse, parseRelativeDate } from '../lib/orchestratorChat.js';
 import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
 // ── Voice helpers — content-aware emotion and speed for Cartesia TTS ─────────
@@ -236,6 +236,7 @@ export default function OrchestratorPanel({ docked = false }) {
   const hasSpeechRef     = useRef(false);
   const audioUnlockedRef = useRef(false);
   const noSpeechTimerRef = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
+  const preferredVoiceRef = useRef(null); // best available Web Speech voice
 
   // Always-current refs to avoid stale closures in mic/timers
   const userNameRef       = useRef('');
@@ -251,6 +252,30 @@ export default function OrchestratorPanel({ docked = false }) {
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
   useEffect(() => { recordingRef.current = recording; }, [recording]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  // Pre-load the best available Web Speech voice — async on Chrome, sync on Edge/Firefox
+  useEffect(() => {
+    if (typeof speechSynthesis === 'undefined') return;
+    const pickVoice = () => {
+      const voices = speechSynthesis.getVoices();
+      preferredVoiceRef.current =
+        // Edge neural voices are excellent (Aria, Jenny, Guy)
+        voices.find(v => /aria|jenny\b/i.test(v.name) && v.lang.startsWith('en')) ||
+        // Any neural/natural/enhanced branded voice
+        voices.find(v => /neural|natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')) ||
+        // Microsoft voices on Windows (generally better than Google)
+        voices.find(v => /microsoft/i.test(v.name) && v.lang === 'en-US') ||
+        voices.find(v => /microsoft/i.test(v.name) && v.lang.startsWith('en')) ||
+        // Google voices
+        voices.find(v => /google.*english/i.test(v.name)) ||
+        voices.find(v => v.lang === 'en-US') ||
+        voices.find(v => v.lang.startsWith('en')) ||
+        null;
+    };
+    pickVoice();
+    speechSynthesis.addEventListener('voiceschanged', pickVoice);
+    return () => speechSynthesis.removeEventListener('voiceschanged', pickVoice);
+  }, []);
 
   function getHistory(msgs) {
     return (msgs || [])
@@ -298,21 +323,23 @@ export default function OrchestratorPanel({ docked = false }) {
   // Skips pure confirmation echoes — user can read those, hearing them is redundant.
   function voiceExcerpt(text) {
     if (!text) return '';
-    const sentences = (text || '')
-      .replace(/[•★✓✗→←↑↓]\s*/g, '')
+    const clean = text
+      .replace(/[•★✓✗→←↑↓✦⚠️💡🎯]\s*/g, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
       .replace(/\n+/g, ' ')
       .replace(/\s{2,}/g, ' ')
+      .trim();
+    const sentences = clean
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 8);
-    if (!sentences.length) return text.slice(0, 120);
-    // Prefer the question — most natural to speak aloud
+      .filter(s => s.length > 6);
+    if (!sentences.length) return clean.slice(0, 80);
+    // 1st priority: the question — this is the call to action
     const q = sentences.find(s => s.includes('?'));
-    if (q) return q.slice(0, 160);
-    // Skip bare confirmation echoes (single-word value confirmations user just clicked)
-    const bareEcho = /^(hardware set to|os set to|database set to|application set to|environment set to)\s+[^.]+\.?$/i;
-    const meaningful = sentences.find(s => !bareEcho.test(s)) || sentences[sentences.length - 1] || sentences[0];
-    return meaningful.replace(/^(next:|next step:)\s*/i, '').trim().slice(0, 160);
+    if (q) return q.slice(0, 90);
+    // 2nd priority: first substantive sentence only — no walls of text spoken aloud
+    const first = sentences[0] || clean;
+    return first.replace(/^(next:|next step:|note:|important:)\s*/i, '').trim().slice(0, 80);
   }
 
   function cleanText(text) {
@@ -392,13 +419,8 @@ export default function OrchestratorPanel({ docked = false }) {
       try {
         speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(text);
-        const voices = speechSynthesis.getVoices();
-        const preferred =
-          voices.find(v => /neural|natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')) ||
-          voices.find(v => /microsoft|google/i.test(v.name) && v.lang.startsWith('en')) ||
-          voices.find(v => v.lang.startsWith('en'));
-        if (preferred) utt.voice = preferred;
-        utt.rate = 0.92; utt.pitch = 1.0; utt.volume = 1.0;
+        if (preferredVoiceRef.current) utt.voice = preferredVoiceRef.current;
+        utt.rate = 0.90; utt.pitch = 1.0; utt.volume = 1.0;
         await new Promise(resolve => { utt.onend = resolve; utt.onerror = resolve; speechSynthesis.speak(utt); });
         played = true;
       } catch { /* browser TTS unavailable */ }
@@ -587,6 +609,7 @@ export default function OrchestratorPanel({ docked = false }) {
     vulnCount: 0, pendingDiscCount: 0, riskScore: 0,
     // Deep sync tracking
     selIncCount: 0, selUumCount: 0,
+    selInc: [], selUUM: [],
     rtmPassCount: 0, rtmFailCount: 0, rtmNaCount: 0, rtmTotalCount: 0,
     closureCheckCount: 0, closureTotalCount: 0,
     rolesFilledCount: 0, coherenceWarnCount: 0, raidCount: 0,
@@ -676,18 +699,23 @@ export default function OrchestratorPanel({ docked = false }) {
       log.push(`Risk score is ${liveScore} — CRITICAL. Project may be blocked. Review the Risk Tracker tab urgently.`);
     }
 
-    // ── Deep sync: incident / UUM scope changes (Phase 2 only) ───────────────
-    if (s.phase2Active && prev.selIncCount !== undefined) {
-      if (selIncCount > prev.selIncCount) {
-        log.push(`+${selIncCount - prev.selIncCount} incident — scope: ${selIncCount} incident${selIncCount !== 1 ? 's' : ''} total.`);
-      } else if (selIncCount < prev.selIncCount && prev.selIncCount > 0) {
-        log.push(`Incident removed — scope: ${selIncCount} incident${selIncCount !== 1 ? 's' : ''} total.`);
-      }
-      if (selUumCount > prev.selUumCount) {
-        log.push(`+${selUumCount - prev.selUumCount} UUM item — scope: ${selUumCount} UUM item${selUumCount !== 1 ? 's' : ''} total.`);
-      } else if (selUumCount < prev.selUumCount && prev.selUumCount > 0) {
-        log.push(`UUM item removed — scope: ${selUumCount} item${selUumCount !== 1 ? 's' : ''} total.`);
-      }
+    // ── Deep sync: incident / UUM scope changes ───────────────────────────────
+    // Always track even before Phase 2 so sidebar selections are echoed in chat
+    if (prev.selInc !== undefined) {
+      const prevInc = prev.selInc || [];
+      const currInc = s.selInc || [];
+      const addedInc = currInc.filter(x => !prevInc.includes(x));
+      const removedInc = prevInc.filter(x => !currInc.includes(x));
+      addedInc.forEach(code => log.push(`Incident added: ${code}`));
+      removedInc.forEach(code => log.push(`Incident removed: ${code}`));
+    }
+    if (prev.selUUM !== undefined) {
+      const prevUUM = prev.selUUM || [];
+      const currUUM = s.selUUM || [];
+      const addedUUM = currUUM.filter(x => !prevUUM.includes(x));
+      const removedUUM = prevUUM.filter(x => !currUUM.includes(x));
+      addedUUM.forEach(code => log.push(`UUM added: ${code}`));
+      removedUUM.forEach(code => log.push(`UUM removed: ${code}`));
     }
 
     // ── Deep sync: RTM progress ───────────────────────────────────────────────
@@ -752,6 +780,8 @@ export default function OrchestratorPanel({ docked = false }) {
       tasksStaleReason: s.tasksStaleReason,
       vulnCount: activeVulns, pendingDiscCount: pendingDisc, riskScore: liveScore,
       selIncCount, selUumCount,
+      selInc: [...(s.selInc || [])],
+      selUUM: [...(s.selUUM || [])],
       rtmPassCount, rtmFailCount, rtmNaCount, rtmTotalCount,
       closureCheckCount, closureTotalCount,
       rolesFilledCount, coherenceWarnCount, raidCount,
@@ -885,7 +915,7 @@ export default function OrchestratorPanel({ docked = false }) {
     const r = currS.requirements || {};
     const filled = { hw: !!hw, os: !!os, db: !!db, app: !!app,
       projectName: !!r.projectName, envType: !!r.envType,
-      projectStartDate: !!r.projectStartDate, goLiveDate: !!r.goLiveDate };
+      projectStartDate: !!r.projectStartDate, goLiveDate: !!r.goLiveDate, sla: !!r.sla };
     const curr = awaitingFieldRef.current;
     if (!filled[curr]) return; // not yet filled
     const next = nextFieldPrompt(currS, curr);
@@ -899,7 +929,7 @@ export default function OrchestratorPanel({ docked = false }) {
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[next] }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctxHw, ctxOs, ctxDb, ctxApp, reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, open]);
+  }, [ctxHw, ctxOs, ctxDb, ctxApp, reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, reqSla, open]);
 
   // ── Tab change logging ────────────────────────────────────────────────────
   const prevActiveTab = useRef('');
@@ -1438,7 +1468,7 @@ export default function OrchestratorPanel({ docked = false }) {
   // ── Name reply handler ───────────────────────────────────────────────────
 
   // Field interview order — projectStartDate comes before goLiveDate (can't set end without start)
-  const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'projectStartDate', 'goLiveDate'];
+  const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'projectStartDate', 'goLiveDate', 'sla'];
 
   // Clickable chip options for each field — user picks instead of typing
   const FIELD_CHIPS = {
@@ -1447,23 +1477,25 @@ export default function OrchestratorPanel({ docked = false }) {
     db:      ['Oracle 19c', 'PostgreSQL 15', 'MySQL 8.0', 'SQL Server 2022', 'MongoDB 6', 'MariaDB 10.11'],
     app:     ['WebSphere 9.0', 'JBoss EAP 7.4', 'Apache Tomcat 10', 'nginx 1.24', 'WebLogic 14c', 'IIS 10'],
     envType: ['Production', 'UAT', 'DR', 'Dev', 'SIT'],
+    sla:     ['Tier 1 (99.99%)', 'Tier 2 (99.9%)', 'Tier 3 (99.5%)'],
   };
   const FIELD_QUESTIONS = {
-    hw:               'What hardware platform are you running on? (select a chip or type — e.g. Dell PowerEdge R750, HPE ProLiant, IBM Power9)',
-    os:               'What operating system? (e.g. RHEL 9.2, Ubuntu 22.04, Windows Server 2022, AIX 7.2)',
-    db:               'What database engine? (e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022)',
-    app:              'What application or middleware? (e.g. WebSphere 9.0, JBoss EAP 7.4, Tomcat, nginx, IIS)',
-    projectName:      'What should we call this project? (a short name for this build — e.g. "DB Upgrade Q3 2026")',
-    envType:          'What environment type is this? (Production, UAT, DR, Dev, or SIT)',
-    projectStartDate: 'When does this project kick off? (start date — e.g. 2026-07-01)',
-    goLiveDate:       'And when is the target go-live date? (e.g. 2026-09-15)',
+    hw:               'Hardware platform? (e.g. Dell PowerEdge R750, HPE ProLiant, IBM Power9)',
+    os:               'Operating system? (e.g. RHEL 9.2, Ubuntu 22.04, Windows Server 2022)',
+    db:               'Database engine? (e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0)',
+    app:              'Application or middleware? (e.g. WebSphere 9.0, JBoss EAP 7.4, Tomcat, nginx)',
+    projectName:      'Project name? (e.g. "DB Upgrade Q3 2026")',
+    envType:          'Environment type? (Production, UAT, DR, Dev, or SIT)',
+    projectStartDate: 'Project start date? (e.g. today, 2026-07-01, or "in 2 weeks")',
+    goLiveDate:       'Target go-live date? (e.g. in 3 months, 2026-09-15, Q3 2026)',
+    sla:              'SLA tier? (Tier 1 = 99.99%, Tier 2 = 99.9%, Tier 3 = 99.5%)',
   };
   const FIELD_CTX_MAP = {
     hw: 'hardware', os: 'OS', db: 'database', app: 'application',
   };
   const FIELD_REQ_MAP = {
     projectName: 'project name', envType: 'environment',
-    projectStartDate: 'project start date', goLiveDate: 'go-live date',
+    projectStartDate: 'project start date', goLiveDate: 'go-live date', sla: 'SLA',
   };
 
   function nextFieldPrompt(currS, afterField) {
@@ -1480,6 +1512,7 @@ export default function OrchestratorPanel({ docked = false }) {
       if (f === 'envType' && !r.envType) return f;
       if (f === 'projectStartDate' && !r.projectStartDate) return f;
       if (f === 'goLiveDate' && !r.goLiveDate) return f;
+      if (f === 'sla' && !r.sla) return f;
     }
     return null;
   }
@@ -1586,6 +1619,29 @@ export default function OrchestratorPanel({ docked = false }) {
         || /\b(run scan|ai scan|inject|submit cab|sign rtm|go live|promote)\b/.test(tl);
 
       if (!isCommand) {
+        // Date fields — parse relative dates directly before going through ruleBasedResponse
+        if (awField === 'projectStartDate' || awField === 'goLiveDate') {
+          const parsed = parseRelativeDate(text) || parseRelativeDate(text.replace(/^.*?\s+(?:is|:)\s+/i, ''));
+          if (parsed) {
+            awaitingFieldRef.current = null;
+            const label = awField === 'projectStartDate' ? 'Project start' : 'Go-live';
+            applyActionsWithRefs([{
+              type: 'SET_REQUIREMENT',
+              description: `Set ${label} to ${parsed}`,
+              params: { key: awField, value: parsed },
+              requiresConfirmation: false,
+            }]);
+            const updatedReqs = { ...sRef.current.requirements, [awField]: parsed };
+            const updatedS = { ...sRef.current, requirements: updatedReqs };
+            const next = nextFieldPrompt(updatedS, awField);
+            awaitingFieldRef.current = next;
+            if (next && FIELD_CHIPS[next]) setChipsField(next);
+            const nextQ = next ? `\n\n${FIELD_QUESTIONS[next]}` : '\n\nAll fields set — say "run scan" to continue.';
+            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `${label}: ${parsed}.${nextQ}` }]);
+            return;
+          }
+        }
+
         awaitingFieldRef.current = null;
         let syntheticText;
         if (FIELD_CTX_MAP[awField]) {
