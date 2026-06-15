@@ -327,6 +327,8 @@ export default function OrchestratorPanel({ docked = false }) {
       .replace(/\*\*([^*]+)\*\*/g, '$1')
       .replace(/\n+/g, ' ')
       .replace(/\s{2,}/g, ' ')
+      // Strip parenthetical examples "(e.g. ...)" — natural in chat, robotic when spoken
+      .replace(/\s*\([^)]{4,}\)/g, '')
       .trim();
     // Short messages (single action/question): speak entirely
     if (clean.length <= 100) return clean;
@@ -418,10 +420,33 @@ export default function OrchestratorPanel({ docked = false }) {
     // Final fallback: Web Speech API — zero config, works in every browser
     if (!played && typeof speechSynthesis !== 'undefined') {
       try {
+        // Re-attempt voice pick in case voiceschanged hadn't fired yet at mount
+        if (!preferredVoiceRef.current) {
+          const voices = speechSynthesis.getVoices();
+          preferredVoiceRef.current =
+            voices.find(v => /aria|jenny\b/i.test(v.name) && v.lang.startsWith('en')) ||
+            voices.find(v => /neural|natural|online|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')) ||
+            voices.find(v => /microsoft/i.test(v.name) && v.lang === 'en-US') ||
+            voices.find(v => /microsoft/i.test(v.name) && v.lang.startsWith('en')) ||
+            voices.find(v => /google.*english/i.test(v.name)) ||
+            voices.find(v => v.lang === 'en-US') ||
+            voices.find(v => v.lang.startsWith('en')) ||
+            null;
+        }
         speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(text);
-        if (preferredVoiceRef.current) utt.voice = preferredVoiceRef.current;
-        utt.rate = 0.90; utt.pitch = 1.0; utt.volume = 1.0;
+        if (preferredVoiceRef.current) {
+          utt.voice = preferredVoiceRef.current;
+          // Neural/Online voices need slightly different tuning
+          const isNeural = /neural|natural|online/i.test(preferredVoiceRef.current.name);
+          utt.rate = isNeural ? 0.92 : 0.88;
+          utt.pitch = isNeural ? 1.0 : 1.05;
+        } else {
+          utt.rate = 0.88;
+          utt.pitch = 1.05;
+        }
+        utt.volume = 1.0;
+        utt.lang = 'en-US';
         await new Promise(resolve => { utt.onend = resolve; utt.onerror = resolve; speechSynthesis.speak(utt); });
         played = true;
       } catch { /* browser TTS unavailable */ }
@@ -1897,10 +1922,12 @@ export default function OrchestratorPanel({ docked = false }) {
 
           {/* Worker connectivity / TTS availability warnings */}
           {ttsVoice === 'none' && workerOk === true && (
-            <div className="px-3 py-2 bg-slate-900 border-b border-slate-700 flex-shrink-0">
-              <span className="text-xs text-slate-300">
-                Voice is silent — no TTS key in the worker. To activate: add <strong className="text-white">ELEVENLABS_API_KEY</strong> in Cloudflare dashboard → Workers → opsmanifest-ai → Settings → Variables. Free tier gives 10k chars/month.
-              </span>
+            <div className="px-3 py-2.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+              <div className="text-xs text-amber-800 font-semibold mb-0.5">Human voice not active — using browser speech</div>
+              <div className="text-xs text-amber-700">
+                For natural AI voice: get a free key at <strong>elevenlabs.io</strong>, then add
+                <strong> ELEVENLABS_API_KEY</strong> in Cloudflare → Workers → opsmanifest-ai → Settings → Variables. Free tier: 10k chars/month.
+              </div>
             </div>
           )}
           {workerOk === false && (
