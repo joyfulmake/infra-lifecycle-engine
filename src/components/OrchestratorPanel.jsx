@@ -313,13 +313,8 @@ export default function OrchestratorPanel({ docked = false }) {
     }
     if (wasLocked && !welcomeSpokenRef.current) {
       welcomeSpokenRef.current = true;
-      const sc = generateScript(sRef.current);
-      // Speak only the next required action — skip the intro on returning builds
-      if (sc.nextAction && sRef.current.isBuilt) {
-        speakQueued(sc.nextAction);
-      } else {
-        speakQueued(`OpsMentor ready. What hardware platform?`);
-      }
+      // Speak the same single-line next-action that appears in chat
+      speakQueued(buildWelcome(sRef.current));
     }
   }
 
@@ -333,6 +328,8 @@ export default function OrchestratorPanel({ docked = false }) {
       .replace(/\n+/g, ' ')
       .replace(/\s{2,}/g, ' ')
       .trim();
+    // Short messages (single action/question): speak entirely
+    if (clean.length <= 100) return clean;
     const sentences = clean
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
@@ -440,19 +437,33 @@ export default function OrchestratorPanel({ docked = false }) {
     if (!cartesiaPlayingRef.current) runCartesiaQueue();
   }
 
-  function buildWelcome() {
-    const stack = [s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join(' / ');
-    const sc = generateScript(s);
-    if (stack && s.isBuilt) {
-      return `Welcome back. Your ${stack} build is already in progress.\n\nNext step: ${sc.nextAction || 'all phases complete'}.\n\nSelect a chip or type your next step — I'll take it from here.`;
-    }
-    if (s.isBuilt || s.scanComplete || s.designApplied) {
-      return `Welcome back. Build in progress — next: ${sc.nextAction || 'all phases complete'}.\n\nType your next step or use the buttons below.`;
-    }
-    // Fresh start — warm, brief, action-oriented
-    const hour = new Date().getHours();
-    const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    return `${greeting}. I'm OpsMentor — your AI infrastructure manager.\n\nI'll guide you through your full server lifecycle: hardware selection, system design, CAB approval, RTM sign-off, and production go-live.\n\nSelect your hardware platform below to get started.`;
+  // Accepts optional state snapshot (for unlockAudio / sRef.current calls)
+  function buildWelcome(state) {
+    const st = state || s;
+    const { hw, os, db, app } = st.ctx || {};
+    const r = st.requirements || {};
+
+    if (st.promoted)      return `Build is live. Complete the closure checklist.`;
+    if (st.rtmSigned)     return `RTM signed. Open Closure and complete the checklist.`;
+    if (st.cabApproved)   return `CAB approved. Open RTM — verify every row.`;
+    if (st.cabDeclined)   return `CAB declined. Unlock for revision, then resubmit.`;
+    if (st.phase2Active)  return `Phase 2 active. Review Gantt, then submit to CAB.`;
+    if (st.designApplied) return `Design locked. Inject Phase 2 from the sidebar.`;
+    if (st.scanComplete)  return `Scan done. Open System Design and fill all 8 sections.`;
+    if (st.isBuilt)       return `Stack built. Run the AI Smart Scan now.`;
+
+    // Not built — return the question for the first unfilled field
+    if (!hw)                  return FIELD_QUESTIONS.hw;
+    if (!os)                  return FIELD_QUESTIONS.os;
+    if (!db)                  return FIELD_QUESTIONS.db;
+    if (!app)                 return FIELD_QUESTIONS.app;
+    if (!r.projectName)       return FIELD_QUESTIONS.projectName;
+    if (!r.envType)           return FIELD_QUESTIONS.envType;
+    if (!r.projectStartDate)  return FIELD_QUESTIONS.projectStartDate;
+    if (!r.goLiveDate)        return FIELD_QUESTIONS.goLiveDate;
+    if (!r.sla)               return FIELD_QUESTIONS.sla;
+
+    return `Stack ready — click Build in the sidebar to continue.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -634,26 +645,22 @@ export default function OrchestratorPanel({ docked = false }) {
     if (!prev.isBuilt && s.isBuilt) {
       awaitingFieldRef.current = null;
       setChipsField(null);
-      const { hw, os, db, app } = s.ctx || {};
-      const stack = [hw, os, db, app].filter(Boolean).join(' / ') || 'your stack';
-      orc.push(`Stack locked in — ${stack}. Now hit the AI Smart Scan in the left sidebar. It checks CVEs, EOL status, and compatibility for your entire stack in under 2 seconds. You'll love what it finds!`);
+      orc.push(`Stack built. Run the AI Smart Scan now.`);
     }
     if (!prev.scanComplete && s.scanComplete) {
       const incCount  = (s.selInc || []).length;
       const uumCount  = (s.selUUM || []).length;
       const findings  = (s.scanResults?.findings || []);
       const critical  = findings.filter(f => f.sev === 'CRITICAL');
-      const high      = findings.filter(f => f.sev === 'HIGH');
       const riskLvl   = s.scanResults?.riskLevel || 'UNKNOWN';
       const summaryLines = [
-        `Scan complete — Risk: ${riskLvl} · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`,
+        `Scan — Risk: ${riskLvl} · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`,
         critical.length > 0 ? `CRITICAL: ${critical.map(f => f.component).join(', ')}` : null,
-        high.length > 0 ? `HIGH: ${high.map(f => f.component).join(', ')}` : null,
-        `Auto-selected: ${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} for remediation`,
+        `${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM items pre-selected`,
       ].filter(Boolean);
-      log.push(summaryLines.join('\n'));
-      const crit = critical.length > 0 ? `${critical.length} CRITICAL issue${critical.length !== 1 ? 's' : ''} flagged — address these first. ` : '';
-      orc.push(`Scan done! ${crit}${incCount} incident${incCount !== 1 ? 's' : ''} and ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} pre-selected for your stack.\n\nOpen System Design now — fill all 8 sections, then click "Generate Task Plan" to lock the design and build the project schedule.`);
+      log.push(summaryLines.join(' · '));
+      const crit = critical.length > 0 ? `${critical.length} CRITICAL. ` : '';
+      orc.push(`Scan done — ${crit}${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM items. Open System Design now.`);
     }
     if (!prev.designApplied && s.designApplied) {
       awaitingFieldRef.current = null;
@@ -728,7 +735,7 @@ export default function OrchestratorPanel({ docked = false }) {
       const nowPassed  = rtmPassCount + rtmNaCount;
       if (nowPassed > prevPassed) {
         if (nowPassed >= rtmTotalCount) {
-          orc.push(`All ${rtmTotalCount} RTM rows are verified — every requirement shows PASS or NA. Ready to sign off! Say "sign RTM" or use the sidebar to lock the baseline.`);
+          orc.push(`All ${rtmTotalCount} RTM rows verified. Say "sign RTM" or use the sidebar to sign off.`);
         } else if (nowPassed % 5 === 0 || nowPassed === Math.floor(rtmTotalCount / 2)) {
           log.push(`RTM: ${nowPassed}/${rtmTotalCount} rows verified (${Math.round(nowPassed / rtmTotalCount * 100)}%).`);
         }
@@ -747,7 +754,7 @@ export default function OrchestratorPanel({ docked = false }) {
     // ── Deep sync: Closure checklist progress ─────────────────────────────────
     if (s.rtmSigned && closureCheckCount > (prev.closureCheckCount || 0)) {
       if (closureTotalCount > 0 && closureCheckCount >= closureTotalCount) {
-        orc.push(`Closure checklist complete — all post-go-live items are done! Export your full audit trail to Excel from the sidebar when ready.`);
+        orc.push(`Closure complete. Export the audit trail from the sidebar.`);
       } else if (closureCheckCount % 3 === 0 && closureCheckCount > 0 && closureTotalCount > 0) {
         log.push(`Closure: ${closureCheckCount}/${closureTotalCount} items done.`);
       }
@@ -756,7 +763,7 @@ export default function OrchestratorPanel({ docked = false }) {
     // ── Deep sync: Team RACI filling up ──────────────────────────────────────
     if (rolesFilledCount > (prev.rolesFilledCount || 0)) {
       if (rolesFilledCount >= 20 && prev.rolesFilledCount < 20) {
-        orc.push(`All 20 roles assigned — the full RACI team is on record! Open the Roles tab to confirm email contacts and backup coverage.`);
+        orc.push(`All 20 RACI roles assigned. Confirm email contacts in the Roles tab.`);
       } else if (rolesFilledCount === 10 && (prev.rolesFilledCount || 0) < 10) {
         log.push(`Team halfway there — ${rolesFilledCount}/20 roles assigned in the Roles tab.`);
       }
