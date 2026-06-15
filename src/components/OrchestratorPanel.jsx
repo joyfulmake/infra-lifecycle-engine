@@ -271,21 +271,37 @@ export default function OrchestratorPanel({ docked = false }) {
   // Uses Cartesia Sonic-2 (warm guide voice). Falls back to Web Speech if
   // Cartesia is unavailable or the fetch fails.
 
-  const cartesiaQueueRef   = useRef([]);
-  const cartesiaPlayingRef = useRef(false);
-  const currentAudioRef    = useRef(null);
-  const welcomeSpokenRef   = useRef(false);
+  const cartesiaQueueRef      = useRef([]);
+  const cartesiaPlayingRef    = useRef(false);
+  const sharedAudioCtxRef     = useRef(null);  // shared AudioContext — avoids CSP blob: issues
+  const currentAudioSourceRef = useRef(null);  // currently playing AudioBufferSourceNode
+  const welcomeSpokenRef      = useRef(false);
 
   const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
   // Must be called synchronously in a click/key handler (before any await).
-  // Unlocks HTMLAudioElement and — on very first interaction — queues a brief
-  // spoken welcome so the user hears OpsMentor greet them.
+  // Creates and resumes a shared AudioContext so all subsequent decodeAudioData/play
+  // calls work without autoplay or CSP blob: restrictions.
   function unlockAudio() {
     const wasLocked = !audioUnlockedRef.current;
     if (wasLocked) {
       audioUnlockedRef.current = true;
-      try { const a = new Audio(SILENT_WAV); a.volume = 0; a.play().catch(() => {}); } catch {}
+      try {
+        // Create shared AudioContext in the gesture context so it starts in 'running' state
+        const ActxClass = window.AudioContext || window.webkitAudioContext;
+        if (ActxClass) {
+          const ctx = new ActxClass();
+          sharedAudioCtxRef.current = ctx;
+          // Resume in case browser created it suspended
+          if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+          // Play one-sample silent buffer to guarantee unlock
+          const buf = ctx.createBuffer(1, 1, 22050);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(ctx.destination);
+          src.start(0);
+        }
+      } catch {}
     }
     if (wasLocked && !welcomeSpokenRef.current) {
       welcomeSpokenRef.current = true;
@@ -330,9 +346,9 @@ export default function OrchestratorPanel({ docked = false }) {
   }
 
   function stopCartesia() {
-    if (currentAudioRef.current) {
-      try { currentAudioRef.current.pause(); } catch {}
-      currentAudioRef.current = null;
+    if (currentAudioSourceRef.current) {
+      try { currentAudioSourceRef.current.stop(); } catch {}
+      currentAudioSourceRef.current = null;
     }
     cartesiaQueueRef.current = [];
     cartesiaPlayingRef.current = false;
@@ -344,7 +360,6 @@ export default function OrchestratorPanel({ docked = false }) {
       return;
     }
     // Only speak after the user has unlocked audio with a gesture.
-    // Without a gesture, browser blocks all audio — queue drains silently on page load.
     if (!audioUnlockedRef.current) {
       cartesiaQueueRef.current = [];
       cartesiaPlayingRef.current = false;
@@ -353,13 +368,12 @@ export default function OrchestratorPanel({ docked = false }) {
     cartesiaPlayingRef.current = true;
     const text = cartesiaQueueRef.current.shift();
 
-    let played = false;
-
-    // Primary: Cartesia Sonic-2 via same-origin Pages Function relay
+    // Use Web Audio API (AudioContext.decodeAudioData) — avoids CSP blob: restrictions
+    // and autoplay policy issues. AudioContext unlocked via unlockAudio() on first gesture.
     if (CARTESIA_CONFIGURED) {
       const ttsBody = JSON.stringify({
         text,
-        voiceId: VOICE_IDS.learner,  // 694f9389 — "Pilot" clear male presenter
+        voiceId: VOICE_IDS.learner,
         speed: pickSpeed(text),
         emotion: pickEmotion(text),
       });
@@ -369,25 +383,28 @@ export default function OrchestratorPanel({ docked = false }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: ttsBody,
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(12000),
           });
           if (!res.ok) continue;
-          const blob = await res.blob();
-          const objUrl = URL.createObjectURL(blob);
-          const audio = new Audio(objUrl);
-          audio.volume = 1;
-          currentAudioRef.current = audio;
-          try {
-            await audio.play();
-            played = true;
-            await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; });
-            break;
-          } catch { /* autoplay blocked — try next URL */ }
-          finally {
-            URL.revokeObjectURL(objUrl);
-            currentAudioRef.current = null;
+          const arrayBuf = await res.arrayBuffer();
+          // Get or recreate shared AudioContext
+          let ctx = sharedAudioCtxRef.current;
+          if (!ctx || ctx.state === 'closed') {
+            const ActxClass = window.AudioContext || window.webkitAudioContext;
+            if (!ActxClass) break;
+            ctx = new ActxClass();
+            sharedAudioCtxRef.current = ctx;
           }
-        } catch { /* network error — try next */ }
+          if (ctx.state === 'suspended') await ctx.resume();
+          const decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
+          const source = ctx.createBufferSource();
+          source.buffer = decoded;
+          source.connect(ctx.destination);
+          currentAudioSourceRef.current = source;
+          await new Promise((resolve) => { source.onended = resolve; source.start(0); });
+          currentAudioSourceRef.current = null;
+          break; // success — move to next queue item
+        } catch { /* network/decode error — try next URL */ }
       }
     }
 
@@ -1427,7 +1444,14 @@ Rules:
       }, 150);
     };
 
-    try { rec.start(); } catch { clearTimeout(noSpeechTimerRef.current); setRecording(false); setRecStatus(''); }
+    try {
+      rec.start();
+    } catch (e) {
+      clearTimeout(noSpeechTimerRef.current);
+      setRecording(false); recordingRef.current = false; setRecStatus('');
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+        `Microphone failed to start: ${e?.message || 'unknown error'}. Make sure the browser has microphone permission for this site — click the lock icon in the address bar → Microphone → Allow.` }]);
+    }
   }
 
   // Whisper fallback (used only when SpeechRecognition is unavailable)
