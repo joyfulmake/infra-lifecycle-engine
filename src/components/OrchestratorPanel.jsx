@@ -468,11 +468,9 @@ export default function OrchestratorPanel({ docked = false }) {
       case 'run_scan': {
         const stack = [sRef.current.ctx?.hw, sRef.current.ctx?.os, sRef.current.ctx?.db, sRef.current.ctx?.app].filter(Boolean).join(' / ');
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          `Running AI Smart Scan on ${stack || 'your stack'} — checking CVEs, EOL status, and compatibility…` }]);
-        // Defer scan by one frame so the message renders before the synchronous scan runs
-        setTimeout(() => {
-          applyActionsWithRefs([{ type: 'RUN_SCAN', params: {}, description: 'Run AI Smart Scan', requiresConfirmation: false }]);
-        }, 60);
+          `Opening AI Smart Scan for ${stack || 'your stack'} — review findings in the popup, then click "Apply Results".` }]);
+        // Dispatch event: PhasePanel opens the ScanModal with its animated popup
+        window.dispatchEvent(new CustomEvent('opsmanifest-run-scan'));
         break;
       }
       case 'nav_design':
@@ -790,17 +788,21 @@ export default function OrchestratorPanel({ docked = false }) {
   // Open when ExecOverview "OpsMentor" button is clicked (floating mode)
   useEffect(() => {
     const handler = () => {
+      unlockAudio(); // dispatched from button click — gesture still active, unlock audio now
       setOpen(true);
       setPanelVisible(true);
       setTimeout(() => inputRef.current?.focus(), 100);
     };
     window.addEventListener('opsmanifest-orchestrator-open', handler);
     return () => window.removeEventListener('opsmanifest-orchestrator-open', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Open after tour dismisses
+  // Open after tour dismisses — tour "Start using it" click IS a gesture, capture it
   useEffect(() => {
     const handler = () => {
+      // Call synchronously inside the click gesture context so audio unlocks immediately
+      unlockAudio();
       setTimeout(() => {
         setOpen(true);
         setPanelVisible(true);
@@ -809,6 +811,7 @@ export default function OrchestratorPanel({ docked = false }) {
     };
     window.addEventListener('opsmanifest-tour-dismissed', handler);
     return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Auto-speak orchestrator messages via TTS queue ────────────────────────
@@ -955,6 +958,12 @@ export default function OrchestratorPanel({ docked = false }) {
       if (!perm.allowed) {
         blocked.push(`${action.description}: ${perm.reason}`);
         auditLog(action, 'blocked');
+        continue;
+      }
+      if (action.type === 'RUN_SCAN') {
+        window.dispatchEvent(new CustomEvent('opsmanifest-run-scan'));
+        auditLog(action, 'executed');
+        done.push(action.description);
         continue;
       }
       executeAction(action, store);
@@ -1156,10 +1165,13 @@ export default function OrchestratorPanel({ docked = false }) {
         auditLog(action, 'blocked');
         continue;
       }
-      // Show scan progress BEFORE executing so user gets immediate feedback
+      // RUN_SCAN: show the PhasePanel ScanModal popup instead of running scan directly.
+      // The popup animates, runs the scan, and lets the user click "Apply Results".
       if (action.type === 'RUN_SCAN') {
-        const stack = [currS.ctx?.hw, currS.ctx?.os, currS.ctx?.db, currS.ctx?.app].filter(Boolean).join(' / ');
-        setMessages(m => [...m, { id: nextId(), role: 'log', text: `Scanning ${stack || 'your stack'} for CVEs, EOL risks, and security issues…` }]);
+        window.dispatchEvent(new CustomEvent('opsmanifest-run-scan'));
+        auditLog(action, 'executed');
+        done.push(action.description);
+        continue; // don't call executeAction — modal handles scan + completeScan
       }
       executeAction(action, store);
       auditLog(action, 'executed');
@@ -1651,6 +1663,7 @@ export default function OrchestratorPanel({ docked = false }) {
       {/* Floating trigger — only shown in non-docked (small screen) mode */}
       {!docked && <button
         onClick={() => {
+          unlockAudio(); // direct click — gesture context active, unlock audio now
           if (!open) {
             setOpen(true);
             setPanelVisible(true);

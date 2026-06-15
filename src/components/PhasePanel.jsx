@@ -681,7 +681,7 @@ function ScanModal({ onClose, onComplete }) {
                 </div>
               )}
               <div className="flex gap-2">
-                <button className="btn-teal flex-1" onClick={() => onComplete(result.findings.map(f => `[${f.sev}] ${f.component}: ${f.msg}`), result.suggestedInc || [], result.suggestedUUM || [])}>
+                <button className="btn-teal flex-1" onClick={() => onComplete(result, result.suggestedInc || [], result.suggestedUUM || [])}>
                   Apply Results &amp; Unlock Design
                 </button>
                 <button className="btn-primary px-3 w-auto" onClick={onClose}>Close</button>
@@ -707,6 +707,14 @@ export default function PhasePanel() {
   const [osSel, setOsSel] = useState('');
   const [dbSel, setDbSel] = useState('');
   const [appSel, setAppSel] = useState('');
+
+  // Listen for OpsMentor's "run scan" command → open the ScanModal popup
+  useEffect(() => {
+    const handler = () => { if (s.isBuilt && !s.scanComplete) setShowScan(true); };
+    window.addEventListener('opsmanifest-run-scan', handler);
+    return () => window.removeEventListener('opsmanifest-run-scan', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.isBuilt, s.scanComplete]);
 
   // Sync dropdowns + text inputs when OpsMentor sets ctx externally via SET_CTX.
   // Must update BOTH the <select> value (hwSel) AND the custom text (hwCustom) so the
