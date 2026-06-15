@@ -322,8 +322,11 @@ async function tryCartesiaTts(text, voiceId, speed, emotion, env) {
 
 async function tryElevenLabsTts(text, env) {
   if (!env.ELEVENLABS_API_KEY) return null;
-  // Josh — warm, confident, natural male voice; override via ELEVENLABS_VOICE env var
-  const voiceId = env.ELEVENLABS_VOICE || 'TxGEqnHWrfWFTfGW9XjX';
+  // Override voice via ELEVENLABS_VOICE env var.
+  // Note: ElevenLabs free tier (2025+) does NOT allow library voices via API.
+  // Set ELEVENLABS_VOICE to a voice ID you created yourself in your ElevenLabs account.
+  const voiceId = env.ELEVENLABS_VOICE;
+  if (!voiceId) return null; // no custom voice set → skip (library voices blocked on free)
   try {
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -335,8 +338,32 @@ async function tryElevenLabsTts(text, env) {
       body: JSON.stringify({
         text,
         model_id: 'eleven_turbo_v2_5',
-        voice_settings: { stability: 0.48, similarity_boost: 0.78, style: 0.35, use_speaker_boost: true },
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true },
       }),
+    });
+    if (!res.ok) return null;
+    const audio = await res.arrayBuffer();
+    return new Response(audio, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/mpeg' } });
+  } catch { return null; }
+}
+
+// Azure Cognitive Services TTS — free tier: 500k chars/month Neural TTS (F0 plan)
+// Set AZURE_TTS_KEY + AZURE_TTS_REGION (e.g. "eastus") in worker env vars.
+// Voices: en-US-JennyNeural, en-US-AriaNeural, en-US-GuyNeural (all free tier)
+async function tryAzureTts(text, env) {
+  if (!env.AZURE_TTS_KEY || !env.AZURE_TTS_REGION) return null;
+  const voice = env.AZURE_TTS_VOICE || 'en-US-JennyNeural';
+  const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'><voice name='${voice}'><prosody rate='0.95'>${text.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</prosody></voice></speak>`;
+  try {
+    const res = await fetch(`https://${env.AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': env.AZURE_TTS_KEY,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
+        'User-Agent': 'OpsManifest',
+      },
+      body: ssml,
     });
     if (!res.ok) return null;
     const audio = await res.arrayBuffer();
@@ -351,10 +378,13 @@ async function handleCartesiaTts(req, env) {
   const cartesia = await tryCartesiaTts(text, voiceId, speed, emotion, env);
   if (cartesia) return cartesia;
 
+  const azure = await tryAzureTts(text, env);
+  if (azure) return azure;
+
   const eleven = await tryElevenLabsTts(text, env);
   if (eleven) return eleven;
 
-  return err('No TTS provider available — add ELEVENLABS_API_KEY or top up Cartesia credits', 503);
+  return err('TTS unavailable — add AZURE_TTS_KEY + AZURE_TTS_REGION for free neural voice', 503);
 }
 
 // ── Orchestrator chat ─────────────────────────────────────────────────────────
@@ -481,11 +511,34 @@ export default {
         model: env.GROQ_MODEL || 'llama-3.3-70b-versatile',
         tts: {
           cartesia:   !!env.CARTESIA_API_KEY,
-          elevenlabs: !!env.ELEVENLABS_API_KEY,
-          voice: env.ELEVENLABS_API_KEY ? 'elevenlabs' : env.CARTESIA_API_KEY ? 'cartesia' : 'none',
+          azure:      !!(env.AZURE_TTS_KEY && env.AZURE_TTS_REGION),
+          elevenlabs: !!(env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE),
+          voice: (env.AZURE_TTS_KEY && env.AZURE_TTS_REGION) ? 'azure'
+               : (env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE) ? 'elevenlabs'
+               : env.CARTESIA_API_KEY ? 'cartesia' : 'none',
         },
         stt: { whisper: !!env.GROQ_API_KEY },
       });
+    }
+
+    // Diagnostic: test TTS providers
+    if (url.pathname === '/tts-debug' && req.method === 'GET') {
+      const out = { providers: {} };
+      // Azure
+      if (env.AZURE_TTS_KEY && env.AZURE_TTS_REGION) {
+        try {
+          const r = await tryAzureTts('Test.', env);
+          out.providers.azure = r ? `OK — audio/mpeg` : 'failed';
+        } catch (e) { out.providers.azure = e.message; }
+      } else { out.providers.azure = 'not configured (add AZURE_TTS_KEY + AZURE_TTS_REGION)'; }
+      // ElevenLabs
+      if (env.ELEVENLABS_API_KEY && env.ELEVENLABS_VOICE) {
+        try {
+          const r = await tryElevenLabsTts('Test.', env);
+          out.providers.elevenlabs = r ? 'OK' : 'failed';
+        } catch (e) { out.providers.elevenlabs = e.message; }
+      } else { out.providers.elevenlabs = env.ELEVENLABS_API_KEY ? 'key set but ELEVENLABS_VOICE not set (free tier needs custom voice)' : 'not configured'; }
+      return json(out);
     }
 
     // Cartesia TTS — checked before the Groq key guard

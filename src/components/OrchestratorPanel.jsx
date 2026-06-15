@@ -313,8 +313,7 @@ export default function OrchestratorPanel({ docked = false }) {
     }
     if (wasLocked && !welcomeSpokenRef.current) {
       welcomeSpokenRef.current = true;
-      // Speak the same single-line next-action that appears in chat
-      speakQueued(buildWelcome(sRef.current));
+      speakQueued(buildVoicePrompt(sRef.current));
     }
   }
 
@@ -462,7 +461,8 @@ export default function OrchestratorPanel({ docked = false }) {
     if (!cartesiaPlayingRef.current) runCartesiaQueue();
   }
 
-  // Accepts optional state snapshot (for unlockAudio / sRef.current calls)
+  // Chat message — observational/agent-style, not interrogating.
+  // Accepts optional state snapshot (for unlockAudio / sRef.current calls).
   function buildWelcome(state) {
     const st = state || s;
     const { hw, os, db, app } = st.ctx || {};
@@ -472,23 +472,51 @@ export default function OrchestratorPanel({ docked = false }) {
     if (st.rtmSigned)     return `RTM signed. Open Closure and complete the checklist.`;
     if (st.cabApproved)   return `CAB approved. Open RTM — verify every row.`;
     if (st.cabDeclined)   return `CAB declined. Unlock for revision, then resubmit.`;
-    if (st.phase2Active)  return `Phase 2 active. Review Gantt, then submit to CAB.`;
+    if (st.phase2Active)  return `Phase 2 active — ${(st.selInc||[]).length} incidents in scope. Review Gantt, then submit to CAB.`;
     if (st.designApplied) return `Design locked. Inject Phase 2 from the sidebar.`;
     if (st.scanComplete)  return `Scan done. Open System Design and fill all 8 sections.`;
     if (st.isBuilt)       return `Stack built. Run the AI Smart Scan now.`;
 
-    // Not built — return the question for the first unfilled field
-    if (!hw)                  return FIELD_QUESTIONS.hw;
-    if (!os)                  return FIELD_QUESTIONS.os;
-    if (!db)                  return FIELD_QUESTIONS.db;
-    if (!app)                 return FIELD_QUESTIONS.app;
-    if (!r.projectName)       return FIELD_QUESTIONS.projectName;
-    if (!r.envType)           return FIELD_QUESTIONS.envType;
-    if (!r.projectStartDate)  return FIELD_QUESTIONS.projectStartDate;
-    if (!r.goLiveDate)        return FIELD_QUESTIONS.goLiveDate;
-    if (!r.sla)               return FIELD_QUESTIONS.sla;
+    // Not built — observational state + directive (no question marks, no examples)
+    if (!hw)                  return `Phase 1 — no hardware selected. Choose your platform below.`;
+    if (!os)                  return `Hardware set. Select the operating system.`;
+    if (!db)                  return `OS set. Select the database engine.`;
+    if (!app)                 return `Database set. Select the application or middleware.`;
+    if (!r.projectName)       return `Stack complete. Enter the project name.`;
+    if (!r.envType)           return `Project named. Select the environment type.`;
+    if (!r.projectStartDate)  return `Environment set. Enter the project start date.`;
+    if (!r.goLiveDate)        return `Start date set. Enter the target go-live date.`;
+    if (!r.sla)               return `Dates set. Select the SLA tier.`;
 
-    return `Stack ready — click Build in the sidebar to continue.`;
+    return `All fields ready — click Build in the sidebar.`;
+  }
+
+  // Voice prompt — shorter than chat, always a directive (never a question with examples).
+  function buildVoicePrompt(state) {
+    const st = state || s;
+    const { hw, os, db, app } = st.ctx || {};
+    const r = st.requirements || {};
+
+    if (st.promoted)      return `Build complete.`;
+    if (st.rtmSigned)     return `Open closure checklist.`;
+    if (st.cabApproved)   return `Open RTM and verify.`;
+    if (st.cabDeclined)   return `CAB declined. Unlock for revision.`;
+    if (st.phase2Active)  return `Review Gantt. Submit to CAB.`;
+    if (st.designApplied) return `Inject Phase 2.`;
+    if (st.scanComplete)  return `Open system design.`;
+    if (st.isBuilt)       return `Run the smart scan.`;
+
+    if (!hw)                  return `Select hardware.`;
+    if (!os)                  return `Select operating system.`;
+    if (!db)                  return `Select database.`;
+    if (!app)                 return `Select application.`;
+    if (!r.projectName)       return `Enter project name.`;
+    if (!r.envType)           return `Select environment type.`;
+    if (!r.projectStartDate)  return `Enter start date.`;
+    if (!r.goLiveDate)        return `Enter go-live date.`;
+    if (!r.sla)               return `Select SLA tier.`;
+
+    return `Click Build.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -1925,8 +1953,9 @@ export default function OrchestratorPanel({ docked = false }) {
             <div className="px-3 py-2.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
               <div className="text-xs text-amber-800 font-semibold mb-0.5">Human voice not active — using browser speech</div>
               <div className="text-xs text-amber-700">
-                For natural AI voice: get a free key at <strong>elevenlabs.io</strong>, then add
-                <strong> ELEVENLABS_API_KEY</strong> in Cloudflare → Workers → opsmanifest-ai → Settings → Variables. Free tier: 10k chars/month.
+                Best free option: Azure Cognitive Services — 500k chars/month Neural TTS (Jenny, Aria).
+                Sign up free at <strong>azure.microsoft.com</strong>, create a Speech resource (F0 free tier),
+                then add <strong>AZURE_TTS_KEY</strong> + <strong>AZURE_TTS_REGION</strong> to the CF Worker.
               </div>
             </div>
           )}

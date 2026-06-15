@@ -182,20 +182,20 @@
   ══════════════════════════════════════════════════════ -->
   <div class="slide" id="s1">
     <div class="accent-bar" style="background:linear-gradient(90deg,#14B8A6,#3B82F6,#8B5CF6);"></div>
-    <div class="eyebrow">OpsMentor — AI Orchestrator</div>
-    <h2>Full app control via voice or text — RACI-enforced</h2>
-    <p class="sub" style="font-size:13px;max-width:700px;">
-      OpsMentor understands your build context, detects EOL/incompatibilities as you type, raises stakeholder discussions automatically, logs every action, and can execute changes with your permission.
+    <div class="eyebrow">OpsMentor — Embedded AI Agent</div>
+    <h2>Observes every tab, acts on your behalf — chat logs it all</h2>
+    <p class="sub" style="font-size:13px;max-width:720px;">
+      OpsMentor is the app's own agent — not a chatbot bolted on. It watches build state across all tabs in real time, detects EOL and incompatibilities instantly, and executes workflow actions with your permission. Chat is the activity log; voice is the action bridge.
     </p>
 
     <div style="max-width:980px;width:100%;margin-top:14px;" class="g3">
       <div class="box" style="background:rgba(20,184,166,0.07);border:1px solid rgba(20,184,166,0.25);">
-        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#2DD4BF;margin-bottom:9px;">VOICE + TEXT INTERFACE</div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#2DD4BF;margin-bottom:9px;">HUMAN VOICE + NATURAL CHAT</div>
         <div class="feat-list fl1">
-          <div class="feat"><div class="feat-dot" style="background:#2DD4BF;"></div><span>Voice via Groq Whisper — works in Brave, Edge, Firefox (no browser speech API needed)</span></div>
-          <div class="feat"><div class="feat-dot" style="background:#2DD4BF;"></div><span>TTS via Cartesia Sonic-2 — natural, human-sounding voice replies</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Chat with full build context: stack, incidents, RTM status, risk score all in window</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Tab hints: "Switch to Gantt", "Open RTM" — guided by current workflow state</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#2DD4BF;"></div><span>Human TTS via ElevenLabs · Cartesia Sonic-2 — cascading fallback, no robot voice</span></div>
+          <div class="feat"><div class="feat-dot" style="background:#2DD4BF;"></div><span>Voice speaks only the next required action — never restates what is already on screen</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Chat = activity log: every field set, incident added, phase transition auto-logged</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Whisper STT fallback when browser mic is blocked — works in Brave, Edge, Firefox</span></div>
         </div>
       </div>
 
@@ -205,7 +205,7 @@
           <div class="feat"><div class="feat-dot" style="background:#FCA5A5;"></div><span>18-pattern EOL table: Windows 2012, RHEL 6/7, Oracle 11g/12c, JBoss 7.x, AIX 7.1, Solaris 10, SQL Server 2014…</span></div>
           <div class="feat"><div class="feat-dot" style="background:#FCA5A5;"></div><span>On stack input → auto-creates incident + vulnerability registry entry instantly</span></div>
           <div class="feat"><div class="feat-dot"></div><span>Auto-adds RAID RISK entry + stakeholder discussion: "Has team agreed migration plan for EOL OS?"</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Also fires endoflife.date live API check — day-precise countdown in CMDB tab</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Fires endoflife.date live API — day-precise countdown in CMDB tab</span></div>
         </div>
       </div>
 
@@ -215,14 +215,14 @@
           <div class="feat"><div class="feat-dot" style="background:#C4B5FD;"></div><span>Every action checked against build RACI — shows "Permission required" before executing</span></div>
           <div class="feat"><div class="feat-dot" style="background:#C4B5FD;"></div><span>Actions: SET_CTX · ADD_INCIDENT · ADD_UUM · TOGGLE_INC · SET_REQUIREMENT · ADD_VULNERABILITY · ADD_DISCUSSION · ADD_RAID_ENTRY</span></div>
           <div class="feat"><div class="feat-dot"></div><span>Persistent audit log — every executed/blocked action timestamped with phase and status</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Commands: "check incompatibilities", "risk score", "show risks", "set budget to 50000"</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Commands: "check incompatibilities", "risk score", "add incident", "set budget to 50000"</span></div>
         </div>
       </div>
     </div>
 
     <div class="pills" style="margin-top:14px;">
       <span class="pill pill-teal">Groq llama-3.3-70b via CF Worker — no API key in browser</span>
-      <span class="pill pill-blue">Auto-scan trigger when all 4 stack fields filled</span>
+      <span class="pill pill-blue">Agent observes all tabs — chat logs changes in real time</span>
       <span class="pill pill-amber">Risk score read-out on demand</span>
       <span class="pill pill-purple">Audit log + Vulnerability Registry exported to Excel</span>
     </div>
