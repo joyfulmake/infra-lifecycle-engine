@@ -254,18 +254,37 @@ Two AI layers — both use the CF Worker proxy pattern to keep API keys out of t
 - **AI Smart Scan** (`src/lib/smartScan.js`) — standalone CVE/EOL/security scan, no API key, runs in-browser
 - **Task metadata enrichment** (`src/lib/taskMetadata.js`) — `enrichTask(task, ctx)` derives 7-point FSM metadata from 30+ regex patterns over task name/role/dep fields
 
+### OpsMentor — LLM-powered advisor (via Groq + `workers/ai-worker.js`)
+
+OpsMentor is the app's embedded AI agent. Key behavioral contract:
+- **Opening assessment**: when opened on any build with data, calls `/orchestrator-chat` with a special `INITIAL_ASSESSMENT` prompt. Treats all entered data as approved. Surfaces only non-obvious risks, EOL windows, or gaps. Never narrates what the user already did.
+- **Proactive actions**: the opening LLM response includes `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, and `SET_DESIGN_FIELD` actions without the user asking. These are applied immediately (no confirmation needed).
+- **Blank builds only**: static warm welcome + hardware chips shown when truly nothing is entered.
+- **Voice**: Azure Neural TTS (free tier) via `AZURE_TTS_KEY` + `AZURE_TTS_REGION` worker env vars. Falls back to Web Speech. `/cartesia-tts` endpoint handles both Azure and Cartesia.
+- **System Design from Phase 1**: when design is empty but stack is known, the opening assessment suggests specific `SET_DESIGN_FIELD` values derived from the hw/os/db/app configuration.
+- `buildWelcome()` and `buildVoicePrompt()` are fallback-only now — only used when the LLM call fails or on a blank build.
+
+Worker routes relevant to OpsMentor:
+- `POST /orchestrator-chat` — main chat; `INITIAL_ASSESSMENT` prefix triggers expert opening brief
+- `POST /cartesia-tts` — TTS; tries Azure Neural first, then Cartesia, then ElevenLabs
+- `GET /health` — returns `{tts:{azure,cartesia,elevenlabs,voice}}`
+
+**Rule 15 in worker system prompt**: when `message` starts with `INITIAL_ASSESSMENT`, do not narrate, do not ask for data already visible, include proactive actions, keep reply to 2–4 sentences.
+
+**Action confirmation rules**: `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, `SET_DESIGN_FIELD` require no confirmation. `APPLY_DESIGN`, `INJECT_PHASE2`, `SUBMIT_CAB`, `SIGN_RTM`, `PROMOTE`, `UNLOCK_FOR_REVISION`, `RESUBMIT_CAB`, `ADD_INCIDENT`, `ADD_UUM_ITEM` always require confirmation.
+
 ### Groq AI (opt-in — `GROQ_CONFIGURED` in `src/lib/groqConfig.js`)
 - **Worker**: `workers/ai-worker.js` — deploy as `opsmanifest-ai` CF Worker; requires `GROQ_API_KEY` env var
-- **Routes**: `POST /groq-enrich` (deepens a task's FSM metadata), `POST /groq-suggest` (top-5 stack risks)
+- **Routes**: `POST /groq-enrich` (deepens a task's FSM metadata), `POST /groq-suggest` (top-5 stack risks), `POST /groq-uum-search` (UUM keyword AI search), `POST /groq-mission-analysis` (Mission Intel)
 - **Model**: `llama-3.3-70b-versatile` (overridable via `GROQ_MODEL` worker env var)
 - **UI**: "✦ AI Deepen — Groq" button appears in the Gantt FSM panel and Matrix FSM detail panel when configured; AI-enhanced fields shown with teal "✦ AI" badge; adds CVE Risks + Best Practice fields
 - **To activate**:
-  1. `wrangler deploy workers/ai-worker.js --name opsmanifest-ai`
-  2. Set `GROQ_API_KEY` in Cloudflare Workers → Settings → Variables
+  1. `wrangler deploy workers/ai-worker.js --name opsmanifest-ai --compatibility-date 2026-06-15`
+  2. Set `GROQ_API_KEY`, `AZURE_TTS_KEY`, `AZURE_TTS_REGION` in Cloudflare Workers → Settings → Variables
   3. Set `GROQ_WORKER_URL` + `GROQ_CONFIGURED = true` in `src/lib/groqConfig.js`
   4. Build and deploy
 
-Always keep the proxy pattern — never call `api.groq.com` directly from the frontend.
+Always keep the proxy pattern — never call `api.groq.com` or Azure Speech directly from the frontend.
 
 ### endoflife.date Live API (CMDB tab — always on, no key required)
 - **Module**: `src/lib/eolApi.js` — REST client for `https://endoflife.date/api`
