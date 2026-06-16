@@ -1,17 +1,28 @@
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import '@fontsource/inter/700.css'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './lib/AuthContext.jsx'
 
-// Register service worker for PWA / offline support.
-// Skip in MSIX packaged context (ms-appx-web:) — the app is already bundled
-// offline, and the SW's fetch handler can crash WebView2 on newer Windows builds
-// when it intercepts ms-appx-web: scheme navigations.
-if ('serviceWorker' in navigator && !window.location.href.startsWith('ms-appx-web:')) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+// Service worker handling — web context only, never MSIX packaged context.
+if ('serviceWorker' in navigator) {
+  if (window.location.href.startsWith('ms-appx-web:')) {
+    // MSIX packaged context: actively unregister any previously registered service workers.
+    // A SW installed by an older MSIX version can survive updates and will crash the
+    // WebView2 renderer on Windows 11 24H2 by intercepting ms-appx-web: scheme fetch events.
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => regs.forEach(r => r.unregister()))
+      .catch(() => {});
+  } else {
+    // Web context — register SW for PWA offline support.
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
 }
 
 // Prevent unhandled promise rejections from terminating the WebView2 renderer.
@@ -19,6 +30,9 @@ if ('serviceWorker' in navigator && !window.location.href.startsWith('ms-appx-we
 window.addEventListener('unhandledrejection', (e) => {
   e.preventDefault();
 });
+
+// Prevent synchronous JS errors from crashing the WebView2 renderer process.
+window.onerror = () => true;
 
 // Root error boundary — prevents a React render crash from showing a blank screen
 class AppErrorBoundary extends Component {

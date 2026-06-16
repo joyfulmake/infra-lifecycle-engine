@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.7.0.0'
+        default: '1.9.0.0'
 
 jobs:
   build-msix:
@@ -102,6 +102,16 @@ jobs:
           # "unreachable CDN" failure that has blocked every submission so far.
           Copy-Item -Path "dist\*" -Destination "msix\" -Recurse -Force
           Write-Host "Copied dist/ contents to msix/"
+
+          # Remove sw.js from the package — the app loads from ms-appx-web://
+          # with no network dependency, so a service worker is unnecessary.
+          # More critically: a SW from a previous MSIX version can survive updates
+          # in the WebView2 data folder and will crash the WebView2 renderer on
+          # Windows 11 24H2 by intercepting ms-appx-web: scheme fetch events.
+          # Removing the file eliminates any possibility of SW activation in the package.
+          Remove-Item "msix\sw.js" -ErrorAction SilentlyContinue
+          Write-Host "Removed sw.js from MSIX package (not needed, prevents WebView2 crash)"
+
           Get-ChildItem msix | Select-Object Name, Length | Format-Table -AutoSize
 
       - name: Write AppxManifest.xml
