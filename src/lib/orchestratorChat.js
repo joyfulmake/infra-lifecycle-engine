@@ -777,6 +777,73 @@ export function ruleBasedResponse(message, s, authUser) {
     };
   }
 
+  // ── Fix-intent recognizer — "fix the TLS issue", "best choice for web", "correct incompatible", etc. ──
+  // Reads coherence alerts that have `fix` payloads and offers to apply them.
+  {
+    const isFixIntent =
+      /\b(fix|correct|update|resolve|apply|enforce|remediat)\b.{0,40}\b(tls|ssl|cipher|protocol|web|incompatib|alert|issue|warning|field|value|section|config)\b/i.test(m)
+      || /\b(best choice|best value|recommended value|correct value|update.{0,20}incompatib|fix.{0,25}value|what should.{0,10}set)\b/i.test(m)
+      || /\b(fix|correct|apply|resolve).{0,20}\b(tls|ssl|nist|pci|cipher|protocol)\b/i.test(m)
+      || /\b(update|fix|correct).{0,30}(web section|design field)\b/i.test(m)
+      || /\bfix all\b|\bapply fixes\b|\bapply.{0,10}recommended\b|\bresolve all.{0,15}alert/i.test(m);
+
+    if (isFixIntent) {
+      const fixableAlerts = (s.coherenceAlerts || []).filter(a => a.fix?.length);
+
+      if (fixableAlerts.length === 0) {
+        // No fixable alerts — fall through to EOL scan or Groq
+      } else {
+        // Narrow to the section the user mentioned, or take all if no specific mention
+        const mentionedSection =
+          /\bweb\b/i.test(m)        ? 'web'
+          : /\bsecur/i.test(m)      ? 'security'
+          : /\bunix|os layer\b/i.test(m) ? 'unix'
+          : /\bnetwork\b/i.test(m)  ? 'network'
+          : /\bstorage\b/i.test(m)  ? 'storage'
+          : /\bbackup\b/i.test(m)   ? 'backup'
+          : /\btls|ssl|cipher|nist|pci|protocol/i.test(m) ? 'web'
+          : null;
+
+        const targeted = mentionedSection
+          ? fixableAlerts.filter(a => a.fix.some(f => f.section === mentionedSection))
+          : fixableAlerts;
+
+        if (targeted.length === 0 && fixableAlerts.length > 0) {
+          // User mentioned a section but no fix targets it — offer all fixable
+          const lines = fixableAlerts.map(a => `• ${a.fixLabel || a.message.slice(0, 60)}`).join('\n');
+          return {
+            reply: `No specific fix for that section, but I can apply these:\n${lines}\n\nSay "fix all" or "apply fixes" to apply.`,
+          };
+        }
+
+        const actions = [];
+        targeted.forEach(alert => {
+          alert.fix.forEach(f => {
+            actions.push({
+              type: 'SET_DESIGN_FIELD',
+              description: f.label || `${f.section} → ${f.field} = ${f.value}`,
+              params: { section: f.section, field: f.field, value: f.value },
+              requiresConfirmation: false,
+            });
+          });
+        });
+
+        const summary = targeted.map(a => a.fixLabel || a.message.slice(0, 60)).join('; ');
+        const fieldList = targeted.flatMap(a => a.fix).map(f => `${f.section}.${f.field} → ${f.value.length > 40 ? f.value.slice(0, 40) + '…' : f.value}`).join('\n');
+
+        return {
+          reply: `Applying: ${summary}\n\n${fieldList}`,
+          actions: [...actions, {
+            type: 'NAVIGATE_TAB',
+            description: 'Open System Design',
+            params: { tab: 'design' },
+            requiresConfirmation: false,
+          }],
+        };
+      }
+    }
+  }
+
   // ── Incompatibility / EOL scan ─────────────────────────────────────────────
   if (/\b(incompatib|eol|end of life|end-of-life|compat|lifecycle|version check|supported)\b/.test(m)) {
     const { hw, os, db, app } = s.ctx || {};

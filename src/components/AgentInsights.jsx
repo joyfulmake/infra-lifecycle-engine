@@ -1,6 +1,30 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore.js';
 
+function FixButton({ alert }) {
+  const setDesignField = useStore(s => s.setDesignField);
+  const [applied, setApplied] = useState(false);
+
+  function applyFix() {
+    (alert.fix || []).forEach(f => setDesignField(f.section, f.field, f.value));
+    setApplied(true);
+  }
+
+  if (applied) {
+    return <span className="text-xs font-semibold text-teal-600 px-1.5 py-0.5">✓ Applied</span>;
+  }
+
+  return (
+    <button
+      onClick={applyFix}
+      className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+      title={alert.fixLabel || 'Apply recommended fix'}
+    >
+      Fix →
+    </button>
+  );
+}
+
 export default function AgentInsights({ tab }) {
   const [expanded, setExpanded] = useState(false);
   const alerts = useStore(s => s.coherenceAlerts);
@@ -17,6 +41,7 @@ export default function AgentInsights({ tab }) {
   const mutedCls  = hasWarn ? 'text-amber-500'    : 'text-blue-400';
 
   if (!expanded) {
+    const firstFixable = relevant.find(a => a.fix?.length);
     return (
       <div
         className={`flex items-center justify-between rounded-lg border ${borderCls} ${bgCls} px-3 py-2 mb-3 gap-3 cursor-pointer select-none`}
@@ -28,6 +53,12 @@ export default function AgentInsights({ tab }) {
           <span className={`text-xs truncate ${bodyCls}`}>{relevant[0].message}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {firstFixable && (
+            <span
+              onClick={e => { e.stopPropagation(); setExpanded(true); }}
+              className={`text-xs font-semibold text-teal-600 border border-teal-300 rounded px-1.5 py-0.5 bg-white hover:bg-teal-50`}
+            >Fix →</span>
+          )}
           {relevant.length > 1 && (
             <span className={`text-xs ${mutedCls}`}>+{relevant.length - 1}</span>
           )}
@@ -61,10 +92,20 @@ export default function AgentInsights({ tab }) {
             <div
               className={`w-0.5 rounded-full flex-shrink-0 mt-0.5 self-stretch ${alert.severity === 'warn' ? 'bg-amber-400' : 'bg-blue-400'}`}
             />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className={`text-xs ${bodyCls}`}>{alert.message}</div>
               {alert.action && (
                 <div className={`text-xs mt-0.5 font-medium ${mutedCls}`}>&#8594; {alert.action}</div>
+              )}
+              {alert.fix?.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    {alert.fix.map((f, i) => (
+                      <span key={i} className="text-xs text-slate-500 font-mono">{f.label}</span>
+                    ))}
+                  </div>
+                  <FixButton alert={alert} />
+                </div>
               )}
             </div>
           </div>

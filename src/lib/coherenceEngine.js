@@ -115,6 +115,11 @@ export function runCoherenceChecks(state) {
         tabs: ['design'],
         message: `${requirements.sla}% SLA requires a monitoring agent — Unix/OS section is missing it.`,
         action: 'System Design → Unix/OS → Monitoring Agent',
+        fix: [
+          { section: 'unix', field: 'monitoring_agent', value: 'Prometheus + Node Exporter + Alertmanager', label: 'monitoring_agent → Prometheus stack' },
+          { section: 'unix', field: 'syslog_server',    value: 'rsyslog → centralised SIEM', label: 'syslog_server → centralised SIEM' },
+        ],
+        fixLabel: 'Add Tier-1 monitoring stack',
       });
     }
   }
@@ -303,6 +308,12 @@ export function runCoherenceChecks(state) {
         tabs: ['design', 'diagram', 'exec'],
         message: `TLS 1.0/1.1 configured — deprecated by NIST (2024) and prohibited under PCI-DSS v4. Remove and enforce TLS 1.2+ only.`,
         action: 'System Design → Web section',
+        fix: [
+          { section: 'web', field: 'ssl_protocols', value: 'TLSv1.2 TLSv1.3', label: 'ssl_protocols → TLSv1.2 TLSv1.3' },
+          { section: 'web', field: 'ssl_ciphers',   value: 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-CHACHA20-POLY1305', label: 'ssl_ciphers → strong ECDHE suite' },
+          { section: 'web', field: 'hsts',          value: 'max-age=31536000; includeSubDomains; preload', label: 'hsts → max-age 1yr + preload' },
+        ],
+        fixLabel: 'Apply NIST-compliant TLS 1.2/1.3 config',
       });
     } else if (pciScope && missingTls12) {
       alerts.push({
@@ -311,6 +322,11 @@ export function runCoherenceChecks(state) {
         tabs: ['design', 'diagram'],
         message: `PCI-DSS in scope but TLS protocol version not confirmed as 1.2+. Set ssl_protocols explicitly.`,
         action: 'System Design → Web → TLS Protocols',
+        fix: [
+          { section: 'web', field: 'ssl_protocols', value: 'TLSv1.2 TLSv1.3', label: 'ssl_protocols → TLSv1.2 TLSv1.3' },
+          { section: 'web', field: 'ssl_ciphers',   value: 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256', label: 'ssl_ciphers → PCI-approved ciphers' },
+        ],
+        fixLabel: 'Set PCI-DSS v4 compliant TLS config',
       });
     }
   }
