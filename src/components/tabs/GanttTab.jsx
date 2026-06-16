@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { ALL_INC } from '../../lib/incidents.js';
@@ -617,6 +617,64 @@ function IncidentEnvPanel({ selInc, selUUM, customInc, customUUM, regions }) {
   );
 }
 
+// ── Inline task adder — shown at the bottom of each UUM group ────────────────
+
+function AddTaskRow({ groupKey, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [hours, setHours] = useState(2);
+  const [role, setRole] = useState('');
+  const inputRef = useRef(null);
+
+  function commit() {
+    if (!title.trim()) return;
+    onAdd(groupKey, { id: `ct-${Date.now()}`, title: title.trim(), est_hours: Number(hours) || 2, role: role.trim() || undefined, addedAt: new Date().toISOString() });
+    setTitle(''); setHours(2); setRole(''); setOpen(false);
+  }
+
+  if (!open) return (
+    <button onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 30); }}
+      className="w-full text-left text-xs text-teal-500 hover:text-teal-700 px-4 py-1.5 hover:bg-teal-50/60 border-t border-teal-50 flex items-center gap-1 transition-colors">
+      + Add task to this group
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 border-t border-teal-100 fade-in">
+      <input ref={inputRef} type="text" value={title} onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setOpen(false); }}
+        placeholder="Task description…"
+        className="flex-1 text-xs border border-teal-200 rounded px-2 py-1 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400" />
+      <input type="text" value={role} onChange={e => setRole(e.target.value)}
+        placeholder="Role"
+        className="w-24 text-xs border border-teal-200 rounded px-2 py-1 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400" />
+      <input type="number" value={hours} onChange={e => setHours(e.target.value)} min={1} max={999}
+        className="w-12 text-xs border border-teal-200 rounded px-2 py-1 text-slate-800 bg-white text-center focus:outline-none focus:ring-1 focus:ring-teal-400" />
+      <span className="text-xs text-slate-400">h</span>
+      <button onClick={commit} className="px-2 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700 transition-colors font-semibold">Add</button>
+      <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 text-xs px-1">✕</button>
+    </div>
+  );
+}
+
+function CustomTaskList({ groupKey, tasks, onRemove }) {
+  if (!tasks?.length) return null;
+  return (
+    <div className="border-t border-teal-100">
+      {tasks.map(ct => (
+        <div key={ct.id} className="flex items-center gap-2 px-3 py-2 bg-teal-50/40 hover:bg-teal-50/70 group transition-colors">
+          <div className="text-xs text-teal-400 font-mono w-7">+</div>
+          {ct.role ? <span className="badge badge-teal text-xs">{ct.role}</span> : <span className="badge badge-teal text-xs">Custom</span>}
+          <div className="flex-1 text-xs text-slate-700">{ct.title}</div>
+          <div className="text-xs text-slate-400 w-12 text-right">~{ct.est_hours || 2}h</div>
+          <button onClick={() => onRemove(groupKey, ct.id)}
+            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs px-1 transition-opacity">✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Phase timeline bar ────────────────────────────────────────────────────────
 
 function PhaseTimeline({ tasks, isAi, totalBufDays }) {
@@ -877,6 +935,8 @@ export default function GanttTab() {
                 );
               })}
             </div>
+            <CustomTaskList groupKey={uum.code} tasks={s.customSectionTasks?.[uum.code]} onRemove={s.removeSectionTask} />
+            <AddTaskRow groupKey={uum.code} onAdd={s.addSectionTask} />
           </div>
         );
       })}
@@ -887,28 +947,33 @@ export default function GanttTab() {
         </div>
       )}
 
-      {/* OpsMentor custom tasks */}
-      {(s.customMentorTasks || []).length > 0 && (
-        <div className="card overflow-hidden mb-4 border-l-4 border-teal-400">
-          <div className="bg-teal-50 px-4 py-2 border-b border-teal-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-teal-700 text-xs uppercase tracking-wide">OpsMentor Tasks</span>
-              <span className="badge badge-teal text-xs">{s.customMentorTasks.length} added</span>
-            </div>
+      {/* Custom tasks — OpsMentor + user-added */}
+      <div className="card overflow-hidden mb-4 border-l-4 border-teal-400">
+        <div className="bg-teal-50 px-4 py-2 border-b border-teal-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-teal-700 text-xs uppercase tracking-wide">Custom Tasks</span>
+            {(s.customMentorTasks || []).length > 0 && <span className="badge badge-teal text-xs">{s.customMentorTasks.length}</span>}
           </div>
-          <div className="divide-y divide-teal-50">
-            {s.customMentorTasks.map(t => (
-              <div key={t.id} className="flex items-center gap-2 px-3 py-2 hover:bg-teal-50/40">
-                <div className="text-xs text-teal-400 font-mono w-7">✦</div>
-                <span className="badge badge-teal text-xs">Manual</span>
-                <div className="flex-1 text-xs text-slate-700">{t.title}</div>
-                {t.notes && <div className="text-xs text-slate-400 italic">{t.notes}</div>}
-                <div className="text-xs text-slate-400 w-12 text-right">~{t.est_hours || 2}h</div>
-              </div>
-            ))}
-          </div>
+          <span className="text-xs text-slate-400">Add tasks outside the auto-generated plan</span>
         </div>
-      )}
+        <div className="divide-y divide-teal-50">
+          {(s.customMentorTasks || []).map(t => (
+            <div key={t.id} className="flex items-center gap-2 px-3 py-2 hover:bg-teal-50/40 group">
+              <div className="text-xs text-teal-400 font-mono w-7">✦</div>
+              <span className="badge badge-teal text-xs">{t.role || 'Manual'}</span>
+              <div className="flex-1 text-xs text-slate-700">{t.title}</div>
+              {t.notes && <div className="text-xs text-slate-400 italic truncate max-w-[120px]">{t.notes}</div>}
+              <div className="text-xs text-slate-400 w-12 text-right">~{t.est_hours || 2}h</div>
+              <button onClick={() => s.removeCustomMentorTask(t.id)}
+                className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs px-1 transition-opacity">✕</button>
+            </div>
+          ))}
+          {(s.customMentorTasks || []).length === 0 && (
+            <div className="px-4 py-3 text-xs text-slate-400 italic">No custom tasks yet — add one below or ask OpsMentor to add a task.</div>
+          )}
+        </div>
+        <AddTaskRow groupKey="__global__" onAdd={(_, task) => s.addCustomMentorTask({ ...task, id: task.id || `mentor-${Date.now()}`, notes: task.notes || '' })} />
+      </div>
 
       {/* Rollback plan */}
       {s.cabDeclined && (

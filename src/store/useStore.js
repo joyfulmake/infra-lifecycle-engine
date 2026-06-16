@@ -248,6 +248,9 @@ export const useStore = create((set, get) => ({
   // OpsMentor user-added RAID entries: [{ id, type, description, severity, mitigation, status, owner, addedAt }]
   customRaidEntries: [],
 
+  // Per-section custom tasks: { [groupKey]: [{ id, title, est_hours, role, notes }] }
+  customSectionTasks: {},
+
   // Vulnerability registry: [{ id, title, cveId, component, severity, description, status, businessDecision, workaround, source, addedAt, updatedAt, fixTargetDate }]
   // status: ACTIVE | PARKED | WORKAROUND | FIXED | ACCEPTED_RISK
   vulnRegistry: [],
@@ -330,7 +333,7 @@ export const useStore = create((set, get) => ({
     isBuilt: true, scanComplete: false, designApplied: false,
     phase2Active: false, cabApproved: false, cabDeclined: false, rtmSigned: false, promoted: false,
     ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [], customUUM: [],
-    customMentorTasks: [], customRaidEntries: [],
+    customMentorTasks: [], customRaidEntries: [], customSectionTasks: {},
     vulnRegistry: [], stakeholderDiscussions: [], actionAuditLog: [], riskAcknowledgments: {},
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
@@ -372,6 +375,22 @@ export const useStore = create((set, get) => ({
   removeCustomMentorTask: (id) => set(s => ({ customMentorTasks: (s.customMentorTasks || []).filter(t => t.id !== id), isDirty: true })),
   addCustomRaidEntry: (entry) => set(s => ({ customRaidEntries: [...(s.customRaidEntries || []), entry], isDirty: true })),
   removeCustomRaidEntry: (id) => set(s => ({ customRaidEntries: (s.customRaidEntries || []).filter(e => e.id !== id), isDirty: true })),
+  updateCustomRaidEntry: (id, patch) => set(s => ({
+    customRaidEntries: (s.customRaidEntries || []).map(e => e.id === id ? { ...e, ...patch } : e),
+    isDirty: true,
+  })),
+  addSectionTask: (groupKey, task) => set(s => ({
+    customSectionTasks: { ...(s.customSectionTasks || {}), [groupKey]: [...(s.customSectionTasks?.[groupKey] || []), task] },
+    isDirty: true,
+  })),
+  removeSectionTask: (groupKey, taskId) => set(s => ({
+    customSectionTasks: { ...(s.customSectionTasks || {}), [groupKey]: (s.customSectionTasks?.[groupKey] || []).filter(t => t.id !== taskId) },
+    isDirty: true,
+  })),
+  updateSectionTask: (groupKey, taskId, patch) => set(s => ({
+    customSectionTasks: { ...(s.customSectionTasks || {}), [groupKey]: (s.customSectionTasks?.[groupKey] || []).map(t => t.id === taskId ? { ...t, ...patch } : t) },
+    isDirty: true,
+  })),
 
   // Vulnerability registry actions
   addVuln: (vuln) => set(s => ({ vulnRegistry: [...(s.vulnRegistry || []), vuln], isDirty: true })),
@@ -498,6 +517,7 @@ export const useStore = create((set, get) => ({
     customUUM: b.customUUM ?? [],
     customMentorTasks: b.customMentorTasks ?? [],
     customRaidEntries: b.customRaidEntries ?? [],
+    customSectionTasks: b.customSectionTasks ?? {},
     sysDesignData: b.sysDesignData ?? initDesignData(),
     sdAiTasks: b.sdAiTasks ?? [],
     scanResults: b.scanResults ?? [],

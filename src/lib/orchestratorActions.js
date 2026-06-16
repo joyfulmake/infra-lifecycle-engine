@@ -28,6 +28,8 @@ export function checkPermission(action, authUser, s) {
       return { allowed: true };
 
     case 'SET_DESIGN_FIELD': {
+      // When no PM is gating the build (guest or setup mode), allow all design field updates
+      if (!s.requirements?.pmEmail) return { allowed: true };
       const ok = canEditDesignSection(userRoles, action.params?.section);
       return ok
         ? { allowed: true }
@@ -181,6 +183,14 @@ export function executeAction(action, store) {
     case 'ADD_CUSTOM_TASK':
       store.addCustomMentorTask(params);
       break;
+
+    case 'ADD_SECTION_TASK': {
+      const groupKey = params.groupKey;
+      const task = { ...params, id: params.id || `sectask-${Date.now()}` };
+      delete task.groupKey;
+      store.addSectionTask(groupKey, task);
+      break;
+    }
 
     case 'ADD_RAID_ENTRY':
       store.addCustomRaidEntry(params);

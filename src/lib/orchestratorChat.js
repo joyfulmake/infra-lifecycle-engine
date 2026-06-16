@@ -818,16 +818,11 @@ export function ruleBasedResponse(message, s, authUser) {
     const title = addIncMatch[1].trim();
     const incId = `INC-MENTOR-${Date.now()}`;
     return {
-      reply: `Creating incident "${title}" and adding it to the scope. It will appear in the topology, RTM, and Excel export.`,
+      reply: '',
       actions: [{
         type: 'ADD_INCIDENT',
         description: `Add incident: ${title}`,
         params: { id: incId, code: incId, short: title, txt: title, grp: 'Custom', sev: 'HIGH', owner: 'PM', layers: [] },
-        requiresConfirmation: false,
-      }, {
-        type: 'NAVIGATE_TAB',
-        description: 'Navigate to Exec Summary to see incidents',
-        params: { tab: 'exec' },
         requiresConfirmation: false,
       }],
     };
@@ -841,16 +836,11 @@ export function ruleBasedResponse(message, s, authUser) {
     const uumId = `UUM-MENTOR-${Date.now()}`;
     const uumType = typeWord === 'patch' ? 'patch' : typeWord === 'upgrade' ? 'upgrade' : 'migration';
     return {
-      reply: `Adding "${title}" as a UUM ${uumType} item. It will appear in Gantt tasks, RTM, the dependency matrix, and Excel export.`,
+      reply: '',
       actions: [{
         type: 'ADD_UUM_ITEM',
         description: `Add UUM item: ${title}`,
         params: { id: uumId, short: title, txt: title, grp: 'Custom', layer: 'os', type: uumType, layers: ['os'] },
-        requiresConfirmation: false,
-      }, {
-        type: 'NAVIGATE_TAB',
-        description: 'Navigate to Exec Summary',
-        params: { tab: 'exec' },
         requiresConfirmation: false,
       }],
     };
@@ -861,7 +851,7 @@ export function ruleBasedResponse(message, s, authUser) {
   if (addTaskMatch) {
     const title = addTaskMatch[1].trim();
     return {
-      reply: `Got it — "${title}". Should I add this to the Gantt schedule or the RAID log?\n\nSay "gantt" or "raid".`,
+      reply: `Gantt or RAID?`,
       _pendingTask: title,
     };
   }
@@ -873,7 +863,7 @@ export function ruleBasedResponse(message, s, authUser) {
     const desc = (addRaidMatch[2] || addRaidMatch[1] || '').trim();
     const id = `raid-${Date.now()}`;
     return {
-      reply: `Added "${desc}" to the RAID log as a ${type}. Open the RAID tab to see it.`,
+      reply: '',
       actions: [{
         type: 'ADD_RAID_ENTRY',
         description: `Add ${type} to RAID log`,
@@ -881,29 +871,45 @@ export function ruleBasedResponse(message, s, authUser) {
         requiresConfirmation: false,
       }, {
         type: 'NAVIGATE_TAB',
-        description: 'Navigate to RAID tab',
+        description: 'Go to RAID',
         params: { tab: 'raid' },
         requiresConfirmation: false,
       }],
     };
   }
 
-  // Set system design field: "set [section] [field]: [value]" or "network field firewall is pfsense"
-  const designMatch = raw.match(/\bset\s+(network|storage|security|backup|compliance|monitoring|dr|ha)\s+(\w[\w\s]*?)\s*[=:to]+\s*(.+)/i)
-    || raw.match(/\b(network|storage|security|backup|compliance|monitoring|disaster recovery|high availability)\s+(\w[\w\s]*?)\s+is\s+(.+)/i);
+  // Set system design field — all 8 section keys + common aliases
+  // "set unix cpu to 16", "network bandwidth is 10GbE", "set db max_conn to 200"
+  const SECTION_PAT = '(?:unix|unix\\/os|os layer|web|app(?:lication)?|db|database|storage|backup|network|security|compliance|monitoring|ha|high[- ]?availability|dr|disaster[- ]?recovery)';
+  const designMatch = raw.match(new RegExp(`\\bset\\s+(${SECTION_PAT})\\s+([\\w][\\w\\s-]*?)\\s*(?:=|:|to|as)\\s*(.+)`, 'i'))
+    || raw.match(new RegExp(`\\b(${SECTION_PAT})\\s+([\\w][\\w\\s-]*?)\\s+is\\s+(.+)`, 'i'));
   if (designMatch) {
-    const sectionRaw = designMatch[1].toLowerCase().replace('disaster recovery', 'dr').replace('high availability', 'ha');
-    const sectionMap = { network: 'network', storage: 'storage', security: 'security', backup: 'backup', compliance: 'compliance', monitoring: 'monitoring', dr: 'dr', ha: 'ha' };
-    const section = sectionMap[sectionRaw] || sectionRaw;
+    const sectionRaw = designMatch[1].toLowerCase()
+      .replace(/^unix\/os$|^os layer$/, 'unix')
+      .replace(/^application$/, 'app')
+      .replace(/^database$/, 'db')
+      .replace(/^disaster[- ]?recovery$/, 'dr')
+      .replace(/^high[- ]?availability$/, 'ha');
+    const SECTION_MAP = {
+      unix: 'unix', web: 'web', app: 'app', db: 'db',
+      storage: 'storage', backup: 'backup', network: 'network', security: 'security',
+      compliance: 'compliance', monitoring: 'monitoring', ha: 'ha', dr: 'dr',
+    };
+    const section = SECTION_MAP[sectionRaw] || sectionRaw;
     const field = designMatch[2].trim().toLowerCase().replace(/\s+/g, '_');
     const value = designMatch[3].trim();
-    if (!s.scanComplete) return { reply: 'System Design is locked until after the AI Smart Scan. Run the scan first.' };
+    if (!s.isBuilt) return { reply: 'Build the stack first — System Design fields become available after Phase 1.' };
     return {
-      reply: `Setting ${section} → ${field} to "${value}". Open the System Design tab to review.`,
+      reply: '',
       actions: [{
         type: 'SET_DESIGN_FIELD',
-        description: `Set ${section}/${field} = ${value}`,
+        description: `${section} → ${field} = ${value}`,
         params: { section, field, value },
+        requiresConfirmation: false,
+      }, {
+        type: 'NAVIGATE_TAB',
+        description: 'Open System Design',
+        params: { tab: 'design' },
         requiresConfirmation: false,
       }],
     };

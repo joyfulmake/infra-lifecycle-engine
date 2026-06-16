@@ -1304,7 +1304,7 @@ Rules:
       const immediate   = actions.filter(a => !a.requiresConfirmation);
       const needsConfirm = actions.filter(a => a.requiresConfirmation);
       if (immediate.length > 0) applyActionsWithRefs(immediate);
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+      if (reply) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
       if (needsConfirm.length > 0) {
         setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
       }
@@ -1835,7 +1835,8 @@ Rules:
         const immediate = actions.filter(a => !a.requiresConfirmation);
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
         if (immediate.length > 0) applyActions(immediate);
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+        // Skip empty bubbles — actions already do the work and will log a result pill
+        if (reply) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
         if (needsConfirm.length > 0) {
           setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
         }
