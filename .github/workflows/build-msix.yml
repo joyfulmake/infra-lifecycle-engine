@@ -98,12 +98,12 @@ jobs:
         shell: powershell
         run: |
           # Bundle the Vite build output into the MSIX so the app loads from
-          # ms-appx-web:/// with no network dependency — eliminates the cert-lab
+          # ms-appx-web:/// with no network dependency - eliminates the cert-lab
           # "unreachable CDN" failure that has blocked every submission so far.
           Copy-Item -Path "dist\*" -Destination "msix\" -Recurse -Force
           Write-Host "Copied dist/ contents to msix/"
 
-          # Remove sw.js from the package — the app loads from ms-appx-web://
+          # Remove sw.js from the package - the app loads from ms-appx-web://
           # with no network dependency, so a service worker is unnecessary.
           # More critically: a SW from a previous MSIX version can survive updates
           # in the WebView2 data folder and will crash the WebView2 renderer on
@@ -122,7 +122,7 @@ jobs:
           PUBLISHER_DISPLAY_NAME: ${{ github.event.inputs.publisher_display_name }}
           APP_VERSION:            ${{ github.event.inputs.app_version }}
         run: |
-          # Use XmlWriter so no encoding surprises — no BOM, no invisible chars
+          # Use XmlWriter so no encoding surprises - no BOM, no invisible chars
           $packageName          = $env:PACKAGE_NAME.Trim()
           $publisherId          = $env:PUBLISHER_ID.Trim()
           $publisherDisplayName = $env:PUBLISHER_DISPLAY_NAME.Trim()
@@ -211,7 +211,7 @@ jobs:
 
                 $w.WriteEndElement() # VisualElements
 
-                # ApplicationContentUriRules — packaged web app: app content is
+                # ApplicationContentUriRules - packaged web app: app content is
                 # served from ms-appx-web:/// (the MSIX bundle), not from a CDN.
                 # This eliminates cert-lab failures caused by unreachable *.pages.dev.
                 $w.WriteStartElement("ApplicationContentUriRules", $nsUap)
@@ -230,11 +230,11 @@ jobs:
 
             # Capabilities
             $w.WriteStartElement("Capabilities", $ns)
-              # Outbound internet — Firebase, Groq, Azure TTS, endoflife.date
+              # Outbound internet - Firebase, Groq, Azure TTS, endoflife.date
               $w.WriteStartElement("Capability", $ns)
               $w.WriteAttributeString("Name", "internetClient")
               $w.WriteEndElement()
-              # Microphone — SpeechRecognition API + WebView2 voice input in OpsMentor
+              # Microphone - SpeechRecognition API + WebView2 voice input in OpsMentor
               # Without this DeviceCapability Windows refuses mic access even if WebView2 requests it
               $w.WriteStartElement("DeviceCapability", $ns)
               $w.WriteAttributeString("Name", "microphone")
@@ -257,50 +257,60 @@ jobs:
       - name: Generate resources.pri
         shell: powershell
         run: |
-          # Index ONLY the images\ subdirectory (tile icons). Indexing the full msix\ root
-          # (which contains JS bundles, woff2 fonts, HTML etc.) can cause makepri to emit
-          # warnings or fail on binary file types, producing a corrupt resources.pri that
-          # causes "failed to install" at the Store. startIndexAt="\images" scopes it to
-          # the assets Windows cares about: tile bitmaps for the Start menu / tile catalog.
-          # PowerShell here-strings require column-1 content which breaks YAML indentation.
-          # Use a string array joined with newlines instead — safe inside YAML run blocks.
-          $priLines = @(
-            '<?xml version="1.0" encoding="utf-8"?>',
-            '<resources targetOsVersion="10.0.0" majorVersion="1">',
-            '  <packaging>',
-            '    <autoResourcePackage qualifier="Language" />',
-            '  </packaging>',
-            '  <index root="\" startIndexAt="\images">',
-            '    <default>',
-            '      <qualifier name="Language" value="en-US" />',
-            '    </default>',
-            '  </index>',
-            '</resources>'
-          )
-          ($priLines -join "`n") | Set-Content "msix\priconfig.xml" -Encoding utf8 -NoNewline
+          # Write priconfig.xml using XmlWriter (same pattern as AppxManifest step).
+          # Avoids all PowerShell string-quoting edge cases and em-dash encoding issues.
+          # Scopes indexing to \images only -- prevents corrupt .pri from JS/woff2 files.
+          $priPath = (Resolve-Path "msix").Path + "\priconfig.xml"
+          $xws = New-Object System.Xml.XmlWriterSettings
+          $xws.Indent = $true
+          $xws.IndentChars = "  "
+          $xws.Encoding = New-Object System.Text.UTF8Encoding($false)
+          $xws.OmitXmlDeclaration = $false
+          $pw = [System.Xml.XmlWriter]::Create($priPath, $xws)
+          $pw.WriteStartDocument()
+          $pw.WriteStartElement("resources")
+          $pw.WriteAttributeString("targetOsVersion", "10.0.0")
+          $pw.WriteAttributeString("majorVersion", "1")
+            $pw.WriteStartElement("packaging")
+              $pw.WriteStartElement("autoResourcePackage")
+              $pw.WriteAttributeString("qualifier", "Language")
+              $pw.WriteEndElement()
+            $pw.WriteEndElement()
+            $pw.WriteStartElement("index")
+            $pw.WriteAttributeString("root", "\")
+            $pw.WriteAttributeString("startIndexAt", "\images")
+              $pw.WriteStartElement("default")
+                $pw.WriteStartElement("qualifier")
+                $pw.WriteAttributeString("name", "Language")
+                $pw.WriteAttributeString("value", "en-US")
+                $pw.WriteEndElement()
+              $pw.WriteEndElement()
+            $pw.WriteEndElement()
+          $pw.WriteEndElement()
+          $pw.WriteEndDocument()
+          $pw.Flush()
+          $pw.Close()
+          Write-Host "priconfig.xml written to $priPath"
 
           $makepri = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
             -Recurse -Filter makepri.exe -ErrorAction SilentlyContinue |
             Sort-Object FullName -Descending | Select-Object -First 1
 
           if (-not $makepri) {
-            Write-Error "makepri.exe not found — resources.pri cannot be generated. Install Windows SDK 10."
+            Write-Error "makepri.exe not found - resources.pri cannot be generated"
             exit 1
           }
 
           Write-Host "makepri: $($makepri.FullName)"
-          # Do NOT run 'makepri createconfig' here — it would overwrite the carefully-crafted
-          # priconfig.xml above with a default one that indexes the full msix/ root, causing
-          # makepri to process JS bundles and woff2 fonts and produce a corrupt resources.pri.
           & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
-          if ($LASTEXITCODE -ne 0) { Write-Error "makepri new failed (exit $LASTEXITCODE)"; exit 1 }
+          if ($LASTEXITCODE -ne 0) { Write-Error "makepri failed (exit $LASTEXITCODE)"; exit 1 }
 
           if (-not (Test-Path "msix\resources.pri")) {
-            Write-Error "resources.pri was not generated — MSIX will fail to install"
+            Write-Error "resources.pri not generated"
             exit 1
           }
           $sz = (Get-Item "msix\resources.pri").Length
-          Write-Host "resources.pri generated: $sz bytes"
+          Write-Host "resources.pri OK - $sz bytes"
 
       - name: Package MSIX with MakeAppx
         shell: powershell
