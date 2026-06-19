@@ -234,10 +234,6 @@ jobs:
               $w.WriteStartElement("Capability", $ns)
               $w.WriteAttributeString("Name", "internetClient")
               $w.WriteEndElement()
-              # Bidirectional internet — WebView2 may need this for some WebSocket/push operations
-              $w.WriteStartElement("Capability", $ns)
-              $w.WriteAttributeString("Name", "internetClientServer")
-              $w.WriteEndElement()
               # Microphone — SpeechRecognition API + WebView2 voice input in OpsMentor
               # Without this DeviceCapability Windows refuses mic access even if WebView2 requests it
               $w.WriteStartElement("DeviceCapability", $ns)
@@ -291,9 +287,9 @@ jobs:
           }
 
           Write-Host "makepri: $($makepri.FullName)"
-          & $makepri.FullName createconfig /cf msix\priconfig.xml /dq en-US /pv 10.0.0 /o
-          if ($LASTEXITCODE -ne 0) { Write-Error "makepri createconfig failed (exit $LASTEXITCODE)"; exit 1 }
-
+          # Do NOT run 'makepri createconfig' here — it would overwrite the carefully-crafted
+          # priconfig.xml above with a default one that indexes the full msix/ root, causing
+          # makepri to process JS bundles and woff2 fonts and produce a corrupt resources.pri.
           & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
           if ($LASTEXITCODE -ne 0) { Write-Error "makepri new failed (exit $LASTEXITCODE)"; exit 1 }
 

@@ -33,7 +33,7 @@ export default function App() {
         <div
           className="flex-shrink-0 h-full overflow-hidden"
           style={{
-            width: mentorCollapsed ? '40px' : '360px',
+            width: mentorCollapsed ? '36px' : '360px',
             borderLeft: '1px solid rgba(13,148,136,0.18)',
             background: '#fff',
             transition: 'width 0.25s ease',

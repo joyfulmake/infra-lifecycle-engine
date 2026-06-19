@@ -242,6 +242,7 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange })
   const audioUnlockedRef    = useRef(false);
   const noSpeechTimerRef    = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
   const lastVoiceTextRef    = useRef('');   // dedup: ignore repeated transcripts within 3s
+  const userEditedInputRef  = useRef(false); // true when user typed manually during recording
   const lastVoiceTimeRef    = useRef(0);
   const lastSpokenExcerptRef = useRef('');  // dedup: don't speak same TTS text within 8s
   const lastSpokenExcerpTimeRef = useRef(0);
@@ -416,6 +417,10 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange })
           }
           await new Promise((resolve) => { source.onended = resolve; source.start(0); });
           currentAudioSourceRef.current = null;
+          // TTS finished — restart SR if it was paused for this clip and recording is still active
+          if (recordingRef.current && speechRecRef.current) {
+            try { speechRecRef.current.start(); } catch {}
+          }
           break; // success — move to next queue item
         } catch { /* network/decode error — try next URL */ }
       }
@@ -738,6 +743,20 @@ Rules:
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Cleanup all voice resources on unmount — prevents MediaStream leaks and
+  // state updates (setMessages, setInput) on an unmounted component.
+  useEffect(() => {
+    return () => {
+      clearTimeout(noSpeechTimerRef.current);
+      clearTimeout(silenceTimerRef.current);
+      clearTimeout(maxRecTimerRef.current);
+      if (speechRecRef.current) { try { speechRecRef.current.stop(); } catch {} speechRecRef.current = null; }
+      if (mediaRecorderRef.current?.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
+      if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
+      if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
+    };
+  }, []);
+
   // ── Action logging — watch key state transitions and auto-post log entries ──
   const prevState = useRef({
     isBuilt: false, scanComplete: false, designApplied: false,
@@ -954,6 +973,9 @@ Rules:
   const handleInputChange = useCallback((e) => {
     clearTimeout(inactivityTimerRef.current);
     nudgeSentRef.current = true; // suppress nudge once typing starts
+    // If the user types manually while SR is active, mark input as user-owned
+    // so interim voice transcripts don't clobber what they're writing.
+    if (recordingRef.current) userEditedInputRef.current = true;
     setInput(e.target.value);
   }, []);
 
@@ -1393,6 +1415,7 @@ Rules:
 
     rec.onstart = () => {
       setRecording(true); recordingRef.current = true; setRecStatus('listening…');
+      userEditedInputRef.current = false; // reset on each new SR session
       // If no speech result arrives in 8 s, the browser speech service isn't returning audio.
       // Escape to Whisper (MediaRecorder) which bypasses the browser speech cloud service.
       clearTimeout(noSpeechTimerRef.current);
@@ -1420,9 +1443,10 @@ Rules:
           processVoiceInput(t);
         }
       } else {
-        // Show live interim transcript in the input field so user sees real-time feedback
+        // Show live interim transcript in the input field so user sees real-time feedback.
+        // Skip if the user manually typed something during this SR session — don't clobber it.
         const interim = latest[0].transcript;
-        setInput(interim);
+        if (!userEditedInputRef.current) setInput(interim);
         setRecStatus(interim.slice(0, 60) + '…');
       }
     };
@@ -1470,6 +1494,10 @@ Rules:
       }
       setTimeout(() => {
         if (recordingRef.current && speechRecRef.current) {
+          // Don't restart SR while TTS is playing — SR would capture TTS audio as a voice
+          // command. The TTS completion handler (source.onended in runCartesiaQueue) restarts
+          // SR once audio finishes.
+          if (currentAudioSourceRef.current) return;
           try { speechRecRef.current.start(); } catch {}
         }
       }, 150);
