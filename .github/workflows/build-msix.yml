@@ -300,7 +300,7 @@ jobs:
             exit 1
           }
           $sz = (Get-Item "msix\resources.pri").Length
-          Write-Host "resources.pri generated ($sz bytes)"
+          Write-Host "resources.pri generated: $sz bytes"
 
       - name: Package MSIX with MakeAppx
         shell: powershell
