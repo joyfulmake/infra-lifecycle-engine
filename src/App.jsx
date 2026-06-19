@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import PhasePanel from './components/PhasePanel.jsx';
 import ExecOverview from './components/ExecOverview.jsx';
 import PmTabs from './components/PmTabs.jsx';
@@ -8,6 +9,7 @@ import { useAuth } from './lib/AuthContext.jsx';
 
 export default function App() {
   const { showAuthModal, setShowAuthModal, authModalReason } = useAuth();
+  const [mentorCollapsed, setMentorCollapsed] = useState(false);
 
   return (
     <>
@@ -27,12 +29,17 @@ export default function App() {
           </div>
         </div>
 
-        {/* OpsMentor — docked right panel, always present, avatar of the app */}
+        {/* OpsMentor — docked right panel; collapses to a 40px strip when minimized */}
         <div
           className="flex-shrink-0 h-full overflow-hidden"
-          style={{ width: '360px', borderLeft: '1px solid rgba(13,148,136,0.18)', background: '#fff' }}
+          style={{
+            width: mentorCollapsed ? '40px' : '360px',
+            borderLeft: '1px solid rgba(13,148,136,0.18)',
+            background: '#fff',
+            transition: 'width 0.25s ease',
+          }}
         >
-          <OrchestratorPanel docked />
+          <OrchestratorPanel docked onCollapsedChange={setMentorCollapsed} />
         </div>
       </div>
 

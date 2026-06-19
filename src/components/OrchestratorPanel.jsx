@@ -141,7 +141,7 @@ function WorkflowStrip({ items }) {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export default function OrchestratorPanel({ docked = false }) {
+export default function OrchestratorPanel({ docked = false, onCollapsedChange }) {
   const store = useStore();
   const { authUser } = useAuth();
 
@@ -218,6 +218,11 @@ export default function OrchestratorPanel({ docked = false }) {
   const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
   const [fullscreen,  setFullscreen]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(false);
+
+  // Notify parent (App.jsx) when collapsed state changes so container can resize
+  const onCollapsedChangeRef = useRef(onCollapsedChange);
+  onCollapsedChangeRef.current = onCollapsedChange;
+  useEffect(() => { onCollapsedChangeRef.current?.(collapsed); }, [collapsed]);
 
   const abortRef        = useRef(null);
   const inputRef        = useRef(null);
@@ -1388,18 +1393,19 @@ Rules:
 
     rec.onstart = () => {
       setRecording(true); recordingRef.current = true; setRecStatus('listening…');
-      // If no speech result arrives in 10 s, the browser speech service isn't working.
-      // Escape to Whisper (Groq) which is network-independent of browser speech service.
+      // If no speech result arrives in 8 s, the browser speech service isn't returning audio.
+      // Escape to Whisper (MediaRecorder) which bypasses the browser speech cloud service.
       clearTimeout(noSpeechTimerRef.current);
       noSpeechTimerRef.current = setTimeout(() => {
         if (!recordingRef.current) return;
         try { speechRecRef.current?.stop(); } catch {}
         speechRecRef.current = null;
         recordingRef.current = false;
+        setInput('');
         setMessages(m => [...m, { id: nextId(), role: 'log', text:
-          'Switching to Whisper — browser speech service returned nothing. Speak after the mic indicator turns blue.' }]);
+          'Browser speech service timed out. Switching to direct mic recording — speak clearly and pause when done.' }]);
         startWhisperRecording();
-      }, 3000);
+      }, 8000);
     };
 
     rec.onresult = (e) => {
@@ -1408,9 +1414,16 @@ Rules:
       const latest = e.results[e.results.length - 1];
       if (latest.isFinal) {
         const t = latest[0].transcript.trim();
-        if (t) { setRecStatus('listening…'); processVoiceInput(t); }
+        if (t) {
+          setInput(''); // clear interim text from input
+          setRecStatus('listening…');
+          processVoiceInput(t);
+        }
       } else {
-        setRecStatus(latest[0].transcript.slice(0, 60) + '…');
+        // Show live interim transcript in the input field so user sees real-time feedback
+        const interim = latest[0].transcript;
+        setInput(interim);
+        setRecStatus(interim.slice(0, 60) + '…');
       }
     };
 
@@ -1548,7 +1561,16 @@ Rules:
         transcribeFailCountRef.current = 0;
       } catch { /* try next */ }
     }
-    if (!transcribed) { transcribeFailCountRef.current++; }
+    if (!transcribed) {
+      transcribeFailCountRef.current++;
+      if (transcribeFailCountRef.current >= 2) {
+        // Two consecutive Whisper failures — tell the user voice isn't available
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+          'Voice transcription is unavailable in this session. All OpsMentor features work by typing — use the input box below.' }]);
+        stopRecording();
+        return;
+      }
+    }
     if (recordingRef.current) restartWhisperCapture();
   }
 
@@ -2221,11 +2243,31 @@ Rules:
             </button>
           </div>
 
-          {/* RACI context hint */}
+          {/* RACI context hint — email + resolved role label */}
           <div className="orch-footer px-4 pb-2.5 text-xs text-slate-400 flex-shrink-0">
-            {authUser
-              ? <><span className="font-medium text-slate-500">{authUser.email}</span>{s.requirements?.pmEmail === authUser.email ? ' · PM — full access' : ' · Role-based access active'}</>
-              : <span className="text-slate-400">Guest mode — sign in to save builds and execute actions</span>
+            {authUser ? (() => {
+              const pm = s.requirements?.pmEmail;
+              const pmBackup = s.requirements?.pmBackupEmail;
+              const email = authUser.email;
+              if (email === pm) return (
+                <><span className="font-medium text-slate-500">{email}</span><span className="text-teal-600"> · PM</span><span> — full access</span></>
+              );
+              if (email === pmBackup) return (
+                <><span className="font-medium text-slate-500">{email}</span><span className="text-teal-600"> · PM Backup</span><span> — full access</span></>
+              );
+              // Resolve actual RACI role(s) from roleAssignments
+              const assignments = s.roleAssignments || {};
+              const roles = Object.entries(assignments)
+                .filter(([, v]) => v?.email === email || v?.backup === email)
+                .map(([role, v]) => v?.backup === email ? `${role} (backup)` : role);
+              if (roles.length > 0) return (
+                <><span className="font-medium text-slate-500">{email}</span><span className="text-blue-600"> · {roles.slice(0, 2).join(', ')}</span></>
+              );
+              return (
+                <><span className="font-medium text-slate-500">{email}</span><span> · No role assigned in this build</span></>
+              );
+            })()
+            : <span className="text-slate-400">Guest mode — sign in to save builds and execute actions</span>
             }
           </div>
         </div>

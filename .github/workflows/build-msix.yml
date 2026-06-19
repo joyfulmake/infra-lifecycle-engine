@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '1.9.0.0'
+        default: '2.0.0.0'
 
 jobs:
   build-msix:
@@ -230,8 +230,18 @@ jobs:
 
             # Capabilities
             $w.WriteStartElement("Capabilities", $ns)
+              # Outbound internet — Firebase, Groq, Azure TTS, endoflife.date
               $w.WriteStartElement("Capability", $ns)
               $w.WriteAttributeString("Name", "internetClient")
+              $w.WriteEndElement()
+              # Bidirectional internet — WebView2 may need this for some WebSocket/push operations
+              $w.WriteStartElement("Capability", $ns)
+              $w.WriteAttributeString("Name", "internetClientServer")
+              $w.WriteEndElement()
+              # Microphone — SpeechRecognition API + WebView2 voice input in OpsMentor
+              # Without this DeviceCapability Windows refuses mic access even if WebView2 requests it
+              $w.WriteStartElement("DeviceCapability", $ns)
+              $w.WriteAttributeString("Name", "microphone")
               $w.WriteEndElement()
             $w.WriteEndElement()
 
@@ -251,32 +261,48 @@ jobs:
       - name: Generate resources.pri
         shell: powershell
         run: |
+          # Index ONLY the images\ subdirectory (tile icons). Indexing the full msix\ root
+          # (which contains JS bundles, woff2 fonts, HTML etc.) can cause makepri to emit
+          # warnings or fail on binary file types, producing a corrupt resources.pri that
+          # causes "failed to install" at the Store. startIndexAt="\images" scopes it to
+          # the assets Windows cares about: tile bitmaps for the Start menu / tile catalog.
           $priConfig = @"
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources targetOsVersion="10.0.0" majorVersion="1">
-            <packaging>
-              <autoResourcePackage qualifier="Language" />
-            </packaging>
-            <index root="\" startIndexAt="\">
-              <default>
-                <qualifier name="Language" value="en-US" />
-              </default>
-            </index>
-          </resources>
-          "@
-          $priConfig | Out-File -FilePath "msix\priconfig.xml" -Encoding utf8
+<?xml version="1.0" encoding="utf-8"?>
+<resources targetOsVersion="10.0.0" majorVersion="1">
+  <packaging>
+    <autoResourcePackage qualifier="Language" />
+  </packaging>
+  <index root="\" startIndexAt="\images">
+    <default>
+      <qualifier name="Language" value="en-US" />
+    </default>
+  </index>
+</resources>
+"@
+          $priConfig | Out-File -FilePath "msix\priconfig.xml" -Encoding utf8 -NoNewline
 
           $makepri = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
             -Recurse -Filter makepri.exe -ErrorAction SilentlyContinue |
             Sort-Object FullName -Descending | Select-Object -First 1
 
-          if ($makepri) {
-            Write-Host "makepri: $($makepri.FullName)"
-            & $makepri.FullName createconfig /cf msix\priconfig.xml /dq en-US /pv 10.0.0 /o
-            & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
-          } else {
-            Write-Host "makepri not found - store will handle resources"
+          if (-not $makepri) {
+            Write-Error "makepri.exe not found — resources.pri cannot be generated. Install Windows SDK 10."
+            exit 1
           }
+
+          Write-Host "makepri: $($makepri.FullName)"
+          & $makepri.FullName createconfig /cf msix\priconfig.xml /dq en-US /pv 10.0.0 /o
+          if ($LASTEXITCODE -ne 0) { Write-Error "makepri createconfig failed (exit $LASTEXITCODE)"; exit 1 }
+
+          & $makepri.FullName new /pr msix /cf msix\priconfig.xml /mn msix\AppxManifest.xml /of msix\resources.pri /o
+          if ($LASTEXITCODE -ne 0) { Write-Error "makepri new failed (exit $LASTEXITCODE)"; exit 1 }
+
+          if (-not (Test-Path "msix\resources.pri")) {
+            Write-Error "resources.pri was not generated — MSIX will fail to install"
+            exit 1
+          }
+          $sz = (Get-Item "msix\resources.pri").Length
+          Write-Host "resources.pri generated ($sz bytes)"
 
       - name: Package MSIX with MakeAppx
         shell: powershell
