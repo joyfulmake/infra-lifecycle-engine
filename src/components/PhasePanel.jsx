@@ -22,6 +22,8 @@ import {
   extractProductSlugs, formatEolDate,
 } from '../lib/uumKeywordDetect.js';
 import OrgPanel from './OrgPanel.jsx';
+import { useCompatCheck } from '../lib/useCompatCheck.js';
+import CompatWarning from './CompatWarning.jsx';
 
 const LOCK_ICON = (
   <svg className="w-3 h-3 opacity-60" fill="currentColor" viewBox="0 0 20 20">
@@ -765,6 +767,10 @@ export default function PhasePanel() {
   const { builds: savedBuilds, saveBuild, deleteBuild: deleteBuildDb, shareToTeam, org, setOrg, syncing, syncError, cloudEnabled, teamEnabled } = useBuildsDb(authUser);
   const [newCustomInc, setNewCustomInc] = useState({ title: '', desc: '', sev: 'HIGH', owner: '' });
   const [newCustomUUM, setNewCustomUUM] = useState({ title: '', desc: '', layer: 'os', type: 'upgrade' });
+  const [uumCompatOverride, setUumCompatOverride] = useState(false);
+  const { hits: uumCompatHits, clear: clearUumCompat } = useCompatCheck(
+    newCustomUUM.title + ' ' + newCustomUUM.desc, s.ctx
+  );
   const [newChange, setNewChange] = useState({ type: 'Emergency', title: '', datetime: '', desc: '', impact: 'High', owner: '' });
   const [aiSuggestBanner, setAiSuggestBanner] = useState(null); // { inc: [], uum: [] }
 
@@ -1541,10 +1547,20 @@ export default function PhasePanel() {
                       </select>
                     </div>
                   </div>
+                  {/* Inline compatibility warning */}
+                  <CompatWarning
+                    hits={uumCompatHits}
+                    overriding={uumCompatOverride}
+                    dark
+                    onOverride={() => setUumCompatOverride(true)}
+                    onDismiss={() => { setNewCustomUUM(p => ({ ...p, title: '', desc: '' })); setUumCompatOverride(false); }}
+                  />
                   <button
-                    className="btn-amber w-full mt-1"
+                    className={`btn-amber w-full mt-1 ${uumCompatHits.length > 0 && !uumCompatOverride ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={uumCompatHits.length > 0 && !uumCompatOverride}
                     onClick={async () => {
                       if (!newCustomUUM.title.trim()) return;
+                      if (uumCompatHits.length > 0 && !uumCompatOverride) return;
                       const id = `custom_uum_${Date.now()}`;
                       const uumTxt = newCustomUUM.title + ' ' + newCustomUUM.desc;
                       const finalLayers = detectLayersFromText(uumTxt);
@@ -1564,8 +1580,26 @@ export default function PhasePanel() {
                       };
                       s.addCustomUUM(entry);
                       s.toggleUUM(id);
+                      // Auto-RAID risk if user overrode a compat warning
+                      if (uumCompatOverride && uumCompatHits.length > 0) {
+                        uumCompatHits.forEach(rule => {
+                          const refs = (rule.refs || []).map(r => r.label).join('; ');
+                          s.addCustomRaidEntry({
+                            id: `compat-risk-${Date.now()}-${rule.id}`,
+                            type: 'RISK',
+                            severity: rule.severity === 'critical' ? 'CRITICAL' : 'HIGH',
+                            description: `[Compat Override] ${rule.title} — added custom UUM entry "${newCustomUUM.title.substring(0, 50)}" despite vendor restriction.`,
+                            mitigation: `Verify against vendor PAM before proceeding. Refs: ${refs}`,
+                            status: 'OPEN',
+                            owner: 'PM / Architect',
+                            addedAt: new Date().toISOString(),
+                          });
+                        });
+                      }
                       const saved = { title: newCustomUUM.title, desc: newCustomUUM.desc, layer: finalLayer, type: finalType };
                       setNewCustomUUM({ title: '', desc: '', layer: 'os', type: 'upgrade' });
+                      setUumCompatOverride(false);
+                      clearUumCompat();
                       setCustomUUMOpen(false);
                       if (GROQ_CONFIGURED) {
                         try {

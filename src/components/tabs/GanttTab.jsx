@@ -6,6 +6,7 @@ import { getRealTasks } from '../../lib/realTasks.js';
 import { buildDesignTasks } from '../../lib/designTasks.js';
 import { canUseFeature } from '../../lib/auth.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
+import { canManageSchedule } from '../../lib/roleAccess.js';
 import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
 import { enrichTaskWithGroq } from '../../lib/groq.js';
@@ -421,9 +422,9 @@ function TaskRow({ task, index, dates, override, onToggleEdit, expanded, maxHour
 
 const EMPTY_PERIOD = { type: 'freeze', label: '', start: '', end: '' };
 
-function ChangePeriodsPanel({ periods, onUpdate, requirements, onUpdateReq, totalHours, selRegions }) {
+function ChangePeriodsPanel({ periods, onUpdate, requirements, onUpdateReq, totalHours, selRegions, readOnly = false }) {
   const [open, setOpen] = useState(false);
-  const { projectStartDate, goLiveDate, hoursPerDay } = requirements;
+  const { projectStartDate, goLiveDate, hoursPerDay } = requirements || {};
   const hpd = parseInt(hoursPerDay || '8', 10);
 
   function addPeriod() {
@@ -506,10 +507,14 @@ function ChangePeriodsPanel({ periods, onUpdate, requirements, onUpdateReq, tota
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Change Freeze &amp; Break Periods</span>
-              <button
-                onClick={addPeriod}
-                className="text-xs text-teal border border-teal/30 rounded px-2 py-0.5 hover:bg-teal/5 transition-colors font-semibold"
-              >+ Add Period</button>
+              {readOnly ? (
+                <span className="text-xs text-slate-400 italic">PM/Deputy PM only</span>
+              ) : (
+                <button
+                  onClick={addPeriod}
+                  className="text-xs text-teal border border-teal/30 rounded px-2 py-0.5 hover:bg-teal/5 transition-colors font-semibold"
+                >+ Add Period</button>
+              )}
             </div>
 
             {periods.length === 0 && (
@@ -721,6 +726,7 @@ export default function GanttTab() {
   const { authUser } = useAuth();
   const [expandedTask, setExpandedTask] = useState(null);
   const canEdit = canUseFeature(authUser, 'save_builds');
+  const canSchedule = canManageSchedule(authUser, s.requirements);
 
   if (!s.designApplied) {
     return (
@@ -836,11 +842,12 @@ export default function GanttTab() {
       {/* Change periods + timeline */}
       <ChangePeriodsPanel
         periods={s.changePeriods}
-        onUpdate={s.setChangePeriods}
+        onUpdate={canSchedule ? s.setChangePeriods : undefined}
         requirements={s.requirements}
-        onUpdateReq={patch => s.setRequirements({ ...s.requirements, ...patch })}
+        onUpdateReq={canSchedule ? (patch => s.setRequirements({ ...s.requirements, ...patch })) : undefined}
         totalHours={rawTotal + uumTotal}
         selRegions={regions}
+        readOnly={!canSchedule}
       />
 
       {/* Incident/UUM scope */}

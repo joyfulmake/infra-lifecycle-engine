@@ -3,6 +3,10 @@ import { useStore } from '../../store/useStore.js';
 import { ALL_INC, FIXES } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import AgentInsights from '../AgentInsights.jsx';
+import { useCompatCheck } from '../../lib/useCompatCheck.js';
+import CompatWarning from '../CompatWarning.jsx';
+import { useAuth } from '../../lib/AuthContext.jsx';
+import { canEditRaidEntry } from '../../lib/roleAccess.js';
 
 const RAID_TYPES = {
   ISSUE: { color: 'badge-red', bg: 'bg-red-50' },
@@ -50,9 +54,16 @@ function RaidRow({ row, isCustom, onEdit, onDelete }) {
 
 export default function RaidTab() {
   const s = useStore();
+  const { authUser } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
+  const [compatOverride, setCompatOverride] = useState(false);
+
+  const canAddType = (type) => canEditRaidEntry(type, authUser, s.requirements);
+
+  // Live compat check on the description text being typed
+  const { hits: compatHits, clear: clearCompat } = useCompatCheck(form.description, s.ctx);
 
   if (!s.phase2Active) {
     return (
@@ -106,13 +117,33 @@ export default function RaidTab() {
   function handleSubmit(e) {
     e.preventDefault();
     if (!form.description.trim()) return;
+    // If compat hits exist and user hasn't overridden, block submit
+    if (compatHits.length > 0 && !compatOverride) return;
     if (editId) {
       s.updateCustomRaidEntry(editId, form);
       setEditId(null);
     } else {
       s.addCustomRaidEntry({ ...form, id: `raid-${Date.now()}`, addedAt: new Date().toISOString() });
+      // Auto-add RAID risk for each overridden compat issue
+      if (compatOverride && compatHits.length > 0) {
+        compatHits.forEach(rule => {
+          const refs = (rule.refs || []).map(r => r.label).join('; ');
+          s.addCustomRaidEntry({
+            id: `compat-risk-${Date.now()}-${rule.id}`,
+            type: 'RISK',
+            severity: rule.severity === 'critical' ? 'CRITICAL' : 'HIGH',
+            description: `[Compat Override] ${rule.title} — user proceeded despite vendor restriction.`,
+            mitigation: `Verify with vendor PAM. Refs: ${refs}`,
+            status: 'OPEN',
+            owner: 'PM / Architect',
+            addedAt: new Date().toISOString(),
+          });
+        });
+      }
     }
     setForm(EMPTY_FORM);
+    setCompatOverride(false);
+    clearCompat();
     setShowForm(false);
   }
 
@@ -132,7 +163,7 @@ export default function RaidTab() {
           <span className="badge badge-amber">{allRows.filter(r => r.type === 'RISK' || r.type === 'CHANGE').length} Risks/Changes</span>
           <span className="badge badge-slate">{allRows.filter(r => r.type === 'ASSUMPTION' || r.type === 'DEPENDENCY').length} A&D</span>
           <button
-            onClick={() => { setShowForm(!showForm); if (showForm) { setForm(EMPTY_FORM); setEditId(null); } }}
+            onClick={() => { setShowForm(!showForm); if (showForm) { setForm(EMPTY_FORM); setEditId(null); setCompatOverride(false); } }}
             className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition-colors"
           >
             {showForm ? '✕ Cancel' : '+ Add Entry'}
@@ -144,6 +175,11 @@ export default function RaidTab() {
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-4 mb-4 bg-teal-50 border border-teal-200 fade-in">
           <div className="text-xs font-semibold text-teal-700 mb-3">{editId ? 'Edit Entry' : 'New RAID Entry'}</div>
+          {!canAddType(form.type) && (
+            <div className="text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded px-3 py-2 mb-3">
+              {form.type} entries are restricted to PM or Deputy PM. Change the type or sign in as PM.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label className="block text-xs text-slate-500 mb-1">Type</label>
@@ -174,15 +210,34 @@ export default function RaidTab() {
           </div>
           <div className="mb-3">
             <label className="block text-xs text-slate-500 mb-1">Description *</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Describe the risk, issue, or assumption…" className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-800 resize-none" required />
+            <textarea
+              value={form.description}
+              onChange={e => { setForm(f => ({ ...f, description: e.target.value })); setCompatOverride(false); }}
+              rows={2}
+              placeholder="Describe the risk, issue, or assumption…"
+              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-800 resize-none"
+              required
+            />
+            <CompatWarning
+              hits={compatHits}
+              overriding={compatOverride}
+              onOverride={() => setCompatOverride(true)}
+              onDismiss={() => { setForm(f => ({ ...f, description: '' })); setCompatOverride(false); }}
+            />
           </div>
           <div className="mb-3">
             <label className="block text-xs text-slate-500 mb-1">Mitigation / Action</label>
             <textarea value={form.mitigation} onChange={e => setForm(f => ({ ...f, mitigation: e.target.value }))} rows={2} placeholder="What action mitigates this?" className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-800 resize-none" />
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="px-3 py-1.5 rounded bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700">{editId ? 'Update' : 'Add Entry'}</button>
-            <button type="button" onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setEditId(null); }} className="px-3 py-1.5 rounded bg-slate-100 text-slate-600 text-xs hover:bg-slate-200">Cancel</button>
+            <button
+              type="submit"
+              disabled={(compatHits.length > 0 && !compatOverride) || !canAddType(form.type)}
+              className="px-3 py-1.5 rounded bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {editId ? 'Update' : 'Add Entry'}
+            </button>
+            <button type="button" onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setEditId(null); setCompatOverride(false); clearCompat(); }} className="px-3 py-1.5 rounded bg-slate-100 text-slate-600 text-xs hover:bg-slate-200">Cancel</button>
           </div>
         </form>
       )}

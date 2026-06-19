@@ -2,9 +2,13 @@ import { useStore } from '../../store/useStore.js';
 import { ALL_INC } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import AgentInsights from '../AgentInsights.jsx';
+import { useAuth } from '../../lib/AuthContext.jsx';
+import { canEditPMLog } from '../../lib/roleAccess.js';
 
 export default function ExecSummaryTab() {
   const s = useStore();
+  const { authUser } = useAuth();
+  const pmLogEditable = canEditPMLog(authUser, s.requirements);
 
   const incSev = s.selInc.length > 5 ? 'CRITICAL' : s.selInc.length > 2 ? 'HIGH' : s.selInc.length > 0 ? 'MEDIUM' : 'CLEAR';
   const incColor = incSev === 'CRITICAL' ? 'text-red-600' : incSev === 'HIGH' ? 'text-red-500' : incSev === 'MEDIUM' ? 'text-amber-600' : 'text-green-600';
@@ -185,6 +189,32 @@ export default function ExecSummaryTab() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* PM Decision Log - restricted to PM / Deputy PM */}
+        <div className="card p-4 mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="text-xs font-bold text-slate-700 uppercase tracking-wide">PM Decision Log</div>
+            <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${pmLogEditable ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
+              {pmLogEditable ? 'Editable (PM)' : 'Read-only'}
+            </span>
+          </div>
+          <div className="text-xs text-slate-400 mb-2">
+            Freeform journal for PM decisions, escalations, approval context, and override rationale. Restricted to PM and Deputy PM.
+          </div>
+          {pmLogEditable ? (
+            <textarea
+              className="w-full text-xs border border-slate-200 rounded px-3 py-2 text-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-teal-400"
+              rows={5}
+              placeholder="Record decisions, approval context, scope changes, escalations, override rationale..."
+              value={s.requirements?.pmDecisionLog || ''}
+              onChange={e => s.setRequirements({ ...s.requirements, pmDecisionLog: e.target.value })}
+            />
+          ) : (
+            <div className="text-xs text-slate-500 border border-slate-100 bg-slate-50 rounded px-3 py-2 min-h-[80px] whitespace-pre-wrap">
+              {s.requirements?.pmDecisionLog || <span className="text-slate-300 italic">No PM notes yet.</span>}
+            </div>
+          )}
         </div>
       </div>
     </div>

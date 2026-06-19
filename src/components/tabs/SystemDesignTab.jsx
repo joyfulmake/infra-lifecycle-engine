@@ -7,6 +7,8 @@ import { useAuth } from '../../lib/AuthContext.jsx';
 import { canUseFeature } from '../../lib/auth.js';
 import { getUserRolesForBuild, canEditDesignSection } from '../../lib/roleAccess.js';
 import AgentInsights from '../AgentInsights.jsx';
+import { useCompatCheck } from '../../lib/useCompatCheck.js';
+import CompatWarning from '../CompatWarning.jsx';
 
 function SuggestDropdown({ suggestions, onSelect, anchorEl, activeIdx = -1 }) {
   const [pos, setPos] = useState(null);
@@ -59,6 +61,9 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
   const lockKey = `${sectionKey}.${fieldKey}`;
   const lockData = s.lockedDesignFields?.[lockKey];
   const isLocked = !!lockData;
+
+  // Compat check on the typed value against the current stack
+  const { hits: compatHits } = useCompatCheck(value, s.ctx, 500);
 
   function handleChange(val) {
     onChange(val);
@@ -146,6 +151,15 @@ function DesignField({ sectionKey, fieldKey, value, onChange, readOnly, techMode
               onSelect={v => { onChange(v); setSuggestions([]); setActiveIdx(-1); }}
               anchorEl={inputRef.current}
               activeIdx={activeIdx}
+            />
+          )}
+          {/* Inline compat warning — no block on design fields, just inform */}
+          {compatHits.length > 0 && (
+            <CompatWarning
+              hits={compatHits}
+              onOverride={null}
+              onDismiss={null}
+              dark={false}
             />
           )}
         </>

@@ -388,13 +388,13 @@ export function runCoherenceChecks(state) {
       });
     }
 
-    // Also scan custom UUM entry text — catches hand-typed entries like "Sybase migration on RHEL Power"
+    // Scan custom UUM/incident text
     const customTextHits = [];
     for (const entry of [...customUUM, ...customInc]) {
       const text = [entry.short, entry.txt, entry.description].filter(Boolean).join(' ');
       const hits = checkCompatibilityForText(text, ctx);
       for (const rule of hits) {
-        if (stackHits.find(r => r.id === rule.id)) continue; // already flagged from stack
+        if (stackHits.find(r => r.id === rule.id)) continue;
         if (customTextHits.find(h => h.ruleId === rule.id && h.entryId === entry.id)) continue;
         customTextHits.push({ ruleId: rule.id, entryId: entry.id, entry, rule });
       }
@@ -410,6 +410,30 @@ export function runCoherenceChecks(state) {
         action: `Ref: ${refLinks}`,
         compatRule: rule,
       });
+    }
+
+    // Scan system design field values — catches e.g. "Sybase" typed into a db field
+    // when the OS is RHEL Power, even if the build ctx db field was not set explicitly
+    const sysDesign = state.sysDesignData || {};
+    const designSeenRules = new Set([...stackHits.map(r => r.id), ...customTextHits.map(h => h.ruleId)]);
+    for (const [secKey, fields] of Object.entries(sysDesign)) {
+      for (const [fieldKey, val] of Object.entries(fields || {})) {
+        if (!val || String(val).trim().length < 4) continue;
+        const hits = checkCompatibilityForText(String(val), ctx);
+        for (const rule of hits) {
+          if (designSeenRules.has(rule.id)) continue;
+          designSeenRules.add(rule.id);
+          const refLinks = (rule.refs || []).map(r => r.label).join(' · ');
+          alerts.push({
+            id: `compat_design_${rule.id}_${secKey}_${fieldKey}`,
+            severity: 'warn',
+            tabs: ['design'],
+            message: `System Design [${secKey}/${fieldKey}]: ${rule.title}`,
+            action: `Ref: ${refLinks}`,
+            compatRule: rule,
+          });
+        }
+      }
     }
   }
 

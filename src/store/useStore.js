@@ -180,6 +180,7 @@ export const useStore = create((set, get) => ({
     loadProfile: '', dataVolume: '', compliance: '', drTier: 'Tier 1', constraints: '',
     projectStartDate: '', changeFreezeStart: '', changeFreezeEnd: '', holidays: '',
     hoursPerDay: '8', pmEmail: '', pmBackupEmail: '',
+    pmDecisionLog: '', // PM-only freeform decision journal (restricted edit)
   },
 
   // Regions in scope
