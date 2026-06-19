@@ -5,6 +5,7 @@ import { getUserRolesForBuild, canEditDesignSection, isQATeamLead } from './role
 import { runSmartScan } from './smartScan.js';
 import { getDefaultDesignValues } from './designDefaults.js';
 import { useStore } from '../store/useStore.js';
+import { checkCompatibility } from './compatibilityRules.js';
 
 // ── Permission check ──────────────────────────────────────────────────────────
 // Returns { allowed: true } or { allowed: false, reason: string }
@@ -335,5 +336,11 @@ export function buildStateContext(s, authUser) {
     isPM,
     userRoles,
     userEmail: authUser?.email || 'guest',
+    // Vendor compatibility issues for the selected stack — surfaced to LLM as explicit context
+    compatIssues: checkCompatibility(s.ctx || {}).map(r => ({
+      title: r.title,
+      severity: r.severity,
+      refs: (r.refs || []).map(rf => rf.label + ' — ' + rf.url),
+    })),
   };
 }

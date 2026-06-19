@@ -93,8 +93,32 @@ export default function AgentInsights({ tab }) {
               className={`w-0.5 rounded-full flex-shrink-0 mt-0.5 self-stretch ${alert.severity === 'warn' ? 'bg-amber-400' : 'bg-blue-400'}`}
             />
             <div className="min-w-0 flex-1">
-              <div className={`text-xs ${bodyCls}`}>{alert.message}</div>
-              {alert.action && (
+              <div className={`text-xs font-semibold ${bodyCls}`}>{alert.message}</div>
+
+              {/* Compatibility rule — show full detail + authoritative references */}
+              {alert.compatRule && (
+                <div className="mt-1.5 space-y-1">
+                  <div className={`text-xs ${bodyCls} opacity-80 leading-relaxed`}>
+                    {alert.compatRule.detail}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {(alert.compatRule.refs || []).map((ref, i) => (
+                      <a
+                        key={i}
+                        href={ref.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 transition-colors"
+                        title={ref.url}
+                      >
+                        <span>↗</span> {ref.label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!alert.compatRule && alert.action && (
                 <div className={`text-xs mt-0.5 font-medium ${mutedCls}`}>&#8594; {alert.action}</div>
               )}
               {alert.fix?.length > 0 && (

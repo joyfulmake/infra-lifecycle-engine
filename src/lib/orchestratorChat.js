@@ -5,6 +5,7 @@
 import { CARTESIA_WORKER_URL } from './cartesia.js';
 import { generateScript } from './orchestratorScripts.js';
 import { computeAllRisks, riskScore, riskLabel } from './riskEngine.js';
+import { checkCompatibility, checkCompatibilityForText } from './compatibilityRules.js';
 
 // ── Relative date parser — understands natural language date inputs ────────────
 // Returns ISO "YYYY-MM-DD" string or null if not recognised.
@@ -996,6 +997,27 @@ export function ruleBasedResponse(message, s, authUser) {
   if (/\b(can i|share|send|paste|copy|enter|input|type|add|provide)\b/.test(m) && /\b(here|this|requirement|detail|value|info)\b/.test(m)) {
     const next = nextPhase1Prompt(s);
     return { reply: `Absolutely — just type it directly. For example:\n• "hardware is Dell PowerEdge R750"\n• "OS is RHEL 8.6"\n• "project name is Server Migration Q3"\n\n${next || 'All Phase 1 fields look complete — ask me anything else.'}` };
+  }
+
+  // ── Compatibility question — check selected stack + free text ────────────────
+  if (/\b(compat|support(ed)?|certif|can.*run|will.*work|platform|pam|matrix)\b/.test(m)) {
+    const hits = checkCompatibility(s.ctx || {});
+    if (hits.length > 0) {
+      const bullets = hits.map(r => {
+        const sev = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ Warning' : 'ℹ Info';
+        const refs = (r.refs || []).map(rf => `${rf.label} — ${rf.url}`).join('; ');
+        return `${sev}: ${r.title}\n${r.detail}\nRef: ${refs}`;
+      }).join('\n\n');
+      return {
+        reply: `Compatibility issues detected for the current stack (${s.ctx?.hw}/${s.ctx?.os}/${s.ctx?.db}/${s.ctx?.app}):\n\n${bullets}\n\nThese are documented vendor platform restrictions — not opinions. Address them before provisioning.`,
+      };
+    }
+    // If no hits but question was asked, reassure
+    if (s.ctx?.hw || s.ctx?.os || s.ctx?.db) {
+      return {
+        reply: `No known vendor platform conflicts for the current stack (${[s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join('/')}). Compatibility checks run against SAP, Oracle, Microsoft, IBM, and Red Hat product availability matrices.`,
+      };
+    }
   }
 
   // Unrecognised — let Groq handle free-form questions with full context

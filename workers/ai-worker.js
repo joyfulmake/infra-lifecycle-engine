@@ -428,6 +428,7 @@ Tasks stale: ${context.tasksStale} | RTM stale: ${context.rtmStale}
 Active alerts: ${(context.alerts || []).join('; ') || 'none'}
 Assigned roles: ${context.assignedRoles || 'none'}
 Design sections filled: ${context.filledDesignSections || 'none'}
+${(context.compatIssues || []).length > 0 ? `\nVENDOR COMPATIBILITY ISSUES DETECTED (from certified vendor PAMs — treat these as blockers):\n${(context.compatIssues || []).map((c, i) => `${i+1}. [${c.severity.toUpperCase()}] ${c.title}\n   Refs: ${(c.refs || []).join('; ')}`).join('\n')}` : ''}
 
 USER: ${context.userEmail}
 ${rolesDesc}

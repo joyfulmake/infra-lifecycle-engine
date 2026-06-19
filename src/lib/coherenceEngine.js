@@ -1,5 +1,6 @@
 import { ALL_INC } from './incidents.js';
 import { ALL_UUM } from './uumItems.js';
+import { checkCompatibility, checkCompatibilityForText } from './compatibilityRules.js';
 
 function hasLayer(code, layer, customInc) {
   const inc = ALL_INC.find(i => i.code === code) || (customInc || []).find(c => c.code === code);
@@ -362,6 +363,52 @@ export function runCoherenceChecks(state) {
         tabs: ['diagram'],
         message: `${migrationEntries.length} custom migration task(s) defined — inject Phase 2 in the sidebar to add them to the Gantt, RTM, and Matrix.`,
         action: 'Phase 2 injection in left sidebar',
+      });
+    }
+  }
+
+  // ── Check 15: Vendor platform compatibility (DB × OS × HW × App) ────────────
+  // Runs on any built stack and also scans custom UUM/incident text descriptions.
+  {
+    const ctx = state.ctx || {};
+    const customUUM = state.customUUM || [];
+    const customInc = state.customInc || [];
+
+    // Check the selected stack against the compatibility rule DB
+    const stackHits = checkCompatibility(ctx);
+    for (const rule of stackHits) {
+      const refLinks = (rule.refs || []).map(r => r.label).join(' · ');
+      alerts.push({
+        id: `compat_${rule.id}`,
+        severity: rule.severity === 'critical' ? 'warn' : 'info',
+        tabs: ['design', 'diagram', 'exec'],
+        message: `${rule.title}. ${rule.detail.split('.')[0]}.`,
+        action: `Ref: ${refLinks}`,
+        compatRule: rule, // full rule available to AgentInsights for deep display
+      });
+    }
+
+    // Also scan custom UUM entry text — catches hand-typed entries like "Sybase migration on RHEL Power"
+    const customTextHits = [];
+    for (const entry of [...customUUM, ...customInc]) {
+      const text = [entry.short, entry.txt, entry.description].filter(Boolean).join(' ');
+      const hits = checkCompatibilityForText(text, ctx);
+      for (const rule of hits) {
+        if (stackHits.find(r => r.id === rule.id)) continue; // already flagged from stack
+        if (customTextHits.find(h => h.ruleId === rule.id && h.entryId === entry.id)) continue;
+        customTextHits.push({ ruleId: rule.id, entryId: entry.id, entry, rule });
+      }
+    }
+    for (const { entry, rule } of customTextHits) {
+      const refLinks = (rule.refs || []).map(r => r.label).join(' · ');
+      const entryName = entry.short || entry.code || entry.txt || 'custom entry';
+      alerts.push({
+        id: `compat_custom_${rule.id}_${entry.id || entry.code}`,
+        severity: 'warn',
+        tabs: ['design', 'diagram'],
+        message: `"${entryName}": ${rule.title}`,
+        action: `Ref: ${refLinks}`,
+        compatRule: rule,
       });
     }
   }
