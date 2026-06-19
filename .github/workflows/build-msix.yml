@@ -262,20 +262,22 @@ jobs:
           # warnings or fail on binary file types, producing a corrupt resources.pri that
           # causes "failed to install" at the Store. startIndexAt="\images" scopes it to
           # the assets Windows cares about: tile bitmaps for the Start menu / tile catalog.
-          $priConfig = @"
-<?xml version="1.0" encoding="utf-8"?>
-<resources targetOsVersion="10.0.0" majorVersion="1">
-  <packaging>
-    <autoResourcePackage qualifier="Language" />
-  </packaging>
-  <index root="\" startIndexAt="\images">
-    <default>
-      <qualifier name="Language" value="en-US" />
-    </default>
-  </index>
-</resources>
-"@
-          $priConfig | Out-File -FilePath "msix\priconfig.xml" -Encoding utf8 -NoNewline
+          # PowerShell here-strings require column-1 content which breaks YAML indentation.
+          # Use a string array joined with newlines instead — safe inside YAML run blocks.
+          $priLines = @(
+            '<?xml version="1.0" encoding="utf-8"?>',
+            '<resources targetOsVersion="10.0.0" majorVersion="1">',
+            '  <packaging>',
+            '    <autoResourcePackage qualifier="Language" />',
+            '  </packaging>',
+            '  <index root="\" startIndexAt="\images">',
+            '    <default>',
+            '      <qualifier name="Language" value="en-US" />',
+            '    </default>',
+            '  </index>',
+            '</resources>'
+          )
+          ($priLines -join "`n") | Set-Content "msix\priconfig.xml" -Encoding utf8 -NoNewline
 
           $makepri = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
             -Recurse -Filter makepri.exe -ErrorAction SilentlyContinue |
