@@ -232,6 +232,619 @@ export const COMPAT_RULES = [
     check: ({ db, os }) =>
       /postgres|postgresql|pgSQL/i.test(db) && /aix/i.test(os),
   },
+
+  // ── EOL Operating Systems ──────────────────────────────────────────────────
+  {
+    id: 'rhel_centos_6_eol',
+    severity: 'critical',
+    vendor: 'Red Hat / CentOS',
+    product: 'RHEL 6 / CentOS 6',
+    title: 'RHEL 6 / CentOS 6: EOL November 2020 — permanently unpatched CVEs',
+    detail:
+      'Red Hat Enterprise Linux 6 reached End of Life in November 2020. All CVEs discovered after ' +
+      'that date will never receive official patches, creating an indefinitely growing unpatched ' +
+      'attack surface. Extended Life Cycle Support (ELS) ended in November 2024 — even paid ELS ' +
+      'subscribers no longer receive patches. Migrate to RHEL 8 or RHEL 9 immediately.',
+    refs: [
+      { label: 'RHEL life cycle — Red Hat', url: 'https://access.redhat.com/support/policy/updates/errata/' },
+      { label: 'RHEL product life cycles', url: 'https://access.redhat.com/product-life-cycles/?product=Red%20Hat%20Enterprise%20Linux' },
+    ],
+    check: ({ os }) => /rhel.?6|centos.?6|red.?hat.{0,20}linux.?6/i.test(os),
+  },
+  {
+    id: 'rhel_centos_7_eol',
+    severity: 'critical',
+    vendor: 'Red Hat / CentOS',
+    product: 'RHEL 7 / CentOS 7',
+    title: 'RHEL 7 / CentOS 7: EOL June 2024 — mainstream support ended',
+    detail:
+      'Red Hat Enterprise Linux 7 mainstream support ended June 30, 2024. CentOS 7 also reached ' +
+      'full EOL on the same date with no Extended Life Cycle Support available. After EOL, no new ' +
+      'CVE patches are published to standard channels. Paid Red Hat ELS provides limited security ' +
+      'patches until June 2028 but does not restore full support coverage. Plan migration to RHEL 8 or RHEL 9.',
+    refs: [
+      { label: 'RHEL 7 life cycle', url: 'https://access.redhat.com/support/policy/updates/errata/' },
+      { label: 'CentOS 7 EOL announcement', url: 'https://blog.centos.org/2023/04/end-dates-are-coming-for-centos-stream-8-and-centos-linux-7/' },
+    ],
+    check: ({ os }) => /rhel.?7|centos.?7|red.?hat.{0,20}linux.?7/i.test(os),
+  },
+  {
+    id: 'ubuntu_1804_eol',
+    severity: 'critical',
+    vendor: 'Canonical',
+    product: 'Ubuntu 18.04 LTS (Bionic Beaver)',
+    title: 'Ubuntu 18.04 LTS: standard support EOL April 2023 — community edition fully unpatched',
+    detail:
+      'Ubuntu 18.04 LTS (Bionic Beaver) standard security maintenance ended April 2023. ' +
+      "Canonical's Extended Security Maintenance (ESM) covers only a narrowed set of packages " +
+      'through April 2028 for paid Ubuntu Pro subscribers — community-edition deployments receive ' +
+      'no patches at all after April 2023. Upgrade to Ubuntu 22.04 LTS (Jammy) or 24.04 LTS (Noble).',
+    refs: [
+      { label: 'Ubuntu release lifecycle', url: 'https://ubuntu.com/about/release-cycle' },
+      { label: 'Ubuntu 18.04 ESM details', url: 'https://ubuntu.com/security/esm' },
+    ],
+    check: ({ os }) => /ubuntu.?18|ubuntu.?bionic/i.test(os),
+  },
+  {
+    id: 'windows_server_2012_eol',
+    severity: 'critical',
+    vendor: 'Microsoft',
+    product: 'Windows Server 2012 / 2012 R2',
+    title: 'Windows Server 2012 / 2012 R2: EOL October 2023 — no more security patches',
+    detail:
+      'Microsoft ended Extended Support for Windows Server 2012 and 2012 R2 on October 10, 2023. ' +
+      'No further security patches are released for on-premises deployments. Paid Extended Security ' +
+      'Updates (ESU) via Azure Arc are available until October 2026 but require enrollment and ' +
+      'additional licensing. Deployments not enrolled in ESU are permanently unpatched. Migrate to Windows Server 2022.',
+    refs: [
+      { label: 'Windows Server 2012 lifecycle', url: 'https://learn.microsoft.com/en-us/lifecycle/products/windows-server-2012' },
+      { label: 'Windows Server 2012 R2 lifecycle', url: 'https://learn.microsoft.com/en-us/lifecycle/products/windows-server-2012-r2' },
+    ],
+    check: ({ os }) => /windows.{0,10}(server.{0,5})?2012/i.test(os),
+  },
+  {
+    id: 'aix_71_eol',
+    severity: 'critical',
+    vendor: 'IBM',
+    product: 'IBM AIX 7.1',
+    title: 'AIX 7.1: IBM support ended September 2023 — no further security PTFs',
+    detail:
+      'IBM AIX 7.1 reached End of Support on April 30, 2023 (standard), with extended date of ' +
+      'September 2023. No further security PTFs (patches) or new TL/SP levels are released. ' +
+      'Running workloads on AIX 7.1 exposes the platform to unpatched OS-level vulnerabilities. ' +
+      'Upgrade to AIX 7.2 (supported through May 2025) or AIX 7.3.',
+    refs: [
+      { label: 'IBM AIX support lifecycle', url: 'https://www.ibm.com/support/pages/aix-support-lifecycle-information' },
+      { label: 'IBM software lifecycle tool', url: 'https://www.ibm.com/support/pages/ibm-software-product-lifecycle' },
+    ],
+    check: ({ os }) => /aix.?7\.1(\b|$)|aix 7\.1/i.test(os),
+  },
+
+  // ── EOL Database Versions ──────────────────────────────────────────────────
+  {
+    id: 'postgres_11_eol',
+    severity: 'critical',
+    vendor: 'PostgreSQL Global Development Group',
+    product: 'PostgreSQL 11',
+    title: 'PostgreSQL 11: EOL November 2023 — no security fixes released after this date',
+    detail:
+      'PostgreSQL 11 reached its end-of-life on November 9, 2023. The PostgreSQL GDG no longer ' +
+      'issues security advisories or patch releases for PG 11. Any CVE affecting the PostgreSQL ' +
+      'engine after November 2023 will remain unpatched. Upgrade to PostgreSQL 15 or 16 ' +
+      '(both in active support with security releases).',
+    refs: [
+      { label: 'PostgreSQL versioning policy', url: 'https://www.postgresql.org/support/versioning/' },
+    ],
+    check: ({ db }) => /postgres(ql)?.?11(\b|$)/i.test(db),
+  },
+  {
+    id: 'postgres_12_eol',
+    severity: 'critical',
+    vendor: 'PostgreSQL Global Development Group',
+    product: 'PostgreSQL 12',
+    title: 'PostgreSQL 12: EOL November 2024 — no further patches',
+    detail:
+      'PostgreSQL 12 reached end-of-life on November 14, 2024. No new security patches or bug ' +
+      'fixes will be issued for this major version. Distributions that shipped PG 12 as their ' +
+      'default (e.g., Ubuntu 20.04, RHEL 8 via SCL) may provide distro-backported patches, but ' +
+      'these are not guaranteed. Upgrade to PostgreSQL 16 or 17.',
+    refs: [
+      { label: 'PostgreSQL versioning policy', url: 'https://www.postgresql.org/support/versioning/' },
+    ],
+    check: ({ db }) => /postgres(ql)?.?12(\b|$)/i.test(db),
+  },
+  {
+    id: 'mysql_57_eol',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'MySQL 5.7',
+    title: 'MySQL 5.7: EOL October 2023 — active CVEs permanently unaddressed',
+    detail:
+      'Oracle ended support for MySQL 5.7 on October 31, 2023. All security vulnerabilities ' +
+      'discovered after that date remain unpatched in the 5.7 branch, including known privilege ' +
+      'escalation and authentication bypass CVEs (e.g., CVE-2023-21980) that will not be ' +
+      'backported. Upgrade to MySQL 8.0 (LTS) or MySQL 8.4.',
+    refs: [
+      { label: 'MySQL 5.7 end of life', url: 'https://endoflife.date/mysql' },
+      { label: 'MySQL lifecycle policy', url: 'https://www.mysql.com/support/supportedplatforms/database.html' },
+    ],
+    check: ({ db }) => /mysql.?5\.7/i.test(db),
+  },
+  {
+    id: 'oracle_12c_eol',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle Database 12c',
+    title: 'Oracle DB 12c: Premier Support ended July 2022 (12.1) / Dec 2022 (12.2) — Extended Support expiring',
+    detail:
+      'Oracle Database 12.1.0.2 Premier Support ended July 2022; 12.2.0.1 ended December 2022. ' +
+      'Extended Support (paid add-on) runs through March 2025 (12.1) and December 2025 (12.2). ' +
+      'After Extended Support ends, Sustaining Support only — no new patches or CVE fixes are ' +
+      'issued. New OS certifications and security patches have already stopped. Migrate to Oracle 19c (LTS, supported until 2027).',
+    refs: [
+      { label: 'Oracle Lifetime Support Policy — Database', url: 'https://www.oracle.com/us/assets/lifetime-support-technology-069183.pdf' },
+      { label: 'Oracle DB support dates (MOS Doc 742060.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+    ],
+    check: ({ db }) => /oracle.{0,10}12c|oracle.{0,10}12\.1|oracle.{0,10}12\.2/i.test(db),
+  },
+  {
+    id: 'mssql_2012_eol',
+    severity: 'critical',
+    vendor: 'Microsoft',
+    product: 'SQL Server 2012',
+    title: 'SQL Server 2012: EOL July 2022 — no security patches since',
+    detail:
+      'Microsoft SQL Server 2012 reached End of Extended Support on July 12, 2022. No security ' +
+      'updates, hotfixes, or compliance updates are issued. Paid ESU via Azure Arc was available ' +
+      'for three years (through July 2025) and is also expiring. Any deployment not migrated is ' +
+      'running with a multi-year backlog of unpatched vulnerabilities. Migrate to SQL Server 2022.',
+    refs: [
+      { label: 'SQL Server 2012 lifecycle', url: 'https://learn.microsoft.com/en-us/lifecycle/products/sql-server-2012' },
+      { label: 'SQL Server ESU details', url: 'https://learn.microsoft.com/en-us/sql/sql-server/end-of-support/sql-server-extended-security-updates' },
+    ],
+    check: ({ db }) => /sql.?server.?2012|mssql.?2012/i.test(db),
+  },
+  {
+    id: 'mssql_2014_eol',
+    severity: 'critical',
+    vendor: 'Microsoft',
+    product: 'SQL Server 2014',
+    title: 'SQL Server 2014: EOL July 2024 — extended support ended',
+    detail:
+      'SQL Server 2014 Extended Support ended on July 9, 2024. No new security patches are issued ' +
+      'for standard deployments. Extended Security Updates (ESU) can be purchased through July 2027 ' +
+      'for on-premises deployments enrolled via Azure Arc, but require additional Microsoft ' +
+      'licensing. Migrate to SQL Server 2019 or SQL Server 2022.',
+    refs: [
+      { label: 'SQL Server 2014 lifecycle', url: 'https://learn.microsoft.com/en-us/lifecycle/products/sql-server-2014' },
+    ],
+    check: ({ db }) => /sql.?server.?2014|mssql.?2014/i.test(db),
+  },
+
+  // ── EOL Middleware / Application Servers ───────────────────────────────────
+  {
+    id: 'apache_httpd_22_eol',
+    severity: 'critical',
+    vendor: 'Apache Software Foundation',
+    product: 'Apache HTTP Server 2.2',
+    title: 'Apache HTTP Server 2.2: EOL December 2017 — years of unpatched CVEs accumulating',
+    detail:
+      'Apache HTTP Server 2.2 reached end of life on December 31, 2017. All security ' +
+      'vulnerabilities discovered since then are permanently unpatched on the 2.2 branch, ' +
+      'including numerous critical CVEs covering path traversal, remote code execution, and DoS. ' +
+      'The 2.2 branch predates HTTP/2 and TLS 1.3 support entirely. Upgrade to Apache 2.4 immediately.',
+    refs: [
+      { label: 'Apache HTTP Server end of life', url: 'https://httpd.apache.org/dev/roadmap.html' },
+      { label: 'Apache HTTP Server supported versions', url: 'https://httpd.apache.org/' },
+    ],
+    check: ({ app }) =>
+      /apache.{0,10}(http.?server|httpd).?2\.2|httpd.?2\.2|apache.?2\.2/i.test(app),
+  },
+  {
+    id: 'tomcat_85_eol',
+    severity: 'critical',
+    vendor: 'Apache Software Foundation',
+    product: 'Apache Tomcat 8.5',
+    title: 'Apache Tomcat 8.5: EOL March 2024 — no further security releases',
+    detail:
+      'Apache Tomcat 8.5 reached end of life on March 31, 2024. The ASF will no longer provide ' +
+      'patches, security fixes, or community support for this branch. Tomcat 8.5 uses the ' +
+      'javax.* namespace (Java EE 8) and does not support Jakarta EE 9+ APIs. Upgrade to ' +
+      'Tomcat 10.1 (Jakarta EE 10) or Tomcat 9.0 (still active, javax.* namespace).',
+    refs: [
+      { label: 'Apache Tomcat 8.5 EOL notice', url: 'https://tomcat.apache.org/tomcat-85-eol.html' },
+      { label: 'Tomcat supported versions', url: 'https://tomcat.apache.org/whichversion.html' },
+    ],
+    check: ({ app }) => /tomcat.?8\.5/i.test(app),
+  },
+  {
+    id: 'php_7x_eol',
+    severity: 'critical',
+    vendor: 'The PHP Group',
+    product: 'PHP 7.x',
+    title: 'PHP 7.x: EOL November 2022 — all 7.x branches permanently unpatched',
+    detail:
+      'All PHP 7.x releases (7.0 through 7.4) reached end of life by November 28, 2022. The PHP ' +
+      'Group no longer issues security advisories or patches for any PHP 7.x branch. PHP 7.x is ' +
+      'missing security backports for numerous CVEs including type juggling, deserialization, and ' +
+      'memory corruption vulnerabilities fixed in PHP 8.x. Upgrade to PHP 8.1 (security through December 2025) or PHP 8.3.',
+    refs: [
+      { label: 'PHP supported versions', url: 'https://www.php.net/supported-versions.php' },
+      { label: 'PHP EOL dates', url: 'https://www.php.net/eol.php' },
+    ],
+    check: ({ app }) => /php.?7\.[0-9]/i.test(app),
+  },
+  {
+    id: 'java8_rhel9',
+    severity: 'warn',
+    vendor: 'Red Hat',
+    product: 'Java 8 / OpenJDK 8',
+    title: 'Java 8 (OpenJDK 8) is not in RHEL 9 default repos — use Java 11/17/21',
+    detail:
+      'RHEL 9 ships OpenJDK 11, 17, and 21 as the supported Java runtimes. OpenJDK 8 is not ' +
+      "available from Red Hat's standard RHEL 9 repositories. Third-party distributions " +
+      '(Adoptium Temurin, Amazon Corretto, Azul Zulu) provide Java 8 for RHEL 9, but running ' +
+      'an unofficial JDK may create support gaps for your application vendor. Validate that your ' +
+      'middleware vendor supports Java 11+ on RHEL 9 before migrating.',
+    refs: [
+      { label: 'RHEL 9 OpenJDK packages', url: 'https://access.redhat.com/documentation/en-us/openjdk/11/html/installing_and_using_openjdk_11_on_rhel/' },
+      { label: 'RHEL 9 application compatibility', url: 'https://access.redhat.com/solutions/6966842' },
+    ],
+    check: ({ app, os }) =>
+      /java.?8|jdk.?8|openjdk.?8|jre.?8/i.test(app) &&
+      /rhel.?9|red.?hat.{0,20}linux.?9|rhel 9/i.test(os),
+  },
+  {
+    id: 'jboss_eap_6x_eol',
+    severity: 'critical',
+    vendor: 'Red Hat',
+    product: 'JBoss EAP 6.x',
+    title: 'JBoss EAP 6.x: EOL June 2023 — no security patches for Java EE 6 platform',
+    detail:
+      'Red Hat JBoss Enterprise Application Platform 6.x (based on JBoss AS 7 / Java EE 6) ' +
+      'reached end of life on June 30, 2023. Red Hat no longer provides security patches, errata, ' +
+      'or technical support for EAP 6.x. EAP 6 relies on the Java EE 6 spec and predates Jakarta ' +
+      'EE — applications must be migrated to EAP 7.4 or EAP 8.0 (Jakarta EE 10).',
+    refs: [
+      { label: 'JBoss EAP 6 lifecycle', url: 'https://access.redhat.com/support/policy/updates/jboss_notes/' },
+      { label: 'JBoss EAP supported configurations', url: 'https://access.redhat.com/articles/2026253' },
+    ],
+    check: ({ app }) => /jboss.{0,10}eap.?6|eap.?6\.[0-9]/i.test(app),
+  },
+
+  // ── ARM64 / Architecture Gaps ──────────────────────────────────────────────
+  {
+    id: 'sap_hana_arm64',
+    severity: 'critical',
+    vendor: 'SAP',
+    product: 'SAP HANA',
+    title: 'SAP HANA does not support ARM64 (aarch64) — x86_64 and IBM POWER only',
+    detail:
+      'SAP HANA is certified exclusively on x86_64 and IBM POWER (big-endian AIX, little-endian ' +
+      'RHEL for Power). No ARM64 (aarch64) build has ever been released. Deploying HANA on ' +
+      'Graviton, Ampere, or any other ARM-based server is unsupported and will fail at the SAP ' +
+      'kernel installation phase. Use certified x86_64 (Intel Xeon, AMD EPYC) or IBM Power LE hardware.',
+    refs: [
+      { label: 'SAP HANA platform availability matrix (PAM)', url: 'https://support.sap.com/en/my-support/software-downloads/support-package-stacks/product-versions.html' },
+      { label: 'SAP HANA hardware directory', url: 'https://www.sap.com/dmc/exp/2014-09-02-hana-hardware/enEN/#/solutions?filters=v:deCertified' },
+    ],
+    check: ({ db, app, hw }) =>
+      /sap.?hana|hana.?db/i.test((db || '') + ' ' + (app || '')) &&
+      /arm|aarch64|graviton|ampere/i.test(hw),
+  },
+  {
+    id: 'ibm_mq_arm64',
+    severity: 'critical',
+    vendor: 'IBM',
+    product: 'IBM MQ',
+    title: 'IBM MQ 9.3 has no ARM64 (aarch64) Linux build',
+    detail:
+      'IBM MQ does not provide an ARM64 (aarch64) binary for Linux as of IBM MQ 9.3 LTS. ' +
+      'Supported Linux architectures are x86_64, ppc64le (Power LE), and s390x (IBM Z). ' +
+      'IBM MQ on ARM64 cloud instances (AWS Graviton, Oracle Ampere) is not supported. Use ' +
+      'an x86_64 instance for IBM MQ, or migrate to a cloud-native message queue if ARM64 is a hard requirement.',
+    refs: [
+      { label: 'IBM MQ system requirements', url: 'https://www.ibm.com/support/pages/system-requirements-ibm-mq' },
+      { label: 'IBM MQ 9.3 supported platforms', url: 'https://www.ibm.com/docs/en/ibm-mq/9.3?topic=mq-system-requirements' },
+    ],
+    check: ({ app, hw }) =>
+      /ibm.?mq|websphere.?mq|wmq/i.test(app) &&
+      /arm|aarch64|graviton|ampere/i.test(hw),
+  },
+  {
+    id: 'weblogic_arm64',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle WebLogic Server',
+    title: 'Oracle WebLogic is not certified on Linux ARM64 (aarch64)',
+    detail:
+      'Oracle WebLogic Server certification covers x86_64 Linux (RHEL, OEL, SLES) and Windows ' +
+      'x64. ARM64 (aarch64) Linux has no WebLogic certification as of WebLogic 14.1.2. While the ' +
+      'JVM itself runs on ARM64, WebLogic native libraries (node manager, Coherence adapters) and ' +
+      "Oracle's support contract are x86_64 only. Running WebLogic on ARM64 is unsupported and may void your Oracle support entitlement.",
+    refs: [
+      { label: 'WebLogic Server certification matrix', url: 'https://www.oracle.com/middleware/technologies/fusion-certification.html' },
+      { label: 'Oracle WebLogic 14c supported configurations', url: 'https://www.oracle.com/middleware/technologies/weblogic/weblogic-certification.html' },
+    ],
+    check: ({ app, hw }) =>
+      /weblogic/i.test(app) &&
+      /arm|aarch64|graviton|ampere/i.test(hw),
+  },
+  {
+    id: 'sap_ase_arm64',
+    severity: 'critical',
+    vendor: 'SAP',
+    product: 'SAP ASE (Sybase)',
+    title: 'SAP ASE (Sybase) has no ARM64 build — x86_64, AIX Power BE, and Windows only',
+    detail:
+      'SAP Adaptive Server Enterprise 16.x ships binaries for x86_64 Linux, AIX (IBM Power, ' +
+      'big-endian), and Windows x64. No ARM64 (aarch64) binary is provided. Attempting to ' +
+      'install SAP ASE on an ARM64 Linux server (Graviton, Ampere) will fail with ' +
+      '"wrong ELF class: ELFCLASS64 (architecture mismatch)" errors at install time.',
+    refs: [
+      { label: 'SAP ASE Product Availability Matrix', url: 'https://support.sap.com/content/dam/launchpad/en_us/pam/pam-essentials/SAP_PAM_ASE.pdf' },
+    ],
+    check: ({ db, hw }) =>
+      /sybase|sap.?ase|adaptive.?server/i.test(db) &&
+      /arm|aarch64|graviton|ampere/i.test(hw),
+  },
+  {
+    id: 'informatica_arm64',
+    severity: 'warn',
+    vendor: 'Informatica',
+    product: 'Informatica PowerCenter',
+    title: 'Informatica PowerCenter is not certified on ARM64 (aarch64)',
+    detail:
+      'Informatica PowerCenter and IDMC on-premises components are certified only on x86_64 ' +
+      'Linux and Windows. No ARM64 Linux certification exists as of PowerCenter 10.5.3. Running ' +
+      'PowerCenter on ARM-based instances (Graviton, Ampere) is unsupported; native code ' +
+      'components in the PowerCenter Data Integration Service will fail to load.',
+    refs: [
+      { label: 'Informatica PowerCenter system requirements', url: 'https://docs.informatica.com/data-integration/powercenter/10-5-3/installation-and-configuration-guide/powercenter-installation/before-you-begin.html' },
+    ],
+    check: ({ app, hw }) =>
+      /informatica|powercenter/i.test(app) &&
+      /arm|aarch64|graviton|ampere/i.test(hw),
+  },
+
+  // ── OS / Application Version Matrix ───────────────────────────────────────
+  {
+    id: 'oracle_19c_rhel7_min',
+    severity: 'warn',
+    vendor: 'Oracle',
+    product: 'Oracle Database 19c',
+    title: 'Oracle DB 19c requires RHEL 7.5+ (kernel 3.10.0-514.el7+) — earlier RHEL 7.x fails prereqs',
+    detail:
+      'Oracle Database 19c installation prerequisites include RHEL 7.5 or later ' +
+      '(kernel 3.10.0-514.el7+). On RHEL 7.0–7.4, the Oracle Universal Installer (OUI) ' +
+      'prerequisite checks will fail due to missing library versions and kernel parameter defaults. ' +
+      'The oracheck / orachk tool will report FAILED for glibc and compat-libstdc++ on RHEL 7 releases earlier than 7.5.',
+    refs: [
+      { label: 'Oracle DB 19c installation guide — Linux (Doc 2669806.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=2669806.1' },
+      { label: 'Oracle DB 19c certification matrix', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+    ],
+    check: ({ db, os }) =>
+      /oracle.{0,10}19c|oracle.{0,10}19\.0/i.test(db) &&
+      /rhel.?7\.[0-4]\b|red.?hat.{0,20}linux.?7\.[0-4]\b/i.test(os),
+  },
+  {
+    id: 'websphere_855_rhel8_fixpack',
+    severity: 'warn',
+    vendor: 'IBM',
+    product: 'IBM WebSphere Application Server Traditional 8.5.5',
+    title: 'WebSphere Traditional 8.5.5 on RHEL 8: requires fix pack 8.5.5.18+ for Glibc 2.28',
+    detail:
+      'IBM WebSphere Application Server Traditional 8.5.5 fix packs prior to 8.5.5.18 were ' +
+      'built against Glibc 2.17 (RHEL 7 baseline) and fail with SIGILL or dynamic linker errors ' +
+      'on RHEL 8 (Glibc 2.28). Fix pack 8.5.5.18 and later are required for RHEL 8 compatibility. ' +
+      'WebSphere Liberty 22.0.0.12+ has native RHEL 8 support without this restriction.',
+    refs: [
+      { label: 'WebSphere 8.5.5 system requirements', url: 'https://www.ibm.com/support/pages/websphere-application-server-85-system-requirements' },
+      { label: 'IBM tech note: WAS 8.5.5 on RHEL 8', url: 'https://www.ibm.com/support/pages/websphere-application-server-traditional-rhel-8' },
+    ],
+    check: ({ app, os }) =>
+      /websphere/i.test(app) &&
+      /rhel.?8|red.?hat.{0,20}linux.?8/i.test(os),
+  },
+  {
+    id: 'db2_115_rhel9_fixpack',
+    severity: 'warn',
+    vendor: 'IBM',
+    product: 'IBM Db2 LUW 11.5',
+    title: 'IBM Db2 11.5 on RHEL 9: requires fix pack 11.5.8+ for Glibc 2.34 compatibility',
+    detail:
+      'IBM Db2 LUW 11.5 fix packs prior to 11.5.8 were not built against RHEL 9\'s Glibc 2.34 ' +
+      'baseline. Earlier fix packs fail during instance creation (db2icrt) with "cannot open ' +
+      'shared object file" errors for libstdc++ and libpam. Db2 11.5.8 (GA December 2022) is ' +
+      'the minimum supported fix pack for RHEL 9.',
+    refs: [
+      { label: 'Db2 LUW 11.5 supported operating systems', url: 'https://www.ibm.com/support/pages/db2-luw-supported-operating-systems' },
+      { label: 'Db2 11.5 fix pack history', url: 'https://www.ibm.com/support/pages/db2-distributed-fix-pack-central' },
+    ],
+    check: ({ db, os }) =>
+      /db2.{0,10}11\.5|ibm.?db2/i.test(db) &&
+      /rhel.?9|red.?hat.{0,20}linux.?9/i.test(os),
+  },
+  {
+    id: 'tomcat_10_javax_break',
+    severity: 'critical',
+    vendor: 'Apache Software Foundation',
+    product: 'Apache Tomcat 10.x',
+    title: 'Tomcat 10.x uses Jakarta EE 9+ namespace (jakarta.*) — javax.* apps will not deploy',
+    detail:
+      'Apache Tomcat 10.0 and later moved from the Java EE javax.* package namespace to the ' +
+      'Jakarta EE jakarta.* namespace. Applications compiled against Tomcat 9.x or earlier ' +
+      '(javax.servlet, javax.ws.rs, etc.) will fail to load on Tomcat 10.x with ' +
+      'ClassNotFoundException or NoClassDefFoundError. Apps must be recompiled with Jakarta EE 9+ ' +
+      'dependencies (e.g., jakarta.servlet-api) before deploying to Tomcat 10.x.',
+    refs: [
+      { label: 'Tomcat 10.x migration guide', url: 'https://tomcat.apache.org/migration-10.html' },
+      { label: 'Jakarta EE 9 namespace change', url: 'https://jakarta.ee/specifications/servlet/5.0/' },
+    ],
+    check: ({ app }) => /tomcat.?10/i.test(app),
+  },
+
+  // ── Storage / Backup / Network / Security Design Rules ─────────────────────
+  {
+    id: 'nfs_v3_oracle_rac',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle RAC / NFS',
+    title: 'NFS v3 is not supported for Oracle RAC shared storage — use NFS v4.1 with dNFS or OCFS2',
+    detail:
+      'Oracle does not support NFS version 3 as shared storage for Oracle Real Application ' +
+      'Clusters (RAC). The locking semantics required for RAC shared disk access are only ' +
+      'guaranteed by NFS v4.1 with the Oracle Direct NFS (dNFS) client, or by OCFS2 (Oracle ' +
+      'Cluster File System 2). NFS v3 with Oracle RAC can result in silent data corruption due to ' +
+      'insufficient cache coherence guarantees between RAC nodes.',
+    refs: [
+      { label: 'Oracle RAC storage best practices (Doc 359515.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=359515.1' },
+      { label: 'Direct NFS Client configuration guide', url: 'https://docs.oracle.com/en/database/oracle/oracle-database/19/racad/using-direct-nfs.html' },
+    ],
+    check: ({ db, os, app }) =>
+      /oracle/i.test(db) &&
+      /rac|real.?application.?cluster/i.test(db + ' ' + os + ' ' + app) &&
+      /nfs.?v?3\b|nfs\s+version\s+3/i.test(os + ' ' + app),
+  },
+  {
+    id: 'oracle_asm_zfs',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle ASM / ZFS',
+    title: 'Oracle ASM is not supported on ZFS volumes — requires raw disks, LVM, or EXT4/XFS',
+    detail:
+      'Oracle Automatic Storage Management (ASM) is not certified on ZFS volumes (including ZFS ' +
+      "on Linux via OpenZFS or Oracle Solaris ZFS). ASM requires direct block device access and " +
+      "does not interoperate with ZFS's copy-on-write semantics. Attempting to create ASM disk " +
+      'groups on ZFS-backed LUNs risks silent data corruption and an unsupported configuration. ' +
+      'Use raw block devices, LVM physical volumes, or EXT4/XFS filesystems for ASM candidate disks.',
+    refs: [
+      { label: 'Oracle ASM administration guide', url: 'https://docs.oracle.com/en/database/oracle/oracle-database/19/ostmg/asm-intro.html' },
+      { label: 'Oracle MOS Note: ASM disk group requirements (Doc 265633.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=265633.1' },
+    ],
+    check: ({ db, os, hw }) =>
+      /oracle/i.test(db) &&
+      /\basm\b|automatic.?storage/i.test(db + ' ' + os + ' ' + hw) &&
+      /\bzfs\b/i.test(os + ' ' + hw),
+  },
+  {
+    id: 'veeam_v10_rhel9',
+    severity: 'critical',
+    vendor: 'Veeam',
+    product: 'Veeam Backup & Replication v10',
+    title: 'Veeam Backup & Replication v10 is not compatible with RHEL 9 — requires v12+',
+    detail:
+      'Veeam Backup & Replication version 10 (and v11) does not support RHEL 9 as a protected ' +
+      'workload or as a Linux Backup Repository host. The Veeam transport agent for Linux requires ' +
+      'Glibc 2.28+ compatibility which was added in Veeam B&R v12. Running Veeam v10 agents on ' +
+      'RHEL 9 will fail with transport service start errors. Upgrade to Veeam B&R v12 or later.',
+    refs: [
+      { label: 'Veeam B&R v12 system requirements', url: 'https://www.veeam.com/kb2182' },
+      { label: 'Veeam support lifecycle policy', url: 'https://www.veeam.com/product-lifecycle.html' },
+    ],
+    check: ({ app, os }) =>
+      /veeam.{0,15}(v?10|10\.)/i.test(app) &&
+      /rhel.?9|red.?hat.{0,20}linux.?9/i.test(os),
+  },
+  {
+    id: 'fips_oracle_12c',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle Database 12c / FIPS 140-2',
+    title: 'Oracle DB 12c is not FIPS-140-2 compliant on modern RHEL FIPS policies',
+    detail:
+      'Oracle Database 12c does not fully support the RHEL system-wide FIPS 140-2 cryptographic ' +
+      'policy. Enabling FIPS mode on RHEL 7.4+ with Oracle 12c causes ORA-28890 errors (FIPS mode ' +
+      'required) or SSL/TLS handshake failures because Oracle 12c\'s network encryption layer does ' +
+      'not interoperate with OpenSSL\'s FIPS provider. Oracle DB 19c with FIPS_MODE=TRUE is required ' +
+      'for compliant operation; Oracle Advanced Security TDE has additional FIPS key management requirements.',
+    refs: [
+      { label: 'Oracle DB 19c FIPS configuration (Doc 2739354.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=2739354.1' },
+      { label: 'RHEL 9 FIPS 140-2 compliance guide', url: 'https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/security_hardening/assembly_installing-the-system-in-fips-mode_security-hardening' },
+    ],
+    check: ({ db, os }) =>
+      /oracle.{0,10}12c|oracle.{0,10}12\.[12]/i.test(db) &&
+      /fips/i.test(os),
+  },
+  {
+    id: 'oracle_listener_ipv6_only',
+    severity: 'warn',
+    vendor: 'Oracle',
+    product: 'Oracle Database Net Listener',
+    title: 'Oracle DB listener does not support IPv6-only networks without dual-stack configuration',
+    detail:
+      'The Oracle Net listener (lsnrctl) defaults to IPv4 binding. In an IPv6-only environment ' +
+      '(no IPv4 stack), the listener will fail to start or bind to an unexpected interface unless ' +
+      'LOCAL_LISTENER is explicitly set with an IPv6 address format ' +
+      '(e.g., (ADDRESS=(PROTOCOL=TCP)(HOST=::1)(PORT=1521))). Oracle 19c on RHEL 9 with IPv6-only ' +
+      'networking requires listener.ora and tnsnames.ora entries to use square-bracket IPv6 notation.',
+    refs: [
+      { label: 'Oracle Net Services admin guide — listener configuration', url: 'https://docs.oracle.com/en/database/oracle/oracle-database/19/netag/enabling-advanced-features-of-oracle-net-services.html' },
+    ],
+    check: ({ db, os, hw }) =>
+      /oracle/i.test(db) &&
+      /ipv6.?only|ipv6-only|ipv6\s+only/i.test(os + ' ' + hw),
+  },
+
+  // ── Hardware Platform Restrictions ─────────────────────────────────────────
+  {
+    id: 'ibm_power_vmware',
+    severity: 'critical',
+    vendor: 'VMware / Broadcom',
+    product: 'VMware vSphere',
+    title: 'VMware vSphere does not support IBM Power (ppc64le) — use PowerVM LPAR or KVM',
+    detail:
+      'VMware vSphere (ESXi) has never supported IBM Power processors (ppc64le or ppc64be). IBM ' +
+      'Power virtualization is provided by PowerVM (LPARs) for production enterprise workloads or ' +
+      'KVM for open-source use. Specifying VMware as the hypervisor on Power hardware means the ' +
+      'environment will not build — ESXi simply has no ppc64 port. Use IBM PowerVM (LPAR) for enterprise SLAs.',
+    refs: [
+      { label: 'VMware vSphere hardware compatibility guide', url: 'https://www.vmware.com/resources/compatibility/search.php' },
+      { label: 'IBM PowerVM overview', url: 'https://www.ibm.com/products/powervm' },
+    ],
+    check: ({ hw, app }) =>
+      /power|ibm.?power|ppc|ppc64/i.test(hw) &&
+      /vmware|vsphere|esxi/i.test(app),
+  },
+  {
+    id: 'itanium_ia64_eol',
+    severity: 'critical',
+    vendor: 'Multiple vendors',
+    product: 'Itanium (ia64)',
+    title: 'Itanium (ia64): all major enterprise vendors dropped support — no viable DB/OS/middleware stack',
+    detail:
+      'Intel discontinued the Itanium processor in 2021. HP-UX on Itanium ended support in ' +
+      'December 2022. All major database vendors dropped Itanium support before this — Oracle DB ' +
+      'last supported ia64 in 12c; SAP HANA never supported ia64; SQL Server dropped ia64 in 2012. ' +
+      'No modern enterprise middleware (WebSphere, JBoss EAP 7+) ships ia64 binaries. An Itanium ' +
+      'target has no viable enterprise stack available.',
+    refs: [
+      { label: 'Intel Itanium end of life', url: 'https://www.intel.com/content/www/us/en/support/articles/000055892/processors.html' },
+      { label: 'HP-UX on Itanium lifecycle', url: 'https://h20195.www2.hpe.com/V2/GetDocument.aspx?docname=a00113958enw' },
+    ],
+    check: ({ hw, os }) =>
+      /itanium|ia64/i.test(hw + ' ' + os),
+  },
+  {
+    id: 'sparc_enterprise_limited',
+    severity: 'warn',
+    vendor: 'Oracle',
+    product: 'Oracle SPARC / Solaris',
+    title: 'SPARC T-series: Oracle Solaris is the only enterprise-supported OS — Linux on SPARC has no enterprise DB/middleware certification',
+    detail:
+      'Oracle SPARC T-series servers run Oracle Solaris as their enterprise-supported OS. Linux ' +
+      'on SPARC (Debian, Ubuntu, Gentoo SPARC ports) exists as community projects but has zero ' +
+      'enterprise vendor certifications for databases, middleware, or backup agents. Oracle DB is ' +
+      'certified on Solaris/SPARC but not Linux/SPARC; WebLogic and WebSphere have no Linux/SPARC ' +
+      'build. If SPARC is a hard requirement, use Oracle Solaris and the Solaris-certified software stack.',
+    refs: [
+      { label: 'Oracle Solaris support lifecycle', url: 'https://www.oracle.com/a/ocom/docs/oracle-solaris-support-policy.pdf' },
+      { label: 'Oracle DB on Solaris SPARC certification', url: 'https://www.oracle.com/us/assets/lifetime-support-technology-069183.pdf' },
+    ],
+    check: ({ hw, os }) =>
+      /sparc/i.test(hw) &&
+      /linux|rhel|ubuntu|centos/i.test(os),
+  },
 ];
 
 /**

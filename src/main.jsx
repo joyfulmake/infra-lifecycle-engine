@@ -1,9 +1,6 @@
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@fontsource/inter/400.css'
-import '@fontsource/inter/500.css'
-import '@fontsource/inter/600.css'
-import '@fontsource/inter/700.css'
+// Inter loaded via Google Fonts link tag in index.html
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './lib/AuthContext.jsx'
@@ -25,14 +22,12 @@ if ('serviceWorker' in navigator) {
   }
 }
 
-// Prevent unhandled promise rejections from terminating the WebView2 renderer.
-// Firebase, IndexedDB, and other async APIs may reject on restricted origins.
-window.addEventListener('unhandledrejection', (e) => {
-  e.preventDefault();
-});
-
-// Prevent synchronous JS errors from crashing the WebView2 renderer process.
-window.onerror = () => true;
+// In the MSIX packaged context: prevent unhandled errors from crashing WebView2.
+// Only suppress in ms-appx-web: — in the browser, let errors surface normally.
+if (window.location.href.startsWith('ms-appx-web:')) {
+  window.addEventListener('unhandledrejection', (e) => { e.preventDefault(); });
+  window.onerror = () => true;
+}
 
 // Root error boundary — prevents a React render crash from showing a blank screen
 class AppErrorBoundary extends Component {
