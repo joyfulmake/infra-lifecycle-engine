@@ -350,9 +350,9 @@ async function tryElevenLabsTts(text, env) {
 // Azure Cognitive Services TTS — free tier: 500k chars/month Neural TTS (F0 plan)
 // Set AZURE_TTS_KEY + AZURE_TTS_REGION (e.g. "eastus") in worker env vars.
 // Voices: en-US-JennyNeural, en-US-AriaNeural, en-US-GuyNeural (all free tier)
-async function tryAzureTts(text, env) {
+async function tryAzureTts(text, env, voiceOverride) {
   if (!env.AZURE_TTS_KEY || !env.AZURE_TTS_REGION) return null;
-  const voice = env.AZURE_TTS_VOICE || 'en-US-JennyNeural';
+  const voice = voiceOverride || env.AZURE_TTS_VOICE || 'en-US-JennyNeural';
   const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'><voice name='${voice}'><prosody rate='0.95'>${text.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</prosody></voice></speak>`;
   try {
     const res = await fetch(`https://${env.AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
@@ -372,11 +372,12 @@ async function tryAzureTts(text, env) {
 }
 
 async function handleCartesiaTts(req, env) {
-  const { text, voiceId, speed, emotion } = await req.json().catch(() => ({}));
+  const { text, voiceId, speed, emotion, azureVoice } = await req.json().catch(() => ({}));
   if (!text) return err('text is required');
 
-  // Azure Neural TTS is primary — free tier, natural human voice, no credit consumption
-  const azure = await tryAzureTts(text, env);
+  // Azure Neural TTS is primary. azureVoice overrides the default so callers can select
+  // a specific Neural voice per speaker (e.g. en-US-GuyNeural for Alex, JennyNeural for Jordan).
+  const azure = await tryAzureTts(text, env, azureVoice);
   if (azure) return azure;
 
   // Cartesia Sonic-2 fallback (credits-based)

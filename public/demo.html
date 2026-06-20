@@ -348,9 +348,15 @@ html,body{height:100%;background:#08101e;color:#e2e8f0;
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
 const WORKER = 'https://opsmanifest-ai.sriram-c76-254.workers.dev';
+// Cartesia voice IDs (used when Azure is unavailable)
 const VOICES = {
   alex:   'b7d50908-b17c-442d-ad8d-810c63997ed9',
   jordan: '694f9389-aac1-45b6-b726-9d9369183238',
+};
+// Azure Neural voices — distinct per speaker so voices don't bleed across characters
+const AZURE_VOICES = {
+  alex:   'en-US-GuyNeural',    // male, Infrastructure Lead
+  jordan: 'en-US-JennyNeural',  // female, Solutions Architect
 };
 
 // ── Script (10 scenes, 20 lines) ──────────────────────────────────────────────
@@ -429,7 +435,7 @@ async function fetchAudio(line) {
     const res = await fetch(`${WORKER}/cartesia-tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: line.text, voiceId: VOICES[line.speaker], speed: 'normal', emotion: [] }),
+      body: JSON.stringify({ text: line.text, voiceId: VOICES[line.speaker], azureVoice: AZURE_VOICES[line.speaker], speed: 'normal', emotion: [] }),
       signal: AbortSignal.timeout(14000),
     });
     if (!res.ok) return null;

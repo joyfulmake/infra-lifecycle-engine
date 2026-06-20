@@ -320,29 +320,54 @@ export function ruleBasedResponse(message, s, authUser) {
   // extraction so "oracle from aix power to RH power" correctly targets RHEL Power.
   const inlineCompatHits = checkCompatibilityForText(raw, s.ctx || {});
   if (inlineCompatHits.length > 0) {
-    const criticals = inlineCompatHits.filter(r => r.severity === 'critical');
-    const warnings  = inlineCompatHits.filter(r => r.severity === 'warn');
     const bullets = inlineCompatHits.map(r => {
       const sev  = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ WARNING' : 'ℹ Info';
       const refs = (r.refs || []).slice(0, 2).map(rf => `  → ${rf.label}`).join('\n');
       return `${sev}: ${r.title}\n${r.detail}${refs ? '\n' + refs : ''}`;
     }).join('\n\n');
-    const raidActions = inlineCompatHits
-      .filter(r => r.severity === 'critical' || r.severity === 'warn')
-      .map(r => ({
-        type: 'ADD_RAID_ENTRY',
-        description: `Log compat risk: ${r.title}`,
-        params: {
-          type: 'RISK',
-          severity: r.severity === 'critical' ? 'CRITICAL' : 'HIGH',
-          description: `[Vendor Compat] ${r.title}`,
-          mitigation: `Verify against vendor PAM before provisioning. Refs: ${(r.refs || []).map(rf => rf.label).join('; ')}`,
-        },
-        requiresConfirmation: true,
-      }));
+
+    const actions = [];
+
+    inlineCompatHits.forEach(r => {
+      // For every critical/warn hit: offer to log it in the RAID log
+      if (r.severity === 'critical' || r.severity === 'warn') {
+        actions.push({
+          type: 'ADD_RAID_ENTRY',
+          description: `Log compat risk: ${r.title}`,
+          params: {
+            type: 'RISK',
+            severity: r.severity === 'critical' ? 'CRITICAL' : 'HIGH',
+            description: `[Vendor Compat] ${r.title}`,
+            mitigation: `Verify against vendor PAM before provisioning. Refs: ${(r.refs || []).map(rf => rf.label).join('; ')}`,
+          },
+          requiresConfirmation: true,
+        });
+      }
+
+      // For rules with compatible alternatives: offer SET_CTX switch (requires confirmation)
+      if (r.compatFix?.alternatives?.length) {
+        r.compatFix.alternatives.forEach(alt => {
+          actions.push({
+            type: 'SET_CTX',
+            description: `Switch to ${alt.label}`,
+            params: { key: alt.ctxKey, value: alt.ctxValue },
+            requiresConfirmation: true,
+            confirmLabel: `Use ${alt.ctxValue}`,
+          });
+        });
+      }
+    });
+
+    const hasAlternatives = inlineCompatHits.some(r => r.compatFix?.alternatives?.length);
+    const altSummary = hasAlternatives
+      ? '\n\nI can switch your ' +
+        [...new Set(inlineCompatHits.flatMap(r => (r.compatFix?.alternatives || []).map(a => a.ctxKey)))].join('/') +
+        ' to a compatible alternative — select one of the options above, or specify one yourself.'
+      : '\n\nIf you proceed, document this in the RAID log. Say "raise as incident" to also create a tracked incident for remediation.';
+
     return {
-      reply: `Vendor compatibility issue detected in what you typed:\n\n${bullets}\n\nThese are published vendor platform restrictions — not opinions. If you proceed, this must be documented in the RAID log as a risk.`,
-      actions: raidActions.length > 0 ? raidActions : undefined,
+      reply: `Vendor compatibility issue detected:\n\n${bullets}${altSummary}`,
+      actions: actions.length > 0 ? actions : undefined,
     };
   }
 
@@ -810,8 +835,103 @@ export function ruleBasedResponse(message, s, authUser) {
     };
   }
 
+  // ── "Raise as incident" — "raise as incident", "log as incident", "create incident for this" ──
+  // Creates a custom incident from the current compat hits or the stack's EOL issues.
+  // Works standalone (raise all current compat issues) or with freeform text describing the issue.
+  {
+    const isRaiseIncident =
+      /\b(raise|log|create|add|report|file|track|record).{0,25}(as.{0,8})?(incident|issue|ticket|case)\b/i.test(m)
+      || /\b(incident|issue).{0,15}(raise|log|create|add|report|file|track)\b/i.test(m)
+      || /\b(make|open).{0,15}(an.{0,5})?(incident|issue)\b/i.test(m);
+
+    if (isRaiseIncident) {
+      // Gather the source: current stack compat issues + coherence alerts with compat content
+      const currentCompatHits = checkCompatibility(s.ctx || {});
+      const allHits = [
+        ...currentCompatHits,
+        // also include coherence alerts that describe a compat/EOL problem
+        ...(s.coherenceAlerts || [])
+          .filter(a => a.severity === 'warn' && !currentCompatHits.find(h => h.id === a.id))
+          .map(a => ({ id: a.id, title: a.message, detail: a.action || '', severity: a.severity === 'warn' ? 'HIGH' : 'MEDIUM', grp: 'Compatibility', layers: [] })),
+      ];
+
+      if (allHits.length === 0) {
+        // No known compat issues — let the user describe it; create from message text
+        const title = raw.replace(/^(raise|log|create|add|report|file|track|make|open)\s+(as\s+)?(an?\s+)?(incident|issue|ticket)[\s:—-]*/i, '').trim() || 'Reported issue';
+        const incId = `INC-${Date.now()}`;
+        return {
+          reply: `Creating custom incident: "${title}". It will appear in Phase 2 incident list and RTM.`,
+          actions: [{
+            type: 'ADD_INCIDENT',
+            description: `Create incident: ${title}`,
+            params: {
+              id: incId, code: incId,
+              short: title.slice(0, 60),
+              txt: title,
+              grp: 'Custom', sev: 'HIGH', owner: 'SysAdmin', layers: [],
+            },
+            requiresConfirmation: false,
+          }],
+        };
+      }
+
+      const actions = allHits.map(h => {
+        const incId = `INC-COMPAT-${h.id || Date.now()}`;
+        return {
+          type: 'ADD_INCIDENT',
+          description: `Create incident: ${h.title || h.short}`,
+          params: {
+            id: incId, code: incId,
+            short: (h.title || h.short || 'Compatibility issue').slice(0, 60),
+            txt: h.detail || h.txt || h.title || '',
+            grp: h.grp || 'Compatibility', sev: h.severity || 'HIGH',
+            owner: 'SysAdmin', layers: h.layers || [],
+          },
+          requiresConfirmation: false,
+        };
+      });
+
+      const names = allHits.map(h => `• ${(h.title || h.short || '').slice(0, 70)}`).join('\n');
+      return {
+        reply: `Creating ${actions.length} custom incident${actions.length > 1 ? 's' : ''} from current compatibility issues:\n${names}\n\nThese will appear in Phase 2 incident list, RTM, and Matrix tab. Each feeds into the task plan automatically.`,
+        actions,
+      };
+    }
+  }
+
+  // ── "Fix DB incompatibility" shortcut ─────────────────────────────────────
+  // "fix the DB issue", "switch to compatible DB", "what DB works here", "use compatible database"
+  {
+    const isFixDb =
+      /\b(fix|switch|change|use|select|pick|recommend).{0,30}(db|database|compatible.{0,10}db|db.{0,10}compat|alternative.{0,10}db)\b/i.test(m)
+      || /\b(compatible|supported).{0,20}(db|database)\b/i.test(m)
+      || /\bwhat (db|database).{0,20}(work|support|certif|compat)\b/i.test(m)
+      || /\b(db|database).{0,20}(replacement|alternative|substitute)\b/i.test(m);
+
+    if (isFixDb) {
+      const compatHits = checkCompatibility(s.ctx || {}).filter(r => r.compatFix?.alternatives?.length);
+      if (compatHits.length > 0) {
+        const actions = compatHits.flatMap(r =>
+          r.compatFix.alternatives.map(alt => ({
+            type: 'SET_CTX',
+            description: `Switch ${alt.ctxKey} to ${alt.ctxValue}`,
+            params: { key: alt.ctxKey, value: alt.ctxValue },
+            requiresConfirmation: true,
+            confirmLabel: `Use ${alt.ctxValue}`,
+          }))
+        );
+        const reason = compatHits.map(r => r.compatFix.summary).join('; ');
+        return {
+          reply: `${reason}\n\nSelect a compatible alternative below, or type the name of your preferred database. I'll update the build and regenerate design defaults automatically.`,
+          actions,
+        };
+      }
+    }
+  }
+
   // ── Fix-intent recognizer — "fix the TLS issue", "best choice for web", "correct incompatible", etc. ──
   // Reads coherence alerts that have `fix` payloads and offers to apply them.
+  // Falls through to direct TLS fix when no alert is active but TLS intent is clear.
   {
     const isFixIntent =
       /\b(fix|correct|update|resolve|apply|enforce|remediat)\b.{0,40}\b(tls|ssl|cipher|protocol|web|incompatib|alert|issue|warning|field|value|section|config)\b/i.test(m)
@@ -824,7 +944,18 @@ export function ruleBasedResponse(message, s, authUser) {
       const fixableAlerts = (s.coherenceAlerts || []).filter(a => a.fix?.length);
 
       if (fixableAlerts.length === 0) {
-        // No fixable alerts — fall through to EOL scan or Groq
+        // No active coherence alerts — if TLS/cipher intent is explicit, apply the fix directly.
+        if (/\btls|ssl|cipher|nist|pci|protocol/i.test(m)) {
+          return {
+            reply: 'Applying NIST-compliant TLS 1.2/1.3 configuration to System Design → Web section.',
+            actions: [
+              { type: 'SET_DESIGN_FIELD', description: 'ssl_protocols → TLSv1.2 TLSv1.3', params: { section: 'web', field: 'ssl_protocols', value: 'TLSv1.2 TLSv1.3' }, requiresConfirmation: false },
+              { type: 'SET_DESIGN_FIELD', description: 'ssl_ciphers → ECDHE NIST suite', params: { section: 'web', field: 'ssl_ciphers', value: 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-CHACHA20-POLY1305' }, requiresConfirmation: false },
+              { type: 'NAVIGATE_TAB', description: 'Open System Design', params: { tab: 'design' }, requiresConfirmation: false },
+            ],
+          };
+        }
+        // Fall through to EOL scan or Groq for other fix intents without active alerts
       } else {
         // Narrow to the section the user mentioned, or take all if no specific mention
         const mentionedSection =

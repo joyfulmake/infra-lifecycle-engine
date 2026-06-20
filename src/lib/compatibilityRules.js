@@ -29,6 +29,16 @@ export const COMPAT_RULES = [
       (/power|ibm.?power|p9|p10/i.test(hw) || /power/i.test(os)) &&
       /rhel|red.?hat|linux/i.test(os) &&
       !/aix/i.test(os),
+    compatFix: {
+      type: 'switch_db',
+      summary: 'SAP ASE has no ppc64le binary — switch to a DB with native RHEL Power LE support',
+      alternatives: [
+        { label: 'PostgreSQL 15+ (native ppc64le, fully certified on RHEL 8/9 Power)', ctxKey: 'db', ctxValue: 'PostgreSQL 15' },
+        { label: 'Oracle 19c on RHEL 8 ppc64le (PAM-certified)', ctxKey: 'db', ctxValue: 'Oracle 19c' },
+        { label: 'IBM Db2 11.5.8+ (native ppc64le with fix pack)', ctxKey: 'db', ctxValue: 'IBM Db2 11.5' },
+        { label: 'MySQL 8.0 Community (ppc64le available for RHEL 8)', ctxKey: 'db', ctxValue: 'MySQL 8.0' },
+      ],
+    },
   },
   {
     id: 'sybase_aix_ok',
@@ -112,6 +122,15 @@ export const COMPAT_RULES = [
     check: ({ db, os, hw }) =>
       /sql.?server|mssql|microsoft.?sql/i.test(db) &&
       (/aix/i.test(os) || /power/i.test(hw) && !/windows/i.test(os)),
+    compatFix: {
+      type: 'switch_db',
+      summary: 'SQL Server has never shipped an AIX or Power build — switch to an AIX-certified DB',
+      alternatives: [
+        { label: 'Oracle 19c on AIX 7.2 TL5+ (PAM-certified, last AIX-supported Oracle)', ctxKey: 'db', ctxValue: 'Oracle 19c' },
+        { label: 'IBM Db2 11.5 on AIX (IBM-certified native AIX build)', ctxKey: 'db', ctxValue: 'IBM Db2 11.5' },
+        { label: 'PostgreSQL 14 on AIX (community-supported; limited IBM support)', ctxKey: 'db', ctxValue: 'PostgreSQL 14' },
+      ],
+    },
   },
   {
     id: 'mssql_power_linux',
@@ -130,6 +149,15 @@ export const COMPAT_RULES = [
       /sql.?server|mssql|microsoft.?sql/i.test(db) &&
       /power|ibm.?power|ppc/i.test(hw) &&
       /linux|rhel|sles|ubuntu|centos/i.test(os),
+    compatFix: {
+      type: 'switch_db',
+      summary: 'SQL Server has no ppc64le binary — switch to a DB with native RHEL Power LE support',
+      alternatives: [
+        { label: 'PostgreSQL 15+ (native ppc64le, fully certified on RHEL 8/9 Power)', ctxKey: 'db', ctxValue: 'PostgreSQL 15' },
+        { label: 'IBM Db2 11.5.8+ (native ppc64le with glibc 2.34 fix pack)', ctxKey: 'db', ctxValue: 'IBM Db2 11.5' },
+        { label: 'Oracle 19c on RHEL 8 ppc64le (Oracle PAM-certified)', ctxKey: 'db', ctxValue: 'Oracle 19c' },
+      ],
+    },
   },
 
   // ── IBM Db2 LUW ────────────────────────────────────────────────────────────
@@ -1044,6 +1072,15 @@ export const COMPAT_RULES = [
     check: ({ db, app, os }) =>
       /sap.?hana|hana.?db/i.test((db || '') + ' ' + (app || '')) &&
       /aix/i.test(os),
+    compatFix: {
+      type: 'switch_db',
+      summary: 'SAP HANA cannot run on AIX — requires x86_64 or IBM Power LE (RHEL). Choose an AIX-certified DB or change platform.',
+      alternatives: [
+        { label: 'Oracle 19c on AIX 7.2 (AIX-certified, last Oracle on AIX)', ctxKey: 'db', ctxValue: 'Oracle 19c' },
+        { label: 'IBM Db2 11.5 on AIX (IBM-certified native AIX build)', ctxKey: 'db', ctxValue: 'IBM Db2 11.5' },
+        { label: 'SAP ASE (Sybase) 16.x on AIX (SAP-certified on AIX Power BE)', ctxKey: 'db', ctxValue: 'SAP ASE 16' },
+      ],
+    },
   },
   {
     id: 'oracle_23c_aix',
@@ -1064,6 +1101,13 @@ export const COMPAT_RULES = [
     check: ({ db, os }) =>
       /oracle.{0,10}23c|oracle.{0,10}23\.0|oracle.{0,10}23ai/i.test(db) &&
       /aix/i.test(os),
+    compatFix: {
+      type: 'version_downgrade',
+      summary: 'Oracle 23c is not available on AIX — downgrade to the last AIX-certified Oracle version',
+      alternatives: [
+        { label: 'Oracle 19c (LTS — last Oracle certified on AIX 7.2 TL5+, supported through 2027)', ctxKey: 'db', ctxValue: 'Oracle 19c' },
+      ],
+    },
   },
   {
     id: 'oracle_23c_rhel7',
@@ -1084,6 +1128,14 @@ export const COMPAT_RULES = [
     check: ({ db, os }) =>
       /oracle.{0,10}23c|oracle.{0,10}23\.0|oracle.{0,10}23ai/i.test(db) &&
       /rhel.?7|centos.?7|red.?hat.{0,20}linux.?7/i.test(os),
+    compatFix: {
+      type: 'version_downgrade',
+      summary: 'Oracle 23c requires RHEL 8.6+ — downgrade DB or upgrade OS',
+      alternatives: [
+        { label: 'Oracle 19c (LTS — certified on RHEL 7, 8, 9; in Premier Support through April 2027)', ctxKey: 'db', ctxValue: 'Oracle 19c' },
+        { label: 'Upgrade OS to RHEL 8 (allows Oracle 23c)', ctxKey: 'os', ctxValue: 'RHEL 8' },
+      ],
+    },
   },
   {
     id: 'jboss_eap_rhel9_min',
