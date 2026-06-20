@@ -174,7 +174,7 @@ export default function DemoTour() {
               }}
             />
           ))}
-          <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'rgba(255,255,255,0.65)', fontVariantNumeric: 'tabular-nums' }}>
             {idx + 1} / {SLIDES.length}
           </span>
         </div>
@@ -183,24 +183,24 @@ export default function DemoTour() {
         <div style={{ padding: '20px 24px 8px' }}>
           <div style={{ fontSize: 42, marginBottom: 12, lineHeight: 1, userSelect: 'none' }}>{slide.icon}</div>
           <div style={{
-            display: 'inline-block', fontSize: 10, fontWeight: 700,
-            letterSpacing: '0.12em', textTransform: 'uppercase',
+            display: 'inline-block', fontSize: 11.5, fontWeight: 700,
+            letterSpacing: '0.10em', textTransform: 'uppercase',
             color: slide.accent, marginBottom: 10,
           }}>
             {slide.step}
           </div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: '#F1F5F9', lineHeight: 1.35, marginBottom: 12 }}>
+          <div style={{ fontSize: 19, fontWeight: 700, color: '#F8FAFC', lineHeight: 1.3, marginBottom: 13 }}>
             {slide.title}
           </div>
-          <p style={{ fontSize: 13, color: 'rgba(241,245,249,0.72)', lineHeight: 1.7, marginBottom: 12 }}>
+          <p style={{ fontSize: 14, color: 'rgba(241,245,249,0.92)', lineHeight: 1.72, marginBottom: 13 }}>
             {slide.body}
           </p>
           {slide.hint && (
             <div style={{
-              fontSize: 11, color: 'rgba(255,255,255,0.45)',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.09)',
-              borderRadius: 8, padding: '7px 12px',
+              fontSize: 12.5, color: 'rgba(255,255,255,0.80)',
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              borderRadius: 8, padding: '8px 14px',
               marginBottom: 4,
             }}>
               {slide.hint}
@@ -214,10 +214,10 @@ export default function DemoTour() {
             <button
               onClick={() => go(-1)}
               style={{
-                fontSize: 12, color: 'rgba(255,255,255,0.5)',
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
+                fontSize: 13, color: 'rgba(255,255,255,0.85)',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 8, padding: '7px 16px', cursor: 'pointer',
                 transition: 'all 0.15s',
               }}
             >
@@ -228,7 +228,7 @@ export default function DemoTour() {
           <button
             onClick={dismiss}
             style={{
-              fontSize: 12, color: 'rgba(255,255,255,0.38)',
+              fontSize: 13, color: 'rgba(255,255,255,0.65)',
               background: 'none', border: 'none', cursor: 'pointer',
               padding: '6px 8px',
             }}
@@ -239,10 +239,10 @@ export default function DemoTour() {
             <button
               onClick={dismiss}
               style={{
-                fontSize: 13, fontWeight: 600,
+                fontSize: 14, fontWeight: 700,
                 background: slide.accent, color: '#fff',
                 border: 'none', borderRadius: 8,
-                padding: '7px 20px', cursor: 'pointer',
+                padding: '8px 22px', cursor: 'pointer',
                 transition: 'opacity 0.15s',
               }}
             >
@@ -252,10 +252,10 @@ export default function DemoTour() {
             <button
               onClick={() => go(1)}
               style={{
-                fontSize: 13, fontWeight: 600,
-                background: 'rgba(255,255,255,0.1)',
-                color: '#fff', border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 8, padding: '7px 18px', cursor: 'pointer',
+                fontSize: 14, fontWeight: 700,
+                background: 'rgba(255,255,255,0.12)',
+                color: '#fff', border: '1px solid rgba(255,255,255,0.22)',
+                borderRadius: 8, padding: '8px 20px', cursor: 'pointer',
                 transition: 'all 0.15s',
               }}
             >
