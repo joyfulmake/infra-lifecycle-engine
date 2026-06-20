@@ -336,17 +336,32 @@ Cloudflare Pages config (via `public/_redirects` and `public/_headers`):
 - Security headers + CSP: `_headers` → applied to `/*`
 - Note: `/slides.html` is a static file in `public/`, served directly by Cloudflare without needing the SPA redirect
 
-**⚠ 2026-06-11 incident — Pages project vanished:** `opsmanifest.pages.dev` went NXDOMAIN (the `opsmanifest` Pages project no longer existed in the Cloudflare account — likely the cause of the v1.4 "blank screen" cert failure, not just MS lab firewalls). Project was recreated the same day via `wrangler pages project create opsmanifest --production-branch main` and redeployed. **The recreated project is NOT connected to GitHub — `git push origin main` no longer auto-deploys.** To restore push-to-deploy, reconnect the repo in CF dashboard → Pages → opsmanifest → Settings → Builds & deployments.
+**⚠ 2026-06-11 incident — Pages project vanished:** `opsmanifest.pages.dev` went NXDOMAIN. Recreated via `wrangler pages project create opsmanifest --production-branch main`.
 
-**After every code change, deploy with wrangler (push alone does NOT deploy):**
+**⚠ 2026-06-20 incident — WSL2 partial uploads corrupt CF Pages asset store:** Uploading JS/CSS via `wrangler pages deploy` from WSL2 causes partial uploads (HeadersTimeoutError / 502 Bad Gateway) that register with a valid hash in CF's content-addressed store but serve HTTP 500. Every subsequent deploy (even from GitHub Actions) sees those files as "already uploaded" and reuses the corrupted versions. **DO NOT deploy from WSL2.** If this happens, rollback via CF API and deploy from GitHub Actions:
 ```bash
-export NVM_DIR="$HOME/.config/nvm" && . "$NVM_DIR/nvm.sh"
-npm run build
-npx wrangler pages deploy dist --project-name opsmanifest --branch main
-git push origin main   # keep repo in sync (does not trigger deploy)
+# Emergency rollback to last working deployment:
+curl -X POST "https://api.cloudflare.com/client/v4/accounts/254fa20341a7b0c16458102e1b48f004/pages/projects/opsmanifest/deployments/<working-deployment-id>/rollback" \
+  -H "Authorization: Bearer <token-from ~/.wrangler/config/default.toml>" \
+  -H "Content-Type: application/json"
+# Then force new file hashes and push to trigger GHA deploy
 ```
 
-**Verify after deploy:** `curl -s https://opsmanifest.pages.dev/ | grep -o 'assets/index-[^"]*\.js'` must match the hash in `dist/index.html`, and DNS must resolve (`dig +short opsmanifest.pages.dev @1.1.1.1`). Given the project vanished once, check DNS resolution before every Store submission.
+**After every code change, deploy via GitHub Actions (git push triggers auto-deploy):**
+```bash
+export NVM_DIR="$HOME/.config/nvm" && . "$NVM_DIR/nvm.sh"
+npm run build          # verify build succeeds locally
+git push origin main   # triggers .github/workflows/deploy-pages.yml → GHA builds + deploys
+```
+
+GHA workflow (`.github/workflows/deploy-pages.yml`) runs on every push to `main`, installs wrangler 3.90.0, builds the app, and deploys. Secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set in GitHub repo settings.
+
+If a file is corrupted in CF's store (new hash produces 500, "already uploaded" on next deploy):
+1. Change the file content to force a new hash (e.g., add CSS var, change a constant)
+2. Rebuild → verify new hash is 404 on production (not yet uploaded)
+3. Push → GHA uploads the fresh file cleanly
+
+**Verify after deploy:** `curl -s https://opsmanifest.pages.dev/ | grep -o 'assets/index-[^"]*\.js'` must match the hash in `dist/index.html`, and all assets must return 200 (not 500).
 
 _(Netlify was migrated away from on 2026-06-09 due to exhausted account credits. `netlify.toml` kept for reference but not active.)_
 
