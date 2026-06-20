@@ -52,11 +52,15 @@ export const COMPAT_RULES = [
     severity: 'critical',
     vendor: 'Oracle',
     product: 'Oracle Database',
-    title: 'Oracle DB 21c+ does not support AIX 7.3 — last supported AIX is 7.2',
+    title: 'Oracle DB is not certified on AIX 7.3 in any version — last certified AIX is 7.2 TL5+',
     detail:
-      'Oracle dropped AIX 7.3 from its certification matrix starting with Oracle Database 21c. ' +
-      'Oracle 19c (long-term release, supported until 2027) is the last version certified on AIX 7.2. ' +
-      'If you require AIX 7.3, you must use Oracle DB 19c and plan migration before its support window closes.',
+      'No version of Oracle Database is certified on AIX 7.3. Oracle 19c (the last AIX-certified ' +
+      'Oracle DB version) is certified on AIX 7.1 TL5+ and AIX 7.2 TL5+ only. AIX 7.3 was never ' +
+      'added to the Oracle 19c, 21c, or 23c certification matrix. Additionally, AIX 7.2 itself ' +
+      'reached IBM End of Support on April 30, 2025, which means Oracle 19c on AIX 7.2 now runs ' +
+      'on an unsupported OS. There is no supported Oracle+AIX path beyond this combination. ' +
+      'The only forward options are: upgrade the DB to Oracle 19c on AIX 7.3 (unsupported by Oracle) ' +
+      'or migrate the DB to RHEL (Oracle 19c/21c/23c on RHEL x86_64 or Power LE are certified).',
     refs: [
       { label: 'Oracle DB 19c/21c Certification Matrix (Doc 742060.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
       { label: 'Oracle Lifetime Support Policy', url: 'https://www.oracle.com/us/assets/lifetime-support-technology-069183.pdf' },
@@ -850,6 +854,331 @@ export const COMPAT_RULES = [
     check: ({ hw, os }) =>
       /sparc/i.test(hw) &&
       /linux|rhel|ubuntu|centos/i.test(os),
+  },
+
+  // ── EOL — OS (additional) ──────────────────────────────────────────────────
+  {
+    id: 'aix_72_eol',
+    severity: 'critical',
+    vendor: 'IBM',
+    product: 'IBM AIX 7.2',
+    title: 'AIX 7.2: IBM End of Support April 2025 — no further security PTFs',
+    detail:
+      'IBM AIX 7.2 reached End of Support on April 30, 2025. No further security PTFs ' +
+      '(program temporary fixes), TL or SP levels, or new hardware enablement are published. ' +
+      'This directly affects Oracle 19c on AIX — Oracle 19c was the last DB version certified on ' +
+      'AIX 7.2 TL5+, and that certification cannot be extended to an unsupported OS. ' +
+      'Upgrade to AIX 7.3 (supported through at least 2028) or plan migration to RHEL.',
+    refs: [
+      { label: 'IBM AIX 7.2 support lifecycle', url: 'https://www.ibm.com/support/pages/aix-support-lifecycle-information' },
+      { label: 'IBM software product lifecycle tool', url: 'https://www.ibm.com/support/pages/ibm-software-product-lifecycle' },
+    ],
+    check: ({ os }) => /aix.?7\.2(\b|$)|aix 7\.2/i.test(os),
+  },
+  {
+    id: 'windows_server_2016_eol_soon',
+    severity: 'warn',
+    vendor: 'Microsoft',
+    product: 'Windows Server 2016',
+    title: 'Windows Server 2016: Extended Support ends January 2027 — plan migration now',
+    detail:
+      'Microsoft Windows Server 2016 Extended Support ends January 12, 2027. After that date, ' +
+      'no security patches, hotfixes, or compliance updates will be released for standard deployments. ' +
+      'ESU via Azure Arc may be available for an additional three years but requires enrollment and ' +
+      'additional licensing. Begin migration planning to Windows Server 2022 or 2025 now to avoid ' +
+      'operating in an unpatched state.',
+    refs: [
+      { label: 'Windows Server 2016 lifecycle', url: 'https://learn.microsoft.com/en-us/lifecycle/products/windows-server-2016' },
+    ],
+    check: ({ os }) => /windows.{0,10}(server.{0,5})?2016/i.test(os),
+  },
+  {
+    id: 'oracle_solaris_10_eol',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle Solaris 10',
+    title: 'Oracle Solaris 10: Extended Support ended January 2024 — permanently unpatched',
+    detail:
+      'Oracle Solaris 10 Extended Support ended January 26, 2024. No further security patches, ' +
+      'Critical Patch Updates (CPUs), or new driver updates are issued. Any CVE affecting the ' +
+      'Solaris kernel, OpenSSL, or built-in network services since January 2024 is permanently ' +
+      'unaddressed. Upgrade to Oracle Solaris 11.4 (supported through at least 2034).',
+    refs: [
+      { label: 'Oracle Solaris 10 lifecycle', url: 'https://www.oracle.com/a/ocom/docs/oracle-solaris-support-policy.pdf' },
+      { label: 'Oracle Support Lifetime Policies', url: 'https://www.oracle.com/support/lifetime-support/' },
+    ],
+    check: ({ os }) => /solaris.?10|sunos.?5\.10/i.test(os),
+  },
+
+  // ── EOL — Database (additional) ────────────────────────────────────────────
+  {
+    id: 'oracle_11g_eol',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle Database 11g',
+    title: 'Oracle DB 11g: Extended Support ended December 2020 — no CVE patches since',
+    detail:
+      'Oracle Database 11.1.0.7 Premier Support ended August 2012. ' +
+      'Oracle 11.2.0.4 Extended Support ended December 31, 2020. ' +
+      'The product is now in Sustaining Support only — Oracle does not issue new security patches, ' +
+      'CVE fixes, or new OS/platform certifications for Oracle 11g. Any security vulnerability ' +
+      'discovered after December 2020 is permanently unpatched in the 11g branch. ' +
+      'Migrate to Oracle 19c (LTS, Premier Support through April 2024, Extended through April 2027).',
+    refs: [
+      { label: 'Oracle Lifetime Support Policy — Database (PDF)', url: 'https://www.oracle.com/us/assets/lifetime-support-technology-069183.pdf' },
+      { label: 'MOS Doc 742060.1 — Oracle DB support dates', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+    ],
+    check: ({ db }) => /oracle.{0,10}11g|oracle.{0,10}11\.1|oracle.{0,10}11\.2/i.test(db),
+  },
+  {
+    id: 'postgres_13_eol',
+    severity: 'critical',
+    vendor: 'PostgreSQL Global Development Group',
+    product: 'PostgreSQL 13',
+    title: 'PostgreSQL 13: EOL November 2025 — no further security releases',
+    detail:
+      'PostgreSQL 13 reached end of life on November 13, 2025. The PostgreSQL GDG no longer ' +
+      'issues security advisories or patch releases for PG 13. Any CVE affecting the PostgreSQL ' +
+      'engine is permanently unpatched in the 13 branch. Upgrade to PostgreSQL 16 (LTS) or ' +
+      'PostgreSQL 17 (both in active support with regular security releases).',
+    refs: [
+      { label: 'PostgreSQL versioning and support policy', url: 'https://www.postgresql.org/support/versioning/' },
+    ],
+    check: ({ db }) => /postgres(ql)?.?13(\b|$)/i.test(db),
+  },
+  {
+    id: 'postgres_14_eol_soon',
+    severity: 'warn',
+    vendor: 'PostgreSQL Global Development Group',
+    product: 'PostgreSQL 14',
+    title: 'PostgreSQL 14: EOL November 2026 — plan upgrade now',
+    detail:
+      'PostgreSQL 14 reaches end of life in November 2026. After that date, no security patches ' +
+      'or bug fixes will be issued. PG 14 ships in Ubuntu 22.04 LTS as the default version — ' +
+      'dist-provided packages may provide limited backports but are not guaranteed. Upgrade to ' +
+      'PostgreSQL 16 (active LTS) before EOL to avoid an unplanned migration under time pressure.',
+    refs: [
+      { label: 'PostgreSQL versioning and support policy', url: 'https://www.postgresql.org/support/versioning/' },
+    ],
+    check: ({ db }) => /postgres(ql)?.?14(\b|$)/i.test(db),
+  },
+  {
+    id: 'mysql_80_eol',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'MySQL 8.0',
+    title: 'MySQL 8.0: EOL April 2026 — migrate to MySQL 8.4 LTS or MySQL 9.x',
+    detail:
+      'Oracle MySQL 8.0 reached end of life on April 30, 2026. No further security patches, ' +
+      'bug fixes, or platform updates are issued for the 8.0 branch. MySQL 8.4 is the current ' +
+      'Long-Term Support (LTS) release (supported through April 2032) and is a drop-in compatible ' +
+      'upgrade from MySQL 8.0 for most workloads. MySQL 9.x is the Innovation track. ' +
+      'Remaining on MySQL 8.0 post-EOL creates an accumulating unpatched CVE exposure.',
+    refs: [
+      { label: 'MySQL lifecycle policy', url: 'https://www.mysql.com/support/supportedplatforms/database.html' },
+      { label: 'MySQL EOL dates — endoflife.date', url: 'https://endoflife.date/mysql' },
+    ],
+    check: ({ db }) => /mysql.?8\.0/i.test(db),
+  },
+  {
+    id: 'mssql_2016_eol_imminent',
+    severity: 'critical',
+    vendor: 'Microsoft',
+    product: 'SQL Server 2016',
+    title: 'SQL Server 2016: Extended Support ends July 14, 2026 — immediately migrate',
+    detail:
+      'Microsoft SQL Server 2016 Extended Support ends July 14, 2026. After this date, no further ' +
+      'security patches, hotfixes, or compliance updates will be issued. SQL Server 2016 is the ' +
+      'last version that included SSRS bundled in the main installer. ' +
+      'ESU via Azure Arc is available for up to three additional years but requires enrollment. ' +
+      'Migrate to SQL Server 2022 (supported through January 2033) without delay.',
+    refs: [
+      { label: 'SQL Server 2016 lifecycle', url: 'https://learn.microsoft.com/en-us/lifecycle/products/sql-server-2016' },
+      { label: 'SQL Server ESU details', url: 'https://learn.microsoft.com/en-us/sql/sql-server/end-of-support/sql-server-extended-security-updates' },
+    ],
+    check: ({ db }) => /sql.?server.?2016|mssql.?2016/i.test(db),
+  },
+
+  // ── EOL — Middleware (additional) ──────────────────────────────────────────
+  {
+    id: 'was_traditional_855_eol',
+    severity: 'critical',
+    vendor: 'IBM',
+    product: 'IBM WebSphere Application Server Traditional 8.5.5',
+    title: 'WebSphere Traditional 8.5.5: IBM support ended September 2025',
+    detail:
+      'IBM WebSphere Application Server Traditional 8.5.5 reached End of Support on ' +
+      'September 30, 2025. IBM no longer provides security fixes, interim fixes, or defect ' +
+      'support for WAS Traditional 8.5.5. Deployments on 8.5.5 are running with a growing ' +
+      'backlog of unpatched Java EE runtime CVEs. Migrate to WebSphere Liberty 24.x (actively ' +
+      'supported, Jakarta EE 10 compatible) or Red Hat JBoss EAP 8.0 as a migration path. ' +
+      'Note: WebSphere Liberty is NOT the same product as WAS Traditional — application code ' +
+      'changes are required for the Liberty migration.',
+    refs: [
+      { label: 'IBM WebSphere lifecycle policy', url: 'https://www.ibm.com/support/pages/ibm-websphere-application-server-support-lifecycle-policy' },
+      { label: 'WAS Traditional 8.5.5 EOL notice', url: 'https://www.ibm.com/support/pages/withdrawal-notice-ibm-websphere-application-server-traditional-855' },
+    ],
+    check: ({ app }) =>
+      /websphere.{0,30}(traditional|was).{0,10}8\.5|was.{0,10}8\.5\.5/i.test(app) ||
+      (/websphere/i.test(app) && /8\.5\.5|8\.5\b/i.test(app)),
+  },
+
+  // ── Platform Incompatibilities (additional) ────────────────────────────────
+  {
+    id: 'sap_hana_aix',
+    severity: 'critical',
+    vendor: 'SAP',
+    product: 'SAP HANA',
+    title: 'SAP HANA is NOT supported on AIX — certified only on x86_64 and IBM Power LE (RHEL)',
+    detail:
+      'SAP HANA is certified exclusively on x86_64 (Intel/AMD) and IBM POWER LE (little-endian ' +
+      'ppc64le, running RHEL for IBM Power). AIX (IBM Power big-endian, ppc64be) is NOT in the ' +
+      'SAP HANA PAM. This is a common misconception for enterprises migrating SAP from AIX to ' +
+      'HANA — you cannot run HANA on your existing AIX server. The target must be a certified ' +
+      'HANA appliance or IBM Power LE (RHEL) server, not AIX. See the SAP HANA hardware directory ' +
+      'for a list of certified appliances.',
+    refs: [
+      { label: 'SAP HANA Platform Availability Matrix (PAM)', url: 'https://support.sap.com/en/my-support/software-downloads/support-package-stacks/product-versions.html' },
+      { label: 'SAP HANA Certified Hardware Directory', url: 'https://www.sap.com/dmc/exp/2014-09-02-hana-hardware/enEN/#/solutions?filters=v:deCertified' },
+    ],
+    check: ({ db, app, os }) =>
+      /sap.?hana|hana.?db/i.test((db || '') + ' ' + (app || '')) &&
+      /aix/i.test(os),
+  },
+  {
+    id: 'oracle_23c_aix',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle Database 23c (AI)',
+    title: 'Oracle DB 23c is NOT certified on AIX — Oracle 19c is the last AIX-certified Oracle version',
+    detail:
+      'Oracle Database 23c (AI) does not include AIX in its certification matrix. Oracle 19c ' +
+      '(LTS, supported through April 2027 in Premier, April 2029 Extended) is the last Oracle ' +
+      'Database version certified on AIX 7.2 TL5+. If you are planning a new Oracle deployment ' +
+      'on AIX, Oracle 19c is the only viable version. Note: AIX 7.2 itself is now EOL (April 2025) ' +
+      'so the only supported Oracle+AIX combination (Oracle 19c on AIX 7.2) runs on an unsupported OS.',
+    refs: [
+      { label: 'Oracle DB 23c Certification Matrix (MOS 742060.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+      { label: 'Oracle Lifetime Support Policy', url: 'https://www.oracle.com/us/assets/lifetime-support-technology-069183.pdf' },
+    ],
+    check: ({ db, os }) =>
+      /oracle.{0,10}23c|oracle.{0,10}23\.0|oracle.{0,10}23ai/i.test(db) &&
+      /aix/i.test(os),
+  },
+  {
+    id: 'oracle_23c_rhel7',
+    severity: 'critical',
+    vendor: 'Oracle',
+    product: 'Oracle Database 23c (AI)',
+    title: 'Oracle DB 23c requires RHEL 8.6+ or RHEL 9 — RHEL 7 is not supported',
+    detail:
+      'Oracle Database 23c is certified on RHEL 8.6 (minimum) and RHEL 9.2 (minimum). RHEL 7 ' +
+      'is NOT in the Oracle 23c certification matrix. This matters for brownfield deployments ' +
+      'where Oracle 12c or 19c runs on RHEL 7 — migrating to Oracle 23c requires upgrading ' +
+      'the OS to RHEL 8.6+ simultaneously. Plan and test the OS upgrade independently before ' +
+      'attempting the Oracle 23c installation.',
+    refs: [
+      { label: 'Oracle DB 23c Installation Guide — Linux', url: 'https://docs.oracle.com/en/database/oracle/oracle-database/23/ladbi/' },
+      { label: 'Oracle DB 23c Certification Matrix (MOS 742060.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+    ],
+    check: ({ db, os }) =>
+      /oracle.{0,10}23c|oracle.{0,10}23\.0|oracle.{0,10}23ai/i.test(db) &&
+      /rhel.?7|centos.?7|red.?hat.{0,20}linux.?7/i.test(os),
+  },
+  {
+    id: 'jboss_eap_rhel9_min',
+    severity: 'warn',
+    vendor: 'Red Hat',
+    product: 'JBoss EAP 7.4',
+    title: 'JBoss EAP 7.4 on RHEL 9: minimum EAP 7.4.2 required — earlier releases fail to start',
+    detail:
+      'JBoss EAP 7.4.0 and 7.4.1 were built against Glibc 2.28 (RHEL 8 baseline) and fail to ' +
+      'start on RHEL 9 (Glibc 2.34+) with "cannot open shared object file" errors in native ' +
+      'libraries used by the Undertow I/O subsystem. EAP 7.4.2+ resolved the Glibc 2.34 ' +
+      'compatibility issues. JBoss EAP 8.0 (Jakarta EE 10) has full RHEL 9 support from GA.',
+    refs: [
+      { label: 'JBoss EAP supported configurations on RHEL 9', url: 'https://access.redhat.com/articles/2026253' },
+      { label: 'JBoss EAP 7.4 release notes', url: 'https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.4/html/7.4.2_release_notes/' },
+    ],
+    check: ({ app, os }) =>
+      /jboss.{0,10}eap.?7\.4|eap.?7\.4/i.test(app) &&
+      /rhel.?9|red.?hat.{0,20}linux.?9/i.test(os),
+  },
+  {
+    id: 'sql_server_power_bi_arm',
+    severity: 'critical',
+    vendor: 'Microsoft',
+    product: 'SQL Server / Power BI Report Server',
+    title: 'SQL Server Reporting Services and Power BI Report Server require Windows — no Linux/AIX build',
+    detail:
+      'SQL Server Reporting Services (SSRS) and Power BI Report Server run exclusively on ' +
+      'Windows Server. There is no Linux build. If your target OS is RHEL, Ubuntu, or AIX, ' +
+      'SSRS cannot be deployed. Alternatives: Power BI Service (cloud), or third-party Linux-native ' +
+      'reporting tools (Jaspersoft, Pentaho). Plan this as a separate workload when migrating ' +
+      'SQL Server off Windows.',
+    refs: [
+      { label: 'SSRS installation requirements', url: 'https://learn.microsoft.com/en-us/sql/reporting-services/install-windows/hardware-and-software-requirements-for-reporting-services' },
+      { label: 'Power BI Report Server system requirements', url: 'https://learn.microsoft.com/en-us/power-bi/report-server/system-requirements' },
+    ],
+    check: ({ app, os }) =>
+      /ssrs|reporting.?services|power.?bi.?report.?server/i.test(app) &&
+      /linux|rhel|ubuntu|centos|aix/i.test(os),
+  },
+  {
+    id: 'db2_aix_72_eol_impact',
+    severity: 'warn',
+    vendor: 'IBM',
+    product: 'IBM Db2 LUW on AIX',
+    title: 'IBM Db2 LUW on AIX 7.2: AIX EOL (April 2025) ends Db2 platform eligibility',
+    detail:
+      'IBM Db2 LUW 11.5 is certified on AIX 7.1 and 7.2. However, AIX 7.2 reached End of Support ' +
+      'on April 30, 2025, which means IBM can no longer certify or patch Db2 on that OS ' +
+      'combination. While Db2 itself continues to work, running Db2 on an EOL OS is outside ' +
+      'IBM\'s supportable configuration — any Db2 issue on AIX 7.2 after April 2025 may be ' +
+      'refused support until the OS is upgraded. Upgrade to AIX 7.3 or migrate Db2 to RHEL.',
+    refs: [
+      { label: 'Db2 LUW supported operating systems', url: 'https://www.ibm.com/support/pages/db2-luw-supported-operating-systems' },
+      { label: 'IBM AIX 7.2 end of support', url: 'https://www.ibm.com/support/pages/aix-support-lifecycle-information' },
+    ],
+    check: ({ db, os }) =>
+      /db2|ibm.?db/i.test(db) && /aix.?7\.2/i.test(os),
+  },
+  {
+    id: 'vmware_esxi_67_eol',
+    severity: 'critical',
+    vendor: 'VMware / Broadcom',
+    product: 'VMware vSphere ESXi 6.7',
+    title: 'VMware ESXi 6.7: End of General Support October 2022 — unpatched hypervisor CVEs',
+    detail:
+      'VMware vSphere ESXi 6.7 reached End of General Support on October 15, 2022. Broadcom (VMware) ' +
+      'no longer releases security patches, critical fixes, or hardware driver updates for ESXi 6.7. ' +
+      'Known hypervisor CVEs (including VM escape vulnerabilities in the SVGA/SCSI device emulation ' +
+      'layer) remain unpatched on ESXi 6.7. Upgrade to ESXi 8.x (supported through October 2029).',
+    refs: [
+      { label: 'VMware vSphere 6.7 lifecycle', url: 'https://lifecycle.vmware.com/' },
+      { label: 'VMware Product Lifecycle Matrix', url: 'https://lifecycle.vmware.com/#/' },
+    ],
+    check: ({ hw, app }) =>
+      /vmware|vsphere|esxi.?6\.7/i.test(app + ' ' + hw) &&
+      /6\.7/i.test(app + ' ' + hw),
+  },
+  {
+    id: 'tomcat_9_jakarta_note',
+    severity: 'info',
+    vendor: 'Apache Software Foundation',
+    product: 'Apache Tomcat 9.x',
+    title: 'Tomcat 9.x: uses javax.* namespace — apps must be rebuilt for Tomcat 10+',
+    detail:
+      'Apache Tomcat 9.x uses the Java EE javax.* namespace (Servlet 4.0, JSP 2.3, etc.). ' +
+      'Tomcat 9.x is still actively maintained and is the correct choice for Java EE 8 / javax.* ' +
+      'applications. However, if you plan to upgrade to Tomcat 10+ in future, all application ' +
+      'code imports (javax.servlet → jakarta.servlet) must be migrated. Tomcat 9.x reaches EOL ' +
+      'when Java SE 11 reaches EOL — plan accordingly.',
+    refs: [
+      { label: 'Tomcat version comparison', url: 'https://tomcat.apache.org/whichversion.html' },
+      { label: 'Tomcat 10.x migration guide', url: 'https://tomcat.apache.org/migration-10.html' },
+    ],
+    check: ({ app }) => /tomcat.?9\./i.test(app),
   },
 ];
 
