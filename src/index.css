@@ -463,3 +463,5 @@
 [data-theme="dark"] .auth-modal-content [class~="bg-white"]        { background-color: #1E293B !important; }
 [data-theme="dark"] .auth-modal-content [class~="bg-slate-50"]     { background-color: #0F172A !important; }
 [data-theme="dark"] .auth-modal-content [class~="border-slate-200"]{ border-color: #334155 !important; }
+
+:root { --build-v: '2.1'; }
