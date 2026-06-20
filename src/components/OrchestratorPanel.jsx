@@ -1633,17 +1633,44 @@ Rules:
     setRecording(false); setRecStatus('');
   }
 
+  // Track first voice use per sign-in session (one acknowledgement per session)
+  const voiceSessionActiveRef = useRef(false);
+
   function handleMic() {
-    unlockAudio(); // synchronous — before any async
-    if (recording) { stopRecording(); return; }
-    transcribeFailCountRef.current = 0;
-    if (SR) {
-      // Native speech recognition — no network needed, works in Chrome/Edge/Brave
-      startNativeSpeech();
-    } else {
-      // Fallback: MediaRecorder → Whisper proxy
-      startWhisperRecording();
+    // Voice requires a signed-in account — actions are attributed to user + role
+    if (!authUser) {
+      setMessages(m => [...m, {
+        id: nextId(),
+        role: 'orchestrator',
+        text: 'Sign in to use voice input. Voice actions are attributed to your account and RACI role — guest sessions cannot log voice entries.',
+      }]);
+      return;
     }
+
+    unlockAudio();
+    if (recording) { stopRecording(); return; }
+
+    // One-time session acknowledgement on first mic use after sign-in
+    if (!voiceSessionActiveRef.current) {
+      voiceSessionActiveRef.current = true;
+      const roleDesc = (() => {
+        const pm = sRef.current?.requirements?.pmEmail;
+        const dep = sRef.current?.requirements?.pmBackupEmail;
+        if (authUser.email === pm) return 'PM (full access)';
+        if (authUser.email === dep) return 'Deputy PM (full access)';
+        return 'Team Member';
+      })();
+      setMessages(m => [...m, {
+        id: nextId(),
+        role: 'orchestrator',
+        text: `Voice logging active — session verified as ${authUser.email} · ${roleDesc}. Your voice entries are attributed to this role for this build.`,
+      }]);
+    }
+
+    // Always use Whisper transcription — consistent across Chrome, Edge, Firefox, Safari
+    // and the packaged MSIX context. Removes the SR fallback chain complexity.
+    transcribeFailCountRef.current = 0;
+    startWhisperRecording();
   }
 
   // ── Name reply handler ───────────────────────────────────────────────────
@@ -2247,19 +2274,27 @@ Rules:
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
-            {/* Mic button — always available; uses native SpeechRecognition (no network needed) */}
+            {/* Mic button — sign-in required; Whisper transcription */}
             <button
               onClick={handleMic}
               disabled={thinking}
-              title={recording ? `Stop (${recStatus})` : SR ? 'Speak — browser-native, no network needed' : 'Speak — Whisper via proxy'}
+              title={
+                !authUser
+                  ? 'Sign in to use voice input'
+                  : recording
+                    ? `Stop recording (${recStatus})`
+                    : 'Voice input — click to record, click again to send'
+              }
               className={[
                 'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all text-base',
                 recording
                   ? 'bg-red-500 text-white animate-pulse shadow-lg'
-                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
+                  : !authUser
+                    ? 'bg-slate-100 text-slate-300 border border-slate-200'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
               ].join(' ')}
             >
-              🎤
+              {!authUser ? '🔒' : '🎤'}
             </button>
             {/* Send button */}
             <button

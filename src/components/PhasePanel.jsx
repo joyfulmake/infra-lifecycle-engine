@@ -327,8 +327,8 @@ function PhasePill({ label, role, locked, active, isCurrent, onClick }) {
         <span className="flex-shrink-0 w-2 h-2 rounded-full border border-white/20 mt-0.5" />
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-white/75 mb-0.5 leading-tight" style={{ fontSize: '10px' }}>{role}</div>
-        <div className={['text-xs font-medium leading-snug', isCurrent ? 'text-teal' : active ? 'text-white/85' : 'text-white/82'].join(' ')}>{label}</div>
+        <div className="text-white/80 mb-0.5 leading-tight" style={{ fontSize: '11.5px' }}>{role}</div>
+        <div className={['text-xs font-semibold leading-snug', isCurrent ? 'text-teal' : active ? 'text-white/90' : 'text-white/85'].join(' ')}>{label}</div>
       </div>
       {isCurrent && <span className="ml-auto text-teal/80 text-xs flex-shrink-0">▸</span>}
     </button>
