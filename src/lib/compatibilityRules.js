@@ -1192,33 +1192,33 @@ export const COMPAT_RULES = [
  */
 export const EOL_RULE_SLUGS = {
   // OS
-  rhel_centos_6_eol:            { slug: 'rhel',            cycle: '6'     },
-  rhel_centos_7_eol:            { slug: 'rhel',            cycle: '7'     },
-  ubuntu_1804_eol:              { slug: 'ubuntu',          cycle: '18.04' },
-  windows_server_2012_eol:      { slug: 'windows-server',  cycle: '2012'  },
-  windows_server_2016_eol_soon: { slug: 'windows-server',  cycle: '2016'  },
-  oracle_solaris_10_eol:        { slug: 'oracle-solaris',  cycle: '10'    },
-  aix_71_eol:                   { slug: 'aix',             cycle: '7.1'   },
-  aix_72_eol:                   { slug: 'aix',             cycle: '7.2'   },
-  // Database
-  oracle_11g_eol:               { slug: 'oracle-db',       cycle: '11.2'  },
-  oracle_12c_eol:               { slug: 'oracle-db',       cycle: '12.2'  },
-  postgres_11_eol:              { slug: 'postgresql',      cycle: '11'    },
-  postgres_12_eol:              { slug: 'postgresql',      cycle: '12'    },
-  postgres_13_eol:              { slug: 'postgresql',      cycle: '13'    },
-  postgres_14_eol_soon:         { slug: 'postgresql',      cycle: '14'    },
-  mysql_57_eol:                 { slug: 'mysql',           cycle: '5.7'   },
-  mysql_80_eol:                 { slug: 'mysql',           cycle: '8.0'   },
-  mssql_2012_eol:               { slug: 'mssqlserver',     cycle: '2012'  },
-  mssql_2014_eol:               { slug: 'mssqlserver',     cycle: '2014'  },
-  mssql_2016_eol_imminent:      { slug: 'mssqlserver',     cycle: '2016'  },
+  rhel_centos_6_eol:            { slug: 'rhel',            cycle: '6'        },
+  rhel_centos_7_eol:            { slug: 'rhel',            cycle: '7'        },
+  ubuntu_1804_eol:              { slug: 'ubuntu',          cycle: '18.04'    },
+  windows_server_2012_eol:      { slug: 'windows-server',  cycle: '2012'     },
+  windows_server_2016_eol_soon: { slug: 'windows-server',  cycle: '2016'     },
+  oracle_solaris_10_eol:        { slug: 'oracle-solaris',  cycle: '10'       },
+  aix_71_eol:                   { slug: 'aix',             cycle: '7.1'      }, // prefix-matches 7.1.5
+  aix_72_eol:                   { slug: 'aix',             cycle: '7.2'      }, // prefix-matches 7.2.x
+  // Database — oracle-database uses dotted cycles (12.2, 11.2); mssqlserver uses build versions
+  oracle_11g_eol:               { slug: 'oracle-database', cycle: '11.2'     },
+  oracle_12c_eol:               { slug: 'oracle-database', cycle: '12.2'     },
+  postgres_11_eol:              { slug: 'postgresql',      cycle: '11'       },
+  postgres_12_eol:              { slug: 'postgresql',      cycle: '12'       },
+  postgres_13_eol:              { slug: 'postgresql',      cycle: '13'       },
+  postgres_14_eol_soon:         { slug: 'postgresql',      cycle: '14'       },
+  mysql_57_eol:                 { slug: 'mysql',           cycle: '5.7'      },
+  mysql_80_eol:                 { slug: 'mysql',           cycle: '8.0'      },
+  mssql_2012_eol:               { slug: 'mssqlserver',     cycle: '11.0'     }, // SQL Server 2012 = 11.x
+  mssql_2014_eol:               { slug: 'mssqlserver',     cycle: '12.0'     }, // SQL Server 2014 = 12.x
+  mssql_2016_eol_imminent:      { slug: 'mssqlserver',     cycle: '13.0-sp3' }, // SP3 EOL: 2026-07-14
   // Middleware / App
-  apache_httpd_22_eol:          { slug: 'apache',          cycle: '2.2'   },
-  tomcat_85_eol:                { slug: 'apache-tomcat',   cycle: '8.5'   },
-  php_7x_eol:                   { slug: 'php',             cycle: '7.4'   },
-  jboss_eap_6x_eol:            { slug: 'jboss-eap',       cycle: '6.4'   },
-  vmware_esxi_67_eol:           { slug: 'vmware-esxi',     cycle: '6.7'   },
-  was_traditional_855_eol:      { slug: 'ibm-websphere',   cycle: '8.5'   },
+  apache_httpd_22_eol:          { slug: 'apache',          cycle: '2.2'      },
+  tomcat_85_eol:                { slug: 'tomcat',          cycle: '8.5'      }, // slug is 'tomcat', not 'apache-tomcat'
+  php_7x_eol:                   { slug: 'php',             cycle: '7.4'      },
+  jboss_eap_6x_eol:            { slug: 'jboss-eap',       cycle: '6'        }, // API tracks major only (6, 7, 8)
+  vmware_esxi_67_eol:           { slug: 'vmware-esxi',     cycle: '6.7'      },
+  // was_traditional_855_eol — no endoflife.date slug for IBM WebSphere; static rule only
 };
 
 /**

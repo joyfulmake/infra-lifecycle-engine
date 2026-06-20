@@ -37,10 +37,12 @@ export function useLiveCompatSync() {
       fetchProductCycles(slug)
         .then(cycles => {
           for (const { ruleId, cycle } of rules) {
-            // Match exact cycle string; fall back to prefix match (e.g. '12' matches '12.2')
+            // Match exact, then API-cycle-starts-with-our-target (AIX: '7.2.5' from '7.2'),
+            // then our-target-starts-with-API-cycle (jboss: '6.4' from '6' if cycle field differs).
             const match =
               cycles.find(c => String(c.cycle) === String(cycle)) ||
-              cycles.find(c => String(c.cycle).startsWith(String(cycle)));
+              cycles.find(c => String(c.cycle).startsWith(String(cycle))) ||
+              cycles.find(c => String(cycle).startsWith(String(c.cycle)));
             if (!match) return;
 
             const liveStatus = cycleLiveStatus(match);
