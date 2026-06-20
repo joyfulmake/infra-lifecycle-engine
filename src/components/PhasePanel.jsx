@@ -1249,17 +1249,19 @@ export default function PhasePanel() {
 
         {/* AI suggestion acceptance banner */}
         {aiSuggestBanner && (
-          <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-2 fade-in">
-            <div className="text-xs font-semibold text-blue-300 mb-0.5">AI Pre-Selected Items</div>
-            <div className="text-xs text-blue-200 leading-snug mb-2">
+          <div className="rounded-lg p-2.5 fade-in" style={{ background: 'rgba(30,58,138,0.75)', border: '1px solid #3b82f6' }}>
+            <div className="text-xs font-bold mb-1" style={{ color: '#93c5fd' }}>AI Pre-Selected Items</div>
+            <div className="text-xs leading-snug mb-2.5" style={{ color: '#e0f0ff' }}>
               {aiSuggestBanner.inc.length} incident{aiSuggestBanner.inc.length !== 1 ? 's' : ''} + {aiSuggestBanner.uum.length} UUM item{aiSuggestBanner.uum.length !== 1 ? 's' : ''} matched to your stack. Review below and deselect any that don't apply.
             </div>
             <button
-              className="text-xs text-blue-400 hover:text-blue-200 border border-blue-700 rounded px-2 py-0.5 mr-2"
+              className="text-xs border rounded px-2 py-0.5 mr-2 transition-colors"
+              style={{ color: '#93c5fd', borderColor: '#3b82f6' }}
               onClick={() => setAiSuggestBanner(null)}
             >Dismiss</button>
             <button
-              className="text-xs text-red-400 hover:text-red-200"
+              className="text-xs transition-colors"
+              style={{ color: '#fca5a5' }}
               onClick={() => {
                 aiSuggestBanner.inc.forEach(code => { if (s.selInc.includes(code)) s.toggleInc(code); });
                 aiSuggestBanner.uum.forEach(code => { if (s.selUUM.includes(code)) s.toggleUUM(code); });

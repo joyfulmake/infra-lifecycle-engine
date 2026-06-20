@@ -314,6 +314,38 @@ export function ruleBasedResponse(message, s, authUser) {
   const m = message.toLowerCase().trim();
   const raw = message.trim();
 
+  // ── Systemic compatibility scan — runs on EVERY message ────────────────────
+  // Detects vendor-documented incompatibilities in migration descriptions, stack
+  // info, or UUM/incident entries typed into the chat. Uses migration-aware text
+  // extraction so "oracle from aix power to RH power" correctly targets RHEL Power.
+  const inlineCompatHits = checkCompatibilityForText(raw, s.ctx || {});
+  if (inlineCompatHits.length > 0) {
+    const criticals = inlineCompatHits.filter(r => r.severity === 'critical');
+    const warnings  = inlineCompatHits.filter(r => r.severity === 'warn');
+    const bullets = inlineCompatHits.map(r => {
+      const sev  = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ WARNING' : 'ℹ Info';
+      const refs = (r.refs || []).slice(0, 2).map(rf => `  → ${rf.label}`).join('\n');
+      return `${sev}: ${r.title}\n${r.detail}${refs ? '\n' + refs : ''}`;
+    }).join('\n\n');
+    const raidActions = inlineCompatHits
+      .filter(r => r.severity === 'critical' || r.severity === 'warn')
+      .map(r => ({
+        type: 'ADD_RAID_ENTRY',
+        description: `Log compat risk: ${r.title}`,
+        params: {
+          type: 'RISK',
+          severity: r.severity === 'critical' ? 'CRITICAL' : 'HIGH',
+          description: `[Vendor Compat] ${r.title}`,
+          mitigation: `Verify against vendor PAM before provisioning. Refs: ${(r.refs || []).map(rf => rf.label).join('; ')}`,
+        },
+        requiresConfirmation: true,
+      }));
+    return {
+      reply: `Vendor compatibility issue detected in what you typed:\n\n${bullets}\n\nThese are published vendor platform restrictions — not opinions. If you proceed, this must be documented in the RAID log as a risk.`,
+      actions: raidActions.length > 0 ? raidActions : undefined,
+    };
+  }
+
   // ── Field-setting commands — parse and return with actions + EOL detection ─
   const ctxField = parseSetField(raw);
   if (ctxField) {

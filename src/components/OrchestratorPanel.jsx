@@ -1049,8 +1049,14 @@ Rules:
   }, [reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, reqSla]);
 
   // ── Field interview sync — advance/close interview when user fills via UI ──
+  // Guard: don't fire while the LLM is thinking — it would stack a second question
+  // on top of whatever the LLM is about to say.
+  const thinkingRef = useRef(false);
+  useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
+
   useEffect(() => {
     if (!open || awaitingNameRef.current || !awaitingFieldRef.current) return;
+    if (thinkingRef.current) return; // LLM in flight — wait
     const currS = sRef.current;
     const { hw, os, db, app } = currS.ctx || {};
     const r = currS.requirements || {};
@@ -1058,16 +1064,21 @@ Rules:
       projectName: !!r.projectName, envType: !!r.envType,
       projectStartDate: !!r.projectStartDate, goLiveDate: !!r.goLiveDate, sla: !!r.sla };
     const curr = awaitingFieldRef.current;
-    if (!filled[curr]) return; // not yet filled
+    if (!filled[curr]) return; // not yet filled — still waiting for user
     const next = nextFieldPrompt(currS, curr);
     awaitingFieldRef.current = next;
     if (!next) {
-      const sc = generateScript(currS);
+      // All Phase 1 fields collected — tell user to click Build
+      const alreadyBuilt = currS.isBuilt;
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-        `All fields set — you're ready to go! ${sc.nextAction ? sc.nextAction : 'Say "run scan" to kick off the AI Smart Scan.'}`
+        alreadyBuilt
+          ? 'All fields are set. Say "run scan" to run the AI Smart Scan, or use the sidebar to continue.'
+          : 'All Phase 1 fields complete. Click **Build Environment** in the left sidebar to set up your environment — or just say "build" here. The AI Smart Scan unlocks straight after.'
       }]);
     } else {
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[next] }]);
+      // For text fields (no chip picker), focus the input
+      if (!FIELD_CHIPS[next]) setTimeout(() => inputRef.current?.focus(), 50);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctxHw, ctxOs, ctxDb, ctxApp, reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, reqSla, open]);
@@ -1787,11 +1798,11 @@ Rules:
     os:               'Which operating system?',
     db:               'Which database engine?',
     app:              'Which application or middleware?',
-    projectName:      'What should we call this project?',
-    envType:          'Production, UAT, DR, Dev, or SIT?',
-    projectStartDate: 'When does the project start?',
-    goLiveDate:       "What's the target go-live date?",
-    sla:              'SLA tier — Tier 1, 2, or 3?',
+    projectName:      'What should we call this project? (type a name and press Enter)',
+    envType:          'What environment type — Production, UAT, DR, Dev, or SIT?',
+    projectStartDate: 'When does the project start? (type a date e.g. 2026-09-01 or use the sidebar date picker)',
+    goLiveDate:       "What's the target go-live date? (type a date e.g. 2026-11-30 or use the sidebar date picker)",
+    sla:              'SLA tier — Tier 1 (99.99%), Tier 2 (99.9%), or Tier 3 (99.5%)?',
   };
   const FIELD_CTX_MAP = {
     hw: 'hardware', os: 'OS', db: 'database', app: 'application',

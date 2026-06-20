@@ -67,16 +67,22 @@ export const COMPAT_RULES = [
   },
   {
     id: 'oracle_power_rhel_check',
-    severity: 'warn',
+    severity: 'critical',
     vendor: 'Oracle',
     product: 'Oracle Database',
-    title: 'Verify Oracle DB version for RHEL IBM Power (ppc64le) — version-specific support',
+    title: 'Oracle DB support on RHEL for IBM Power (ppc64le) is version-gated — verify before migrating',
     detail:
-      'Oracle Database support on RHEL for IBM Power (ppc64le) is version-specific. ' +
-      'Oracle 19c and 21c are certified on RHEL 8 ppc64le. Oracle 23c (AI) has not been certified ' +
-      'on ppc64le as of 2024. Always verify against the current certification matrix before provisioning.',
+      'Oracle Database 19c and 21c are certified on RHEL 8 for IBM Power LE (ppc64le). ' +
+      'Oracle 12c and earlier are NOT certified on ppc64le — only on AIX Power (big-endian). ' +
+      'Oracle 23c AI is certified on ppc64le RHEL 8.6/9.2 but verify the exact OS version. ' +
+      'Migrating from AIX (big-endian) to RHEL Power LE (ppc64le) requires a full data export/import — ' +
+      'binary datafiles are NOT portable between big-endian AIX and little-endian RHEL Power. ' +
+      'This is a documented Oracle PAM restriction. Verify your exact Oracle version and target RHEL ' +
+      'minor version against the current certification matrix before provisioning.',
     refs: [
-      { label: 'Oracle Certification Matrix — Linux for Power (Doc 742060.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+      { label: 'Oracle Certification Matrix — Linux for IBM Power (Doc 742060.1)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=742060.1' },
+      { label: 'Oracle DB on IBM Power Linux — Installation Guide', url: 'https://docs.oracle.com/en/database/oracle/oracle-database/19/ladbi/' },
+      { label: 'Migrating from AIX to Linux: Export/Import required (endian change)', url: 'https://support.oracle.com/epmos/faces/DocumentDisplay?id=1401597.1' },
     ],
     check: ({ db, hw, os }) =>
       /oracle/i.test(db) &&
@@ -865,37 +871,69 @@ export function checkCompatibility(ctx) {
 }
 
 /**
- * Check a free-text UUM/incident entry description against all rules.
- * Appends matching ctx fields to broaden detection.
+ * Check a free-text description against all rules.
+ * Handles migration patterns ("from X to Y") by extracting the TARGET platform.
  */
 export function checkCompatibilityForText(text, ctx) {
   if (!text) return [];
-  const combined = (text + ' ' + (ctx?.db || '') + ' ' + (ctx?.os || '') + ' ' + (ctx?.hw || '') + ' ' + (ctx?.app || '')).toLowerCase();
-  // Synthesise a pseudo-ctx from the text + real ctx so rule checks work
-  const pseudoCtx = {
-    hw:  (ctx?.hw  || '') + ' ' + extractHW(text),
-    os:  (ctx?.os  || '') + ' ' + extractOS(text),
-    db:  (ctx?.db  || '') + ' ' + extractDB(text),
-    app: (ctx?.app || '') + ' ' + extractApp(text),
-  };
+  const pseudoCtx = extractMigrationCtx(text, ctx);
   return checkCompatibility(pseudoCtx);
 }
 
 // ── Text extractors — pull stack hints out of free-text entry descriptions ────
+// For migration phrases ("from X to Y"), the TARGET platform is what matters for
+// compatibility checking — extract it preferentially over the source.
+
+const HW_PAT  = /\b(ibm.?power|power\s*\d?|ppc64le|ppc64be|ppc|p9|p10|powerpc|graviton|arm64?|aarch64|sparc|itanium|x86_64|amd64)\b/i;
+const OS_PAT  = /\b(rhel|rh\b|red.?hat|aix[\s\d.]*|sles|suse|ubuntu[\s\d.]*lts?|centos|windows.?server[\s\d.]*|linux)\b/i;
+const DB_PAT  = /\b(oracle|sybase|sap.?ase|adaptive.?server|mysql|mariadb|postgres(?:ql)?|db2|ibm.?db2|sql.?server|mssql)\b/i;
+const APP_PAT = /\b(websphere|weblogic|jboss|eap|tomcat|nginx|iis)\b/i;
+
+function normOS(s) { return s ? s.toLowerCase().replace(/\brh\b/, 'rhel') : ''; }
+
+function extractBothSides(t, pat) {
+  // Find all matches; for migration text ("from X to Y") return [source, target]
+  const all = [];
+  let re = new RegExp(pat.source, 'gi');
+  let m;
+  while ((m = re.exec(t)) !== null) all.push(m[0]);
+  return all; // caller decides which to use
+}
 
 function extractHW(t) {
-  const m = t.match(/\b(ibm.?power|power\s*\d|aix|ppc|p9|p10|powerpc|graviton|arm|sparc|itanium)\b/i);
+  // Prefer the token immediately after "to" (migration target)
+  const toMatch = t.match(/\bto\b[^a-z]*(?:\S+\s+){0,3}?(ibm.?power|power\s*\d?|ppc64le|ppc64be|ppc|p9|p10|powerpc|graviton|arm64?|aarch64|sparc|itanium|x86_64|amd64)\b/i);
+  if (toMatch) return toMatch[1];
+  const m = t.match(HW_PAT);
   return m ? m[0] : '';
 }
 function extractOS(t) {
-  const m = t.match(/\b(rhel|red.?hat|aix[\s\d.]*|sles|suse|ubuntu|centos|windows.?server|linux)\b/i);
-  return m ? m[0] : '';
+  // Prefer the token immediately after "to" (migration target)
+  const toMatch = t.match(/\bto\b[^a-z]*(?:\S+\s+){0,3}?(rhel|rh\b|red.?hat|aix[\s\d.]*|sles|suse|ubuntu[\s\d.]*|centos|windows.?server[\s\d.]*|linux)\b/i);
+  if (toMatch) return normOS(toMatch[1]);
+  const m = t.match(OS_PAT);
+  return m ? normOS(m[0]) : '';
 }
 function extractDB(t) {
-  const m = t.match(/\b(oracle|sybase|sap.?ase|adaptive.?server|mysql|mariadb|postgres|db2|sql.?server|mssql)\b/i);
+  const m = t.match(DB_PAT);
   return m ? m[0] : '';
 }
 function extractApp(t) {
-  const m = t.match(/\b(websphere|weblogic|jboss|eap|tomcat|nginx|iis)\b/i);
+  const m = t.match(APP_PAT);
   return m ? m[0] : '';
+}
+
+/**
+ * Parse a migration description ("oracle from aix power to rhel power") and return
+ * a pseudo-ctx that reflects the TARGET stack — the compat rules apply to where
+ * you are going, not where you came from.
+ */
+export function extractMigrationCtx(text, existingCtx) {
+  const t = text || '';
+  return {
+    hw:  (existingCtx?.hw  || '') + ' ' + extractHW(t),
+    os:  (existingCtx?.os  || '') + ' ' + extractOS(t),
+    db:  (existingCtx?.db  || '') + ' ' + extractDB(t),
+    app: (existingCtx?.app || '') + ' ' + extractApp(t),
+  };
 }
