@@ -1183,6 +1183,45 @@ export const COMPAT_RULES = [
 ];
 
 /**
+ * Maps rule IDs to their endoflife.date live-check coordinates.
+ * On every app open, useLiveCompatSync fetches live EOL dates for each
+ * slug and stores results in store.liveCompatData[ruleId].
+ * Only EOL/lifecycle rules appear here — platform incompatibility rules
+ * (SQL Server on AIX, SAP HANA on AIX, etc.) have no live API equivalent
+ * and remain statically authoritative.
+ */
+export const EOL_RULE_SLUGS = {
+  // OS
+  rhel_centos_6_eol:            { slug: 'rhel',            cycle: '6'     },
+  rhel_centos_7_eol:            { slug: 'rhel',            cycle: '7'     },
+  ubuntu_1804_eol:              { slug: 'ubuntu',          cycle: '18.04' },
+  windows_server_2012_eol:      { slug: 'windows-server',  cycle: '2012'  },
+  windows_server_2016_eol_soon: { slug: 'windows-server',  cycle: '2016'  },
+  oracle_solaris_10_eol:        { slug: 'oracle-solaris',  cycle: '10'    },
+  aix_71_eol:                   { slug: 'aix',             cycle: '7.1'   },
+  aix_72_eol:                   { slug: 'aix',             cycle: '7.2'   },
+  // Database
+  oracle_11g_eol:               { slug: 'oracle-db',       cycle: '11.2'  },
+  oracle_12c_eol:               { slug: 'oracle-db',       cycle: '12.2'  },
+  postgres_11_eol:              { slug: 'postgresql',      cycle: '11'    },
+  postgres_12_eol:              { slug: 'postgresql',      cycle: '12'    },
+  postgres_13_eol:              { slug: 'postgresql',      cycle: '13'    },
+  postgres_14_eol_soon:         { slug: 'postgresql',      cycle: '14'    },
+  mysql_57_eol:                 { slug: 'mysql',           cycle: '5.7'   },
+  mysql_80_eol:                 { slug: 'mysql',           cycle: '8.0'   },
+  mssql_2012_eol:               { slug: 'mssqlserver',     cycle: '2012'  },
+  mssql_2014_eol:               { slug: 'mssqlserver',     cycle: '2014'  },
+  mssql_2016_eol_imminent:      { slug: 'mssqlserver',     cycle: '2016'  },
+  // Middleware / App
+  apache_httpd_22_eol:          { slug: 'apache',          cycle: '2.2'   },
+  tomcat_85_eol:                { slug: 'apache-tomcat',   cycle: '8.5'   },
+  php_7x_eol:                   { slug: 'php',             cycle: '7.4'   },
+  jboss_eap_6x_eol:            { slug: 'jboss-eap',       cycle: '6.4'   },
+  vmware_esxi_67_eol:           { slug: 'vmware-esxi',     cycle: '6.7'   },
+  was_traditional_855_eol:      { slug: 'ibm-websphere',   cycle: '8.5'   },
+};
+
+/**
  * Check a ctx { hw, os, db, app } against all compatibility rules.
  * Returns an array of matching rules (with full rule objects).
  */

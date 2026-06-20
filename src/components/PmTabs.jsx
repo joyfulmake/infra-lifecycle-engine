@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { useCoherenceEngine } from '../lib/useCoherenceEngine.js';
+import { useLiveCompatSync } from '../lib/liveCompatSync.js';
 import ExecSummaryTab from './tabs/ExecSummaryTab.jsx';
 import SystemDesignTab from './tabs/SystemDesignTab.jsx';
 import GanttTab from './tabs/GanttTab.jsx';
@@ -147,6 +148,7 @@ export default function PmTabs() {
   const activeTab = s.activeTab || 'exec';
 
   useCoherenceEngine();
+  useLiveCompatSync(); // fetches live EOL dates from endoflife.date on every app open
 
   const nextTabId = getNextTabId(s);
 

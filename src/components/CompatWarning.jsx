@@ -7,8 +7,17 @@
  *   onDismiss     — called when user clicks "Change my entry"
  *   dark          — true for dark background (sidebar), false for light (tabs)
  *   overriding    — true if user has already overridden; shows a softer reminder
+ *
+ * Each rule that has a matching entry in store.liveCompatData gets a live
+ * verification badge showing whether the EOL status was just confirmed or
+ * whether the vendor has extended support beyond the static date.
  */
+import { useStore } from '../store/useStore.js';
+
 export default function CompatWarning({ hits, onOverride, onDismiss, dark = false, overriding = false }) {
+  const liveCompatData      = useStore(s => s.liveCompatData);
+  const liveCompatVerifiedAt = useStore(s => s.liveCompatVerifiedAt);
+
   if (!hits || hits.length === 0) return null;
 
   const hasCritical = hits.some(h => h.severity === 'critical');
@@ -28,30 +37,82 @@ export default function CompatWarning({ hits, onOverride, onDismiss, dark = fals
     ? 'text-blue-300 hover:text-blue-200 border-blue-500/40 bg-white/5 hover:bg-white/10'
     : 'text-blue-700 hover:text-blue-800 border-blue-300 bg-white hover:bg-blue-50';
 
+  function liveBadge(rule) {
+    const live = liveCompatData[rule.id];
+    if (!live) return null;
+
+    // If live data shows the product is still active, the static CRITICAL rule may be stale
+    // (vendor extended support). Show an amber caution note.
+    if (live.status === 'active') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ml-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/30">
+          ⚡ Live: support may be extended — re-verify
+        </span>
+      );
+    }
+    // 'eol' or 'eos' — live data confirms the static rule is accurate
+    if (live.status === 'eol' || live.status === 'eos') {
+      const dateStr = live.eolDate && live.eolDate !== 'EOL' ? ` (${live.eolDate})` : '';
+      return (
+        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ml-1.5 bg-green-800/25 text-green-300 border border-green-600/30">
+          ✓ Live confirmed{dateStr}
+        </span>
+      );
+    }
+    // 'eos_soon' — EOL within 12 months, live-verified
+    if (live.status === 'eos_soon') {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ml-1.5 bg-amber-800/25 text-amber-300 border border-amber-600/30">
+          ⏳ Live: EOL approaching ({live.eolDate || 'soon'})
+        </span>
+      );
+    }
+    return null;
+  }
+
+  // Format the verified timestamp concisely
+  const verifiedStr = liveCompatVerifiedAt
+    ? (() => {
+        try {
+          const d = new Date(liveCompatVerifiedAt);
+          return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        } catch { return null; }
+      })()
+    : null;
+
   return (
     <div className={`rounded border ${borderCls} ${bgCls} p-2.5 mt-1.5 mb-1 text-xs space-y-2`}>
-      {hits.map(rule => (
-        <div key={rule.id}>
-          <div className={`font-semibold ${headCls} mb-0.5`}>
-            {rule.severity === 'critical' ? '🔴' : '⚠'} {rule.title}
+      {hits.map(rule => {
+        const live = liveCompatData[rule.id];
+        return (
+          <div key={rule.id}>
+            <div className={`font-semibold ${headCls} mb-0.5 flex flex-wrap items-center gap-0.5`}>
+              {rule.severity === 'critical' ? '🔴' : '⚠'} {rule.title}
+              {liveBadge(rule)}
+            </div>
+            <div className={`${bodyCls} leading-relaxed mb-1`}>{rule.detail}</div>
+            {live?.latest && (
+              <div className={`text-xs mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Latest supported release: <strong>{live.latest}</strong>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1">
+              {(rule.refs || []).map((ref, i) => (
+                <a
+                  key={i}
+                  href={ref.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-xs transition-colors ${linkCls}`}
+                  title={ref.url}
+                >
+                  ↗ {ref.label}
+                </a>
+              ))}
+            </div>
           </div>
-          <div className={`${bodyCls} leading-relaxed mb-1`}>{rule.detail}</div>
-          <div className="flex flex-wrap gap-1">
-            {(rule.refs || []).map((ref, i) => (
-              <a
-                key={i}
-                href={ref.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-xs transition-colors ${linkCls}`}
-                title={ref.url}
-              >
-                ↗ {ref.label}
-              </a>
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* Only show action buttons when handlers are provided (info-only mode passes null) */}
       {!overriding && onOverride !== null && (
@@ -86,6 +147,13 @@ export default function CompatWarning({ hits, onOverride, onDismiss, dark = fals
       {overriding && (
         <div className={`text-xs font-semibold mt-1 ${hasCritical ? 'text-red-400' : 'text-amber-400'}`}>
           ⚠ Overridden — a RAID risk will be auto-raised on submit
+        </div>
+      )}
+
+      {/* Live verification footer */}
+      {verifiedStr && (
+        <div className={`text-xs pt-1 border-t border-current/10 ${dark ? 'text-white/35' : 'text-slate-400'}`}>
+          Live data from endoflife.date · verified {verifiedStr}
         </div>
       )}
     </div>

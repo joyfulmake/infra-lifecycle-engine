@@ -1035,19 +1035,34 @@ export function ruleBasedResponse(message, s, authUser) {
   if (/\b(compat|support(ed)?|certif|can.*run|will.*work|platform|pam|matrix)\b/.test(m)) {
     const hits = checkCompatibility(s.ctx || {});
     if (hits.length > 0) {
+      const liveCompatData = s.liveCompatData || {};
+      const verifiedAt     = s.liveCompatVerifiedAt
+        ? `Live EOL data verified ${new Date(s.liveCompatVerifiedAt).toLocaleString()}.`
+        : 'Live EOL data not yet loaded — static vendor PAM data in use.';
       const bullets = hits.map(r => {
-        const sev = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ Warning' : 'ℹ Info';
-        const refs = (r.refs || []).map(rf => `${rf.label} — ${rf.url}`).join('; ');
-        return `${sev}: ${r.title}\n${r.detail}\nRef: ${refs}`;
+        const sev  = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ Warning' : 'ℹ Info';
+        const live = liveCompatData[r.id];
+        const liveTag = live
+          ? (live.status === 'eol' || live.status === 'eos'
+              ? ` [Live ✓ EOL confirmed${live.eolDate && live.eolDate !== 'EOL' ? ' ' + live.eolDate : ''}]`
+              : live.status === 'active'
+              ? ' [Live ⚡ vendor may have extended support — re-verify]'
+              : '')
+          : '';
+        const refs = (r.refs || []).slice(0, 2).map(rf => `  → ${rf.label}`).join('\n');
+        return `${sev}: ${r.title}${liveTag}\n${r.detail}${refs ? '\n' + refs : ''}`;
       }).join('\n\n');
       return {
-        reply: `Compatibility issues detected for the current stack (${s.ctx?.hw}/${s.ctx?.os}/${s.ctx?.db}/${s.ctx?.app}):\n\n${bullets}\n\nThese are documented vendor platform restrictions — not opinions. Address them before provisioning.`,
+        reply: `Compatibility issues detected for the current stack (${s.ctx?.hw}/${s.ctx?.os}/${s.ctx?.db}/${s.ctx?.app}):\n\n${bullets}\n\nThese are documented vendor platform restrictions — not opinions. Address them before provisioning.\n\n${verifiedAt}`,
       };
     }
-    // If no hits but question was asked, reassure
+    // If no hits but question was asked, reassure with live-check context
     if (s.ctx?.hw || s.ctx?.os || s.ctx?.db) {
+      const verifiedAt = s.liveCompatVerifiedAt
+        ? `Live EOL data verified ${new Date(s.liveCompatVerifiedAt).toLocaleString()}.`
+        : '';
       return {
-        reply: `No known vendor platform conflicts for the current stack (${[s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join('/')}). Compatibility checks run against SAP, Oracle, Microsoft, IBM, and Red Hat product availability matrices.`,
+        reply: `No known vendor platform conflicts for the current stack (${[s.ctx?.hw, s.ctx?.os, s.ctx?.db, s.ctx?.app].filter(Boolean).join('/')}). Checks run against 62 rules covering SAP, Oracle, Microsoft, IBM, Red Hat, PostgreSQL, Apache, VMware, and more. ${verifiedAt}`,
       };
     }
   }

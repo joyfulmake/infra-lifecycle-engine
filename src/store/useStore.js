@@ -500,6 +500,15 @@ export const useStore = create((set, get) => ({
     liveEolData: { ...s.liveEolData, [componentName]: data },
   })),
 
+  // Live compatibility data — fetched from endoflife.date on every app open.
+  // Keyed by COMPAT_RULES rule id. Runtime-only — not persisted.
+  liveCompatData: {},
+  liveCompatVerifiedAt: null,
+  setLiveCompatData: (ruleId, data) => set(s => ({
+    liveCompatData: { ...s.liveCompatData, [ruleId]: data },
+  })),
+  setLiveCompatVerifiedAt: ts => set({ liveCompatVerifiedAt: ts }),
+
   loadBuild: (b) => set({
     isBuilt: b.isBuilt ?? false,
     scanComplete: b.scanComplete ?? false,
