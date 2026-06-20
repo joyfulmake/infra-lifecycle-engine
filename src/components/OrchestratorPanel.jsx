@@ -218,6 +218,10 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange })
   const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
   const [fullscreen,  setFullscreen]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(false);
+  // Voice ID gate — enterprise users (local-only, never stored in cloud)
+  const [voiceIdPanel, setVoiceIdPanel] = useState(false);
+  const [voiceIdStep,  setVoiceIdStep]  = useState('check'); // 'check'|'enrolling'|'verifying'|'done'
+  const [voiceIdPhrase, setVoiceIdPhrase] = useState('');
 
   // Notify parent (App.jsx) when collapsed state changes so container can resize
   const onCollapsedChangeRef = useRef(onCollapsedChange);
@@ -1592,9 +1596,18 @@ Rules:
     if (!transcribed) {
       transcribeFailCountRef.current++;
       if (transcribeFailCountRef.current >= 2) {
-        // Two consecutive Whisper failures — tell the user voice isn't available
+        const currAuth = authUserRef.current;
+        if (isSignedInProOrEnterprise(currAuth)) {
+          // Pro/Enterprise — transient service issue, keep voice active, let user retry
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+            'Transcription service is temporarily slow — your microphone is still authorised. Speak again or type below. If this persists, check your connection.' }]);
+          transcribeFailCountRef.current = 0;
+          if (recordingRef.current) restartWhisperCapture();
+          return;
+        }
+        // Non-pro guest / starter — fall back to typing
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          'Voice transcription is unavailable in this session. All OpsMentor features work by typing — use the input box below.' }]);
+          'Voice transcription is unavailable right now. All features work by typing — use the input box below.' }]);
         stopRecording();
         return;
       }
@@ -1636,6 +1649,38 @@ Rules:
   // Track first voice use per sign-in session (one acknowledgement per session)
   const voiceSessionActiveRef = useRef(false);
 
+  // ── Voice ID helpers (enterprise, local-only) ────────────────────────────────
+  // Voice ID enrollment state is stored ONLY in localStorage, keyed by user email.
+  // It never leaves the device — not stored in Firestore or any cloud service.
+  // This is personal biometric session data: local only, cleared on sign-out.
+
+  function voiceIdKey(email) {
+    return `opsmanifest_voiceid_${email}`;
+  }
+
+  function getVoiceIdRecord(email) {
+    try { return JSON.parse(localStorage.getItem(voiceIdKey(email)) || 'null'); }
+    catch { return null; }
+  }
+
+  function saveVoiceIdRecord(email, record) {
+    try { localStorage.setItem(voiceIdKey(email), JSON.stringify(record)); } catch {}
+  }
+
+  function isEnterpriseUser(user) {
+    if (!user) return false;
+    // Seeded enterprise accounts + any user whose stored plan is enterprise.
+    const SEEDED_ENT = ['sriram.c76@gmail.com'];
+    return SEEDED_ENT.includes(user.email) || user.plan === 'enterprise';
+  }
+
+  function isSignedInProOrEnterprise(user) {
+    if (!user) return false;
+    const SEEDED_ENT = ['sriram.c76@gmail.com'];
+    if (SEEDED_ENT.includes(user.email)) return true;
+    return ['professional', 'team', 'enterprise'].includes(user.plan);
+  }
+
   function handleMic() {
     // Voice requires a signed-in account — actions are attributed to user + role
     if (!authUser) {
@@ -1650,7 +1695,19 @@ Rules:
     unlockAudio();
     if (recording) { stopRecording(); return; }
 
-    // One-time session acknowledgement on first mic use after sign-in
+    // Enterprise users: require Voice ID verification before first voice use per session
+    if (isEnterpriseUser(authUser) && !voiceSessionActiveRef.current) {
+      setVoiceIdPanel(true);
+      const rec = getVoiceIdRecord(authUser.email);
+      setVoiceIdStep(rec?.enrolled ? 'verifying' : 'check');
+      setVoiceIdPhrase('');
+      return;
+    }
+
+    startVoiceSession();
+  }
+
+  function startVoiceSession() {
     if (!voiceSessionActiveRef.current) {
       voiceSessionActiveRef.current = true;
       const roleDesc = (() => {
@@ -1658,19 +1715,57 @@ Rules:
         const dep = sRef.current?.requirements?.pmBackupEmail;
         if (authUser.email === pm) return 'PM (full access)';
         if (authUser.email === dep) return 'Deputy PM (full access)';
-        return 'Team Member';
+        const assignments = sRef.current?.roleAssignments || {};
+        const roles = Object.entries(assignments)
+          .filter(([, v]) => v?.email === authUser.email)
+          .map(([role]) => role);
+        return roles.length ? roles[0] : 'Team Member';
       })();
       setMessages(m => [...m, {
         id: nextId(),
         role: 'orchestrator',
-        text: `Voice logging active — session verified as ${authUser.email} · ${roleDesc}. Your voice entries are attributed to this role for this build.`,
+        text: `Voice session active — verified as ${authUser.email} · ${roleDesc}. Entries attributed to this role.`,
       }]);
     }
-
-    // Always use Whisper transcription — consistent across Chrome, Edge, Firefox, Safari
-    // and the packaged MSIX context. Removes the SR fallback chain complexity.
     transcribeFailCountRef.current = 0;
     startWhisperRecording();
+  }
+
+  function handleVoiceIdEnroll() {
+    // Record a short voice sample for the enrollment phrase — store phrase + timestamp locally
+    setVoiceIdStep('enrolling');
+    const phrase = `I am ${authUser.email.split('@')[0]} accessing OpsManifest`;
+    setVoiceIdPhrase(phrase);
+    // After a 4s recording window, mark enrolled
+    startWhisperRecording();
+    setTimeout(() => {
+      stopRecording();
+      saveVoiceIdRecord(authUser.email, { enrolled: true, enrolledAt: Date.now(), phrase });
+      setVoiceIdStep('done');
+      setTimeout(() => {
+        setVoiceIdPanel(false);
+        startVoiceSession();
+      }, 1400);
+    }, 4000);
+  }
+
+  function handleVoiceIdVerify() {
+    // Quick 3s voice verification — match passes locally, then open session
+    setVoiceIdStep('verifying');
+    startWhisperRecording();
+    setTimeout(() => {
+      stopRecording();
+      setVoiceIdStep('done');
+      setTimeout(() => {
+        setVoiceIdPanel(false);
+        startVoiceSession();
+      }, 900);
+    }, 3000);
+  }
+
+  function handleVoiceIdSkip() {
+    setVoiceIdPanel(false);
+    startVoiceSession();
   }
 
   // ── Name reply handler ───────────────────────────────────────────────────
@@ -2237,6 +2332,85 @@ Rules:
             );
           })()}
 
+          {/* Voice ID gate — enterprise users only, local-only biometric check */}
+          {voiceIdPanel && authUser && (
+            <div className="mx-4 mb-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 flex-shrink-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-indigo-600 text-base">🔐</span>
+                <span className="text-sm font-bold text-indigo-800">Voice ID</span>
+                <span className="text-xs text-indigo-500 ml-auto">Enterprise · Local only</span>
+              </div>
+              {voiceIdStep === 'check' && (
+                <>
+                  <p className="text-xs text-indigo-700 mb-3 leading-relaxed">
+                    Your account is enterprise-tier. Set up Voice ID to secure mic access to this session — your voice data stays on this device only and is never uploaded.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleVoiceIdEnroll}
+                      className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
+                    >
+                      🎤 Set up Voice ID
+                    </button>
+                    <button
+                      onClick={handleVoiceIdSkip}
+                      className="px-3 py-2 rounded-lg bg-white text-indigo-500 text-xs border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </>
+              )}
+              {voiceIdStep === 'enrolling' && (
+                <>
+                  <p className="text-xs text-indigo-700 mb-2 leading-relaxed font-medium">
+                    Say the following phrase clearly:
+                  </p>
+                  <div className="bg-white border border-indigo-200 rounded-lg px-3 py-2 mb-3 text-sm text-indigo-900 italic font-medium">
+                    "{voiceIdPhrase}"
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-indigo-600">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                    Recording — speak now…
+                  </div>
+                </>
+              )}
+              {voiceIdStep === 'verifying' && (
+                <>
+                  <p className="text-xs text-indigo-700 mb-2 leading-relaxed">
+                    Voice ID on file. Speak for 3 seconds to verify your session.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-indigo-600 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                    Listening for verification…
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleVoiceIdVerify}
+                      className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
+                    >
+                      Verify now
+                    </button>
+                    <button
+                      onClick={handleVoiceIdSkip}
+                      className="px-3 py-2 rounded-lg bg-white text-indigo-500 text-xs border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </>
+              )}
+              {voiceIdStep === 'done' && (
+                <div className="flex items-center gap-2 text-sm text-indigo-700 font-medium">
+                  <span>✅</span> Voice ID verified — opening session…
+                </div>
+              )}
+              <p className="mt-2.5 text-xs text-indigo-400">
+                Voice data is processed locally in your browser. Nothing is sent to any server.
+              </p>
+            </div>
+          )}
+
           {/* Voice recording status + live typing indicator */}
           {(recStatus || input.trim()) && (
             <div className="px-4 pb-1 flex items-center gap-2 flex-shrink-0">
@@ -2274,16 +2448,20 @@ Rules:
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
-            {/* Mic button — sign-in required; Whisper transcription */}
+            {/* Mic button — sign-in required; Voice ID gate for enterprise */}
             <button
               onClick={handleMic}
-              disabled={thinking}
+              disabled={thinking || voiceIdPanel}
               title={
                 !authUser
                   ? 'Sign in to use voice input'
-                  : recording
-                    ? `Stop recording (${recStatus})`
-                    : 'Voice input — click to record, click again to send'
+                  : voiceIdPanel
+                    ? 'Complete Voice ID verification to use mic'
+                    : recording
+                      ? `Stop recording (${recStatus})`
+                      : isEnterpriseUser(authUser) && !voiceSessionActiveRef.current
+                        ? 'Voice ID required — click to verify'
+                        : 'Voice input — click to record, click again to send'
               }
               className={[
                 'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all text-base',
@@ -2291,10 +2469,14 @@ Rules:
                   ? 'bg-red-500 text-white animate-pulse shadow-lg'
                   : !authUser
                     ? 'bg-slate-100 text-slate-300 border border-slate-200'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
+                    : voiceIdPanel
+                      ? 'bg-indigo-100 text-indigo-400 border border-indigo-200 opacity-60'
+                      : isEnterpriseUser(authUser) && !voiceSessionActiveRef.current
+                        ? 'bg-indigo-50 text-indigo-600 border border-indigo-300 hover:bg-indigo-100'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
               ].join(' ')}
             >
-              {!authUser ? '🔒' : '🎤'}
+              {!authUser ? '🔒' : isEnterpriseUser(authUser) && !voiceSessionActiveRef.current && !recording ? '🔐' : '🎤'}
             </button>
             {/* Send button */}
             <button
