@@ -73,13 +73,15 @@ export default function DemoTour() {
   const autoTimerRef = useRef(null);
   const transRef     = useRef(false);
 
-  // Always show on every load — user can close when ready
+  // Show once per session (sessionStorage gate — resets when browser tab closes)
   useEffect(() => {
+    if (sessionStorage.getItem('opsmanifest_tour_seen')) return;
     const t = setTimeout(() => setVisible(true), 800);
     return () => clearTimeout(t);
   }, []);
 
   const dismiss = useCallback(() => {
+    sessionStorage.setItem('opsmanifest_tour_seen', '1');
     setOpacity(0);
     setTranslateY(12);
     setTimeout(() => {
