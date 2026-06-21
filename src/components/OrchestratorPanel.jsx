@@ -233,6 +233,8 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const bottomRef       = useRef(null);
   const msgId           = useRef(0);
   const pendingConfirmRef = useRef(null);
+  // Tracks compat rule IDs confirmed this session — prevents re-prompting the same risk
+  const acknowledgedCompatIds = useRef(new Set());
   // Speech recognition — browser-native SpeechRecognition first (no network),
   // MediaRecorder + Whisper as secondary (requires worker proxy)
   const speechRecRef     = useRef(null);   // native SpeechRecognition instance
@@ -1206,6 +1208,12 @@ Rules:
   function handleConfirm(actions) {
     setMessages(m => m.filter(msg => msg.role !== 'confirm'));
     pendingConfirmRef.current = null;
+    // Record confirmed compat risk IDs so the same warning is never re-prompted this session
+    actions.forEach(a => {
+      if (a.type === 'ADD_RAID_ENTRY' && a.params?._ruleId) {
+        acknowledgedCompatIds.current.add(a.params._ruleId);
+      }
+    });
     applyActions(actions);
 
     // Brief delay so the result pill renders first, then emit the next-step nudge.
@@ -1354,7 +1362,7 @@ Rules:
           awaitingFieldRef.current = null;
           const synthText = FIELD_CTX_MAP[awField] ? `${FIELD_CTX_MAP[awField]} is ${synth}` : FIELD_REQ_MAP[awField] ? `${FIELD_REQ_MAP[awField]} is ${synth}` : null;
           if (synthText) {
-            const result = ruleBasedResponse(synthText, currS, currAuth);
+            const result = ruleBasedResponse(synthText, currS, currAuth, acknowledgedCompatIds.current);
             if (result) {
               const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
               if (actions.length > 0) applyActionsWithRefs(actions);
@@ -1375,7 +1383,7 @@ Rules:
     setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
     setThinking(true);
 
-    const fast = ruleBasedResponse(text, currS, currAuth);
+    const fast = ruleBasedResponse(text, currS, currAuth, acknowledgedCompatIds.current);
     if (fast) {
       setThinking(false);
       const { reply, actions = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
@@ -2022,7 +2030,7 @@ Rules:
           syntheticText = `${FIELD_REQ_MAP[awField]} is ${text}`;
         }
         if (syntheticText) {
-          const result = ruleBasedResponse(syntheticText, sRef.current, authUserRef.current);
+          const result = ruleBasedResponse(syntheticText, sRef.current, authUserRef.current, acknowledgedCompatIds.current);
           if (result) {
             const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
             if (actions.length > 0) applyActionsWithRefs(actions);
@@ -2047,7 +2055,7 @@ Rules:
 
     try {
       // Rule-based mentor — handles phase guidance, field-setting, status queries
-      const fast = ruleBasedResponse(text, s, authUser);
+      const fast = ruleBasedResponse(text, s, authUser, acknowledgedCompatIds.current);
       if (fast) {
         setThinking(false);
         const { reply, actions = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
@@ -2095,7 +2103,7 @@ Rules:
     } catch (e) {
       setThinking(false);
       // When Groq is unavailable, respond with helpful guidance instead of a technical error
-      const fallback = ruleBasedResponse('help', s, authUser);
+      const fallback = ruleBasedResponse('help', s, authUser, acknowledgedCompatIds.current);
       const fallbackText = typeof fallback === 'string' ? fallback : fallback?.reply;
       setMessages(m => [...m, {
         id: nextId(),

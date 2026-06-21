@@ -310,15 +310,21 @@ function parseSetRequirement(m) {
   return null;
 }
 
-export function ruleBasedResponse(message, s, authUser) {
+// acknowledgedCompatIds: optional Set of rule IDs already confirmed this session —
+// previously-acknowledged compat risks are skipped rather than re-prompted.
+export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   const m = message.toLowerCase().trim();
   const raw = message.trim();
 
-  // ── Systemic compatibility scan — runs on EVERY message ────────────────────
-  // Detects vendor-documented incompatibilities in migration descriptions, stack
-  // info, or UUM/incident entries typed into the chat. Uses migration-aware text
-  // extraction so "oracle from aix power to RH power" correctly targets RHEL Power.
-  const inlineCompatHits = checkCompatibilityForText(raw, s.ctx || {});
+  // ── Systemic compatibility scan ─────────────────────────────────────────────
+  // Only fires when the message text itself contains stack/platform keywords
+  // (checkCompatibilityForText now guards against generic messages like "yes" or
+  // "go ahead" triggering the same compat warning on a stack that already has a
+  // known incompatibility).  Already-acknowledged rule IDs are filtered out so
+  // the user is never re-prompted after clicking "Yes, go ahead".
+  const allCompatHits = checkCompatibilityForText(raw, s.ctx || {});
+  const inlineCompatHits = allCompatHits.filter(r => !acknowledgedCompatIds?.has(r.id));
+
   if (inlineCompatHits.length > 0) {
     const bullets = inlineCompatHits.map(r => {
       const sev  = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ WARNING' : 'ℹ Info';
@@ -329,12 +335,15 @@ export function ruleBasedResponse(message, s, authUser) {
     const actions = [];
 
     inlineCompatHits.forEach(r => {
-      // For every critical/warn hit: offer to log it in the RAID log
+      // For every critical/warn hit: offer to log it in the RAID log.
+      // _ruleId is stored so OrchestratorPanel can track which rules were confirmed
+      // and avoid re-prompting for the same risk in this session.
       if (r.severity === 'critical' || r.severity === 'warn') {
         actions.push({
           type: 'ADD_RAID_ENTRY',
           description: `Log compat risk: ${r.title}`,
           params: {
+            _ruleId: r.id,
             type: 'RISK',
             severity: r.severity === 'critical' ? 'CRITICAL' : 'HIGH',
             description: `[Vendor Compat] ${r.title}`,

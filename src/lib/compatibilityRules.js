@@ -1293,9 +1293,17 @@ export function checkCompatibility(ctx) {
 /**
  * Check a free-text description against all rules.
  * Handles migration patterns ("from X to Y") by extracting the TARGET platform.
+ *
+ * IMPORTANT: only fires when the text itself mentions stack-relevant keywords.
+ * Without this guard, every message in a build that already has a known compat
+ * issue (e.g. Oracle + RHEL Power) would trigger the same warning repeatedly —
+ * because extractMigrationCtx always merges the existing ctx, so even "yes" or
+ * "go ahead" would satisfy the rule via the ctx fields alone.
  */
 export function checkCompatibilityForText(text, ctx) {
   if (!text) return [];
+  const hasStackKeywords = HW_PAT.test(text) || OS_PAT.test(text) || DB_PAT.test(text) || APP_PAT.test(text);
+  if (!hasStackKeywords) return [];
   const pseudoCtx = extractMigrationCtx(text, ctx);
   return checkCompatibility(pseudoCtx);
 }
