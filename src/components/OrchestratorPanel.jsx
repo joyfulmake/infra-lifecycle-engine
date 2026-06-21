@@ -141,7 +141,7 @@ function WorkflowStrip({ items }) {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export default function OrchestratorPanel({ docked = false, onCollapsedChange }) {
+export default function OrchestratorPanel({ docked = false, onCollapsedChange, initialCollapsed = false }) {
   const store = useStore();
   const { authUser } = useAuth();
 
@@ -217,7 +217,7 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange })
   const [ttsVoice,    setTtsVoice]    = useState(null); // 'cartesia'|'elevenlabs'|'none'|null
   const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
   const [fullscreen,  setFullscreen]  = useState(false);
-  const [collapsed,   setCollapsed]   = useState(false);
+  const [collapsed,   setCollapsed]   = useState(initialCollapsed);
   // Voice ID gate — enterprise users (local-only, never stored in cloud)
   const [voiceIdPanel, setVoiceIdPanel] = useState(false);
   const [voiceIdStep,  setVoiceIdStep]  = useState('check'); // 'check'|'enrolling'|'verifying'|'done'

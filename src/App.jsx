@@ -9,7 +9,9 @@ import { useAuth } from './lib/AuthContext.jsx';
 
 export default function App() {
   const { showAuthModal, setShowAuthModal, authModalReason } = useAuth();
-  const [mentorCollapsed, setMentorCollapsed] = useState(false);
+  // Start collapsed on viewports too narrow for all three panels (sidebar 320 + center ≥ 400 + panel 360 = 1080 min).
+  const initialCollapsed = window.innerWidth < 1100;
+  const [mentorCollapsed, setMentorCollapsed] = useState(initialCollapsed);
 
   return (
     <>
@@ -39,7 +41,7 @@ export default function App() {
             transition: 'width 0.25s ease',
           }}
         >
-          <OrchestratorPanel docked onCollapsedChange={setMentorCollapsed} />
+          <OrchestratorPanel docked initialCollapsed={initialCollapsed} onCollapsedChange={setMentorCollapsed} />
         </div>
       </div>
 
