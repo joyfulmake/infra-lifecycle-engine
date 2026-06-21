@@ -187,12 +187,12 @@ html,body{height:100%;background:#08101e;color:#e2e8f0;
     <!-- 2: Solution -->
     <div class="scene" data-scene="2">
       <div class="kicker">The Solution</div>
-      <h1 class="scene-heading">A guided workflow from hardware selection to go-live sign-off</h1>
+      <h1 class="scene-heading">Pick your stack. Walk your team through everything that follows.</h1>
       <div class="features">
-        <div class="feature"><div class="feature-icon">&#x1F3D7;</div><div class="feature-text"><h4>Phase 1 — Stack Build</h4><p>HW · OS · DB · App selection with live EOL check</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F50D;</div><div class="feature-text"><h4>AI Smart Scan</h4><p>CVE, EOL, and cipher gap detection before design</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F5C2;</div><div class="feature-text"><h4>System Design</h4><p>8-section form with tech-review locking</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F4CB;</div><div class="feature-text"><h4>CAB · RTM · Gantt</h4><p>Connected documents that update together</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F3D7;</div><div class="feature-text"><h4>Start from one decision</h4><p>Choose your hardware, OS, database, and application. Every document — design, risk log, schedule, sign-off — builds from that single starting point.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F50D;</div><div class="feature-text"><h4>Know what's broken before you design</h4><p>Run one scan. CVE exposures, end-of-life gaps, and cipher issues surface before a single design field is filled.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F5C2;</div><div class="feature-text"><h4>Design locked by the team that owns it</h4><p>Each section of the system design is owned by a role. Changes require re-approval. Nothing drifts unnoticed.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F501;</div><div class="feature-text"><h4>One change, everything updates</h4><p>Change the go-live date, add an incident, update a design field — the Gantt, RTM, and Matrix all follow. No re-keying.</p></div></div>
       </div>
     </div>
 
@@ -263,35 +263,35 @@ html,body{height:100%;background:#08101e;color:#e2e8f0;
 
     <!-- 8: Pro and Enterprise Roadmap -->
     <div class="scene" data-scene="8">
-      <div class="kicker">Pro and Enterprise — What's Coming</div>
-      <h1 class="scene-heading">Voice Identity. SSO. Enterprise Data Governance.</h1>
+      <div class="kicker">What's Coming — Pro and Enterprise</div>
+      <h1 class="scene-heading">Your voice is your identity. Your team works from one source of truth.</h1>
       <div class="features">
         <div class="feature">
           <div class="feature-icon">&#x1F3A4;</div>
           <div class="feature-text">
             <h4>Voice Identity Verification <span class="tag-pill tag-pro">Pro</span></h4>
-            <p>Your voice signature computed on-device, stored only in your local browser. Never uploaded or synced. Personal biometric stays personal.</p>
+            <p>Your voice signature is computed on your device and never leaves it. Sign approvals, log decisions, and confirm actions — your identity proven without a password.</p>
           </div>
         </div>
         <div class="feature">
           <div class="feature-icon">&#x1F511;</div>
           <div class="feature-text">
-            <h4>SSO — SAML / OIDC <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Okta, Azure AD, Ping Identity, or any SAML 2.0 provider. RACI roles resolved directly from your IdP groups.</p>
+            <h4>Single Sign-On <span class="tag-pill tag-ent">Enterprise</span></h4>
+            <p>Sign in with your company identity. RACI roles resolve directly from your directory groups — no manual assignment, no second account.</p>
           </div>
         </div>
         <div class="feature">
           <div class="feature-icon">&#x1F3E2;</div>
           <div class="feature-text">
-            <h4>Org Build Library <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Team-scoped builds with RACI access per member. Your CAB chair works from the same document you submitted.</p>
+            <h4>Team Build Library <span class="tag-pill tag-ent">Enterprise</span></h4>
+            <p>Every build shared across your team in real time. Your CAB chair, your DBA, your security lead — all working from the same living document.</p>
           </div>
         </div>
         <div class="feature">
           <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
           <div class="feature-text">
             <h4>Data Governance Panel <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Admin-controlled policy: what stays local, what syncs to cloud, what is never stored — even in memory. Your choice, documented.</p>
+            <p>Admin-defined policy for every byte: what stays local, what syncs to cloud, what is never stored. Documented and auditable.</p>
           </div>
         </div>
       </div>
@@ -370,8 +370,8 @@ const SCRIPT = [
   { scene:1, speaker:'jordan', text:"The data, the design, the risk log — they exist. Just spread across twelve spreadsheets, three email threads, and one person's laptop.", pauseAfter:700 },
 
   // Scene 2 — Solution
-  { scene:2, speaker:'jordan', text:"OpsManifest gives you the structured pre-work that everyone assumes has been done — but never is. Not a CMDB, not a ticket system. A guided workflow that takes you from first decision to go-live sign-off.", pauseAfter:400 },
-  { scene:2, speaker:'alex',   text:"Pick your stack. The system builds your design, incident list, risk log, schedule, and traceability matrix — all from one starting point, all staying in sync as the project evolves.", pauseAfter:700 },
+  { scene:2, speaker:'jordan', text:"OpsManifest gives your team the one thing missing from every go-live — a single place where every decision, every artefact, every risk is connected and in sync. Not a ticket system. Not a CMDB. The structured pre-work layer that everything else depends on.", pauseAfter:400 },
+  { scene:2, speaker:'alex',   text:"Pick your stack. The system produces your system design, incident register, Gantt, RTM, RACI, and risk log automatically — and keeps them all up to date as the project changes. Change one thing; everything follows.", pauseAfter:700 },
 
   // Scene 3 — OpsMentor
   { scene:3, speaker:'alex',   text:"What makes OpsManifest different is OpsMentor — an AI advisor embedded in every tab, watching your entire build in real time.", pauseAfter:400 },
@@ -394,8 +394,8 @@ const SCRIPT = [
   { scene:7, speaker:'alex',   text:"And because system design, RTM, risk log, RACI, and the Gantt all live in one place — every stakeholder works from the same living document.", pauseAfter:700 },
 
   // Scene 8 — Roadmap
-  { scene:8, speaker:'jordan', text:"Coming in Pro: Voice Identity Verification. Your voice signature is computed on your device and stored only in your local browser — never uploaded, never synced. Personal biometric stays personal.", pauseAfter:500 },
-  { scene:8, speaker:'alex',   text:"Enterprise teams get SAML and OIDC single sign-on, org-level build sharing, and an admin-controlled data governance panel — specifying exactly what is local, what syncs, and what is never stored, even in memory.", pauseAfter:900 },
+  { scene:8, speaker:'jordan', text:"Coming in Pro: voice becomes your identity. Your voice signature is computed on your device and never leaves it — no biometric ever uploaded, ever synced. Sign approvals and log decisions in your own voice, verified locally.", pauseAfter:500 },
+  { scene:8, speaker:'alex',   text:"For enterprise teams: sign in with your company identity and your RACI role resolves automatically from your directory. Every build shared across your team in real time. And an admin-defined policy for every byte of project data — what is local, what syncs, what is never stored.", pauseAfter:900 },
 
   // Scene 9 — CTA
   { scene:9, speaker:'alex',   text:"OpsManifest is free on the web and in the Microsoft Store. Sign in to unlock cloud sync and role-based access — no account needed to start your first build.", pauseAfter:400 },
