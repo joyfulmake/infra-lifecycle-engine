@@ -460,11 +460,13 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const uumCount = (st.selUUM || []).length;
 
     if (st.promoted)
-      return `${r.projectName ? `"${r.projectName}"` : 'The build'} is live in production. The closure checklist is the last gate — confirm every item and make sure handover notes are complete before we call this done.`;
-    if (st.rtmSigned)
-      return `RTM is signed for ${proj}. Head to Closure, work through the checklist line by line, and make sure the handover and lessons-learned sections are solid. Almost there.`;
+      return `${r.projectName ? `"${r.projectName}"` : 'The build'} is live. Closure is the final gate — hypercare monitoring, CMDB updates, lessons learned, and formal team sign-off. Every item must be green before the project is formally closed.`;
+    if (st.rtmSigned && st.cabApproved)
+      return `All gates cleared for ${proj}${goLive}. RTM is signed, CAB has approved. Confirm your change window is active and all leads are on the bridge, then initiate cutover from the sidebar. That is the point of no return.`;
+    if (st.rtmSigned && !st.cabApproved)
+      return `RTM is signed for ${proj}. CAB approval is the remaining gate — submit to CAB from the sidebar when the Gantt schedule and scope are finalised.`;
     if (st.cabApproved)
-      return `CAB has approved ${proj}${goLive}. Now open RTM — go through every row and mark it PASS or N/A. Nothing moves to production with outstanding FAIL rows. Let me know if anything looks unclear.`;
+      return `CAB has approved ${proj}${goLive}. Open RTM — mark every row PASS or N/A. Nothing moves to production with an outstanding FAIL. BLOCKED rows need an owner and a mitigation logged in the RAID log before sign-off.`;
     if (st.cabDeclined)
       return `CAB declined ${proj}. Unlock the tabs using the button below, address the board's feedback in the design and RAID log, then resubmit. I'll flag anything that could cause a second decline.`;
     if (st.phase2Active)
@@ -507,11 +509,13 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const stack = [hw, os, db, app].filter(Boolean).join(', ');
 
     if (st.promoted)
-      return proj ? `${proj} is live. Let's close it out cleanly.` : `The build is live. Complete the closure checklist.`;
+      return proj ? `${proj} is live. Work through the closure checklist — every item needs sign-off before the project is formally closed.` : `The build is live. Work through the closure checklist.`;
+    if (st.rtmSigned && st.cabApproved)
+      return `All gates cleared. Confirm your change window is open and initiate cutover from the sidebar.`;
     if (st.rtmSigned)
-      return `RTM is signed. Head to Closure and complete every item on the checklist.`;
+      return `RTM is signed. Submit to CAB from the sidebar to get the final approval before cutover.`;
     if (st.cabApproved)
-      return `CAB has approved the change. Open RTM and verify every row before we cut over.`;
+      return `CAB approved. Open RTM and verify every row before we cut over.`;
     if (st.cabDeclined)
       return `CAB declined the submission. Unlock the tabs, address the feedback, and resubmit.`;
     if (st.phase2Active)
@@ -826,10 +830,10 @@ Rules:
       orc.push(`CAB declined. Click "Unlock Tabs for Revision" in the sidebar, update scope or design, then resubmit.`);
     }
     if (!prev.rtmSigned && s.rtmSigned) {
-      orc.push(`RTM signed. Open Closure tab — complete the checklist, then promote to live.`);
+      orc.push(`RTM signed. All pre-cutover gates are now clear — initiate cutover from the sidebar when your change window opens. Closure opens after the system goes live.`);
     }
     if (!prev.promoted && s.promoted) {
-      orc.push(`System is live. Complete the Closure checklist, then export the audit trail.`);
+      orc.push(`System is live. The Closure tab is now active — work through hypercare, CMDB updates, and lessons learned. Export the full audit trail from the sidebar when complete.`);
     }
     if (!prev.rtmStale && s.rtmStale) {
       log.push(`RTM drifted — scope changed after sign-off. Open RTM, re-review each row, and re-sign if requirements still hold.`);
@@ -899,7 +903,7 @@ Rules:
     }
 
     // ── Deep sync: Closure checklist progress ─────────────────────────────────
-    if (s.rtmSigned && closureCheckCount > (prev.closureCheckCount || 0)) {
+    if (s.promoted && closureCheckCount > (prev.closureCheckCount || 0)) {
       if (closureTotalCount > 0 && closureCheckCount >= closureTotalCount) {
         orc.push(`Closure complete. Export the audit trail from the sidebar.`);
       } else if (closureCheckCount % 3 === 0 && closureCheckCount > 0 && closureTotalCount > 0) {
@@ -1094,20 +1098,65 @@ Rules:
     // User is navigating the app directly — stop field interview
     if (!awaitingNameRef.current) awaitingFieldRef.current = null;
     const n = userNameRef.current ? `, ${userNameRef.current}` : '';
+    const criticalRisks = liveRisks.filter(r => r.severity === 'CRITICAL').length;
+    const failRtm = Object.values(s.rtmRows || {}).filter(v => v === 'FAIL').length;
+    const pendingRtm = Object.values(s.rtmRows || {}).filter(v => v === 'PENDING').length;
+    const rolesWithEmail = Object.values(s.roleAssignments || {}).filter(v => v?.email).length;
+    const closureDone = Object.values(s.closureChecks || {}).filter(Boolean).length;
+    const closureTotal = Object.keys(s.closureChecks || {}).length;
+
     const tabHints = {
-      exec:    `Executive Summary${n}. Risk score, KPIs, and incident overview — this is your command dashboard.`,
-      design:  `System Design${n}. Fill all 8 sections — Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA — then click "Generate Task Plan" to lock the design and build your project schedule.`,
-      gantt:   `Gantt chart${n}. Your auto-generated schedule is here — review the critical path and task durations.${s.tasksStaleReason ? ' Tasks are stale — click Regenerate now.' : ''}`,
-      rtm:     `RTM${n}. Every requirement row must be PASS or NA before you can sign off.${s.rtmStale ? ' Scope drifted after sign-off — re-review required!' : ' Work through the rows and get every one green.'}`,
-      matrix:  `Cross-Stack Matrix${n}. See task dependencies across all 8 swimlane layers — great for spotting blocking chains.`,
-      raid:    `RAID Log${n}. Log Risks, Assumptions, Issues, and Decisions here — this becomes your project governance record.`,
-      roles:   `Roles and RACI${n}. Assign your 20-role team, set email contacts, and lock who owns each design section.`,
-      closure: `Closure checklist${n}. Tick off every post-go-live item — hypercare, CMDB updates, lessons-learned — before exporting.`,
-      diagram: `Infrastructure Diagram${n}. Switch between Visual topology, ASCII Map, and Mission Intel to see your architecture from every angle.`,
-      cmdb:    `CMDB live EOL data${n}. Check real-time end-of-life status for every component in your stack.`,
-      vuln:    `Vulnerability Registry${n}. CVEs, EOL risks, stakeholder decisions, and the full action audit trail — all in one place.`,
-      risks:   `Risk Tracker${n}. Current score: ${liveScore} (${liveRl.label}). ${liveRisks.filter(r => r.severity === 'CRITICAL').length > 0 ? `${liveRisks.filter(r => r.severity === 'CRITICAL').length} critical risk${liveRisks.filter(r => r.severity === 'CRITICAL').length !== 1 ? 's' : ''} need immediate attention!` : 'Looking good — keep monitoring as scope changes.'}`,
-      cost:    `Cost Management${n}. ${s.costConfig?.enabled ? 'Cost tracking is active — your project cost is being estimated from task hours.' : 'Enable cost tracking to get a real-time project cost estimate from your task schedule.'}`,
+      exec: s.promoted
+        ? `Executive Summary${n}. ${s.requirements?.projectName || 'The build'} is live — review KPIs against the SLA baseline and confirm the risk score is trending down post-cutover.`
+        : `Executive Summary${n}. Live risk score, KPI tiles, and incident scope at a glance.${criticalRisks > 0 ? ` ${criticalRisks} critical risk${criticalRisks !== 1 ? 's' : ''} flagged — address before CAB.` : ' Risk posture looks clear.'}`,
+
+      design: s.designApplied
+        ? s.unlockedForRevision
+          ? `System Design${n} — temporarily unlocked for CAB revision. Address the board's concerns, then resubmit. Changes here will mark the Gantt tasks stale.`
+          : `System Design${n} — locked. Use the Tech Review toggle to make targeted field corrections without breaking the schedule. Any full re-open will require Gantt regeneration.`
+        : s.scanComplete
+          ? `System Design${n}. Scan defaults are loaded for your stack. Step through all 8 sections — Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA — and verify every field. Click "Generate Task Plan" to lock the design and build your Gantt in one step.`
+          : `System Design${n}. Run the AI Smart Scan from the sidebar first — it auto-fills defaults from your stack and flags EOL and CVE issues before you touch the design.`,
+
+      gantt: !s.phase2Active
+        ? `Gantt${n} — locked until Phase 2 is injected. Inject Phase 2 from the sidebar first; the task schedule generates from your incident and UUM scope.`
+        : s.tasksStaleReason
+          ? `Gantt${n} — tasks are stale: ${s.tasksStaleReason}. Click Regenerate to rebuild from current scope. Do this before CAB submission — the board reviews the schedule.`
+          : s.cabApproved
+            ? `Gantt${n} — schedule is CAB-approved. Any changes from here constitute a scope change and should be raised with the change manager before cutover.`
+            : `Gantt${n}. Review the critical path — CP-flagged tasks are on the longest chain; any delay there delays go-live. Confirm task owners and durations before submitting to CAB.`,
+
+      rtm: !s.phase2Active
+        ? `RTM${n} — locked until Phase 2 is active. The matrix is built from your selected incidents and UUM items. Inject Phase 2 from the sidebar to populate it.`
+        : s.rtmSigned && !s.rtmStale
+          ? s.promoted
+            ? `RTM${n} — signed and locked for audit. Any post-go-live scope changes are formal change requests, not RTM updates.`
+            : `RTM${n} — signed. All pre-cutover gates are clear. Initiate cutover from the sidebar when your change window is confirmed.`
+          : s.rtmStale
+            ? `RTM${n} — scope drifted after sign-off. Review every row against the updated scope, update dispositions, and re-sign before proceeding.`
+            : `RTM${n}. ${failRtm > 0 ? `${failRtm} FAIL row${failRtm !== 1 ? 's' : ''} — each needs a mitigation and owner in RAID before sign-off.` : pendingRtm > 0 ? `${pendingRtm} PENDING row${pendingRtm !== 1 ? 's' : ''} remaining.` : 'All rows set.'} Every row must be PASS or NA before you can sign off.`,
+
+      matrix:  `Cross-Stack Dependency Matrix${n}. 8 swimlane layers — Hardware through Security. Use this to identify blocking chains between roles and verify no single owner is overloaded in the critical change window.`,
+
+      raid: `RAID Log${n}. ${(s.raidLog || []).filter(r => r.status === 'OPEN' && r.severity === 'CRITICAL').length > 0 ? `${(s.raidLog || []).filter(r => r.status === 'OPEN' && r.severity === 'CRITICAL').length} critical open item${(s.raidLog || []).filter(r => r.status === 'OPEN' && r.severity === 'CRITICAL').length !== 1 ? 's' : ''} need mitigation and an owner before CAB. ` : ''}Log every known risk, assumption, issue, and decision — this is your formal change governance record. CAB boards examine the RAID log as part of their approval review.`,
+
+      roles: `Roles and RACI${n}. ${rolesWithEmail < 5 ? 'Critical contacts missing — CAB boards ask for PM, DBA, Unix Admin, SecOps, and App Admin at minimum. Add email contacts before submission.' : rolesWithEmail < 15 ? `${rolesWithEmail}/20 roles assigned. Confirm all key leads have contacts and backup names.` : 'Team is fully assigned. Verify email addresses — these are used for RTM attribution and sign-off.'}`,
+
+      closure: !s.promoted
+        ? `Closure${n} — this tab activates after go-live. Complete the cutover first, then return here for hypercare monitoring, CMDB updates, lessons learned, and formal team sign-off.`
+        : closureTotal > 0
+          ? `Closure${n} — ${closureDone}/${closureTotal} items complete. ${closureDone >= closureTotal ? 'All items done — export the audit trail from the sidebar to formally close the project.' : 'Work through every item before declaring the project closed. The lessons-learned section is required for the audit record.'}`
+          : `Closure${n}. Tick off every post-go-live item — hypercare monitoring, CMDB updates, lessons learned, and team sign-off — then export the full audit trail.`,
+
+      diagram: `Infrastructure Diagram${n}. Three views: Visual topology (layered stack), ASCII Map (copy directly into your CAB document), Mission Intel (business, functional, and technical analysis). The ASCII Map view is the fastest way to add architecture context to a change request.`,
+
+      cmdb: `CMDB live EOL data${n}. ${!s.scanComplete ? 'Run the AI Smart Scan first — it loads your stack components automatically.' : 'Check the EOSL and Security-Only columns. Any component entering security-only mode during your project window is a material CAB risk that needs a mitigation plan.'}`,
+
+      vuln:    `Vulnerability Registry${n}. CVEs, EOL exposure, stakeholder sign-offs, and the full OpsMentor action audit trail. ${(s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length > 0 ? `${(s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length} active — each needs a disposition before go-live.` : 'All clear — log new CVE findings here as they surface.'}`,
+
+      risks: `Risk Tracker${n}. Score: ${liveScore} — ${liveRl.label}. ${liveScore >= 18 ? 'CRITICAL posture — address red items immediately; the project may be blocked.' : liveScore >= 10 ? 'HIGH — CAB will challenge these. Ensure every risk has an owner and a mitigation logged in RAID.' : 'Risk posture is acceptable. Keep monitoring as scope evolves.'}`,
+
+      cost: `Cost Management${n}. ${s.costConfig?.enabled ? 'Cost tracking active — estimate is derived from task hours × team rate. Review the number before CAB; the board may ask for budget justification.' : 'Enable cost tracking to generate a project cost estimate from your Gantt schedule. Useful for CAB documentation and stakeholder reporting.'}`,
     };
     const hint = tabHints[s.activeTab];
     // Use orchestrator role for tab hints so voice announces the context
@@ -1201,7 +1250,7 @@ Rules:
     if (!phase2Active) return 'Click **Inject Phase 2** in the sidebar to activate incident and UUM scope and unlock Gantt and RTM.';
     if (!cabApproved && !cabDeclined) return 'Review the **Gantt** tab for task schedule and scope — then submit to CAB when ready.';
     if (!rtmSigned) return 'Head to **RTM** tab to verify all requirements are traced and signed off before cutover.';
-    if (!promoted) return 'Complete the **Closure** checklist and promote to live when all items are green.';
+    if (cabApproved && rtmSigned && !promoted) return 'All gates cleared. Confirm your change window is active and initiate **Promote to Live** from the sidebar. Closure opens once the system is live.';
     return null;
   }
 
