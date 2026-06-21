@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Service Level Agreement — OpsManifest</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --navy: #0F1F35; --accent: #3B82F6; --teal: #0D9488; --text: #1E293B; --muted: #64748B; --border: #E2E8F0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #F8FAFC; color: var(--text); line-height: 1.7; }
+  header { background: var(--navy); color: #fff; padding: 20px 0; }
+  header .inner { max-width: 760px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-mark { width: 32px; height: 32px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--teal)); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #fff; flex-shrink: 0; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: #93C5FD; }
+  header a { color: rgba(255,255,255,0.6); font-size: 13px; margin-left: auto; text-decoration: none; }
+  header a:hover { color: #fff; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+  .meta { font-size: 13px; color: var(--muted); margin-bottom: 40px; }
+  h2 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 14px; font-weight: 700; color: var(--text); margin: 20px 0 6px; }
+  p { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+  ul { font-size: 14px; color: var(--text); padding-left: 20px; margin-bottom: 12px; }
+  ul li { margin-bottom: 5px; }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0 20px; }
+  th { background: #F1F5F9; text-align: left; padding: 9px 14px; font-weight: 600; color: var(--navy); border: 1px solid var(--border); }
+  td { padding: 9px 14px; border: 1px solid var(--border); color: var(--text); }
+  tr:nth-child(even) td { background: #F8FAFC; }
+  .callout { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; color: #1D4ED8; }
+  .green { color: #166534; font-weight: 600; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px; border-top: 1px solid var(--border); }
+  .doc-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .doc-links a { font-size: 13px; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <div class="logo-mark">O</div>
+    <div class="logo-text">OpsManifest</div>
+    <a href="https://opsmanifest.pages.dev">&#8592; Back to app</a>
+  </div>
+</header>
+
+<main>
+  <h1>Service Level Agreement</h1>
+  <p class="meta">Effective date: 21 June 2026 &nbsp;|&nbsp; Applies to: Professional, Team, and Enterprise plans</p>
+
+  <div class="callout">
+    <strong>Summary:</strong> We target 99.5% monthly uptime. Enterprise customers get 1-business-day support response. If we miss the uptime target, we credit your next invoice. Local-only (guest/starter) builds are unaffected by any service interruption — they run in your browser.
+  </div>
+
+  <h2>1. Uptime Commitment</h2>
+  <p>OpsManifest targets <strong>99.5% monthly uptime</strong> for the web application at <a href="https://opsmanifest.pages.dev">opsmanifest.pages.dev</a>. This equates to a maximum of approximately 3.6 hours of unplanned downtime per month.</p>
+  <p>Uptime is measured from our external monitoring service (UptimeRobot). The public status page is available at <a href="https://stats.uptimerobot.com/opsmanifest" target="_blank">stats.uptimerobot.com/opsmanifest</a>.</p>
+
+  <h3>What counts as downtime</h3>
+  <ul>
+    <li>The application is unreachable (HTTP 5xx or timeout) for more than 5 consecutive minutes</li>
+    <li>Core workflow features (build, design, Gantt, RTM, export) are non-functional</li>
+  </ul>
+
+  <h3>What does not count as downtime</h3>
+  <ul>
+    <li>Planned maintenance with at least 48 hours advance notice</li>
+    <li>AI/voice features (OpsMentor, TTS) — these depend on third-party APIs and are excluded from the uptime commitment</li>
+    <li>Live EOL data (endoflife.date API) — third-party, excluded</li>
+    <li>Interruptions caused by the customer's own network, browser, or device</li>
+    <li>Force majeure events (natural disasters, widespread internet outages)</li>
+  </ul>
+
+  <h2>2. Support Response Times</h2>
+
+  <table>
+    <tr><th>Plan</th><th>Channel</th><th>First response</th><th>Resolution target</th></tr>
+    <tr><td><strong>Enterprise</strong></td><td>Email — sriram.c76@gmail.com</td><td class="green">1 business day</td><td>3 business days for critical issues</td></tr>
+    <tr><td><strong>Team</strong></td><td>Email</td><td class="green">2 business days</td><td>5 business days</td></tr>
+    <tr><td><strong>Professional</strong></td><td>Email</td><td>3 business days</td><td>Best effort</td></tr>
+    <tr><td><strong>Starter / Guest</strong></td><td>—</td><td>Best effort</td><td>Best effort</td></tr>
+  </table>
+
+  <p>Business days are Monday–Friday, 09:00–18:00 IST (UTC+5:30), excluding Indian public holidays.</p>
+
+  <h2>3. Incident Severity Classification</h2>
+
+  <table>
+    <tr><th>Severity</th><th>Definition</th><th>Enterprise response</th></tr>
+    <tr><td><strong>Critical (P1)</strong></td><td>Application completely inaccessible; core workflow broken for all users</td><td>1 business day</td></tr>
+    <tr><td><strong>High (P2)</strong></td><td>Major feature non-functional (e.g. export broken, cloud sync down); workaround available</td><td>2 business days</td></tr>
+    <tr><td><strong>Medium (P3)</strong></td><td>Minor feature degraded; does not block core workflow</td><td>5 business days</td></tr>
+    <tr><td><strong>Low (P4)</strong></td><td>Cosmetic issue, feature request, general question</td><td>Best effort</td></tr>
+  </table>
+
+  <h2>4. Service Credits</h2>
+  <p>If monthly uptime falls below 99.5% in any calendar month, Enterprise and Team customers are entitled to a service credit applied to their next invoice:</p>
+
+  <table>
+    <tr><th>Monthly uptime achieved</th><th>Credit</th></tr>
+    <tr><td>99.0% – 99.4%</td><td>10% of monthly fee</td></tr>
+    <tr><td>95.0% – 98.9%</td><td>25% of monthly fee</td></tr>
+    <tr><td>Below 95.0%</td><td>50% of monthly fee</td></tr>
+  </table>
+
+  <p>Credits must be requested within 14 days of the incident by emailing <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a> with the dates and description of the disruption. Credits are the sole remedy for uptime failures and are not redeemable for cash.</p>
+
+  <h2>5. Planned Maintenance</h2>
+  <p>We will provide at least 48 hours advance notice of planned maintenance via email to account holders and via a notice on the status page. Planned maintenance is scheduled outside of 09:00–18:00 IST on weekdays where possible.</p>
+
+  <h2>6. Data Availability</h2>
+  <p>Because OpsManifest stores build data locally in your browser (IndexedDB), your data remains accessible even during a service outage — you can continue working offline. Cloud sync (Pro+) is additionally backed by Google Firebase with its own 99.95% SLA.</p>
+
+  <h2>7. Reporting an Incident</h2>
+  <p>To report a service issue, email <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a> with the subject line starting with the severity: <em>[P1]</em>, <em>[P2]</em>, <em>[P3]</em>, or <em>[P4]</em>, followed by a brief description.</p>
+
+  <div class="doc-links">
+    <a href="/tos.html">Terms of Service</a>
+    <a href="/privacy.html">Privacy Policy</a>
+    <a href="/msa.html">Master Service Agreement</a>
+    <a href="/dpa.html">Data Processing Agreement</a>
+    <a href="/aup.html">Acceptable Use Policy</a>
+  </div>
+</main>
+
+<footer>OpsManifest &copy; 2026 Flourishing &nbsp;|&nbsp; <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></footer>
+</body>
+</html>

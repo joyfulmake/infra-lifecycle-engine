@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Processing Agreement — OpsManifest</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --navy: #0F1F35; --accent: #3B82F6; --teal: #0D9488; --text: #1E293B; --muted: #64748B; --border: #E2E8F0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #F8FAFC; color: var(--text); line-height: 1.7; }
+  header { background: var(--navy); color: #fff; padding: 20px 0; }
+  header .inner { max-width: 760px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-mark { width: 32px; height: 32px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--teal)); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #fff; flex-shrink: 0; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: #93C5FD; }
+  header a { color: rgba(255,255,255,0.6); font-size: 13px; margin-left: auto; text-decoration: none; }
+  header a:hover { color: #fff; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+  .meta { font-size: 13px; color: var(--muted); margin-bottom: 40px; }
+  h2 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  p { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+  ul { font-size: 14px; color: var(--text); padding-left: 20px; margin-bottom: 12px; }
+  ul li { margin-bottom: 5px; }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0 20px; }
+  th { background: #F1F5F9; text-align: left; padding: 9px 14px; font-weight: 600; color: var(--navy); border: 1px solid var(--border); }
+  td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; }
+  .callout { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; color: #1D4ED8; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px; border-top: 1px solid var(--border); }
+  .doc-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .doc-links a { font-size: 13px; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <div class="logo-mark">O</div>
+    <div class="logo-text">OpsManifest</div>
+    <a href="https://opsmanifest.pages.dev">&#8592; Back to app</a>
+  </div>
+</header>
+
+<main>
+  <h1>Data Processing Agreement</h1>
+  <p class="meta">Effective date: 21 June 2026 &nbsp;|&nbsp; GDPR Article 28 compliant</p>
+
+  <div class="callout">
+    <strong>Key fact:</strong> OpsManifest is designed to process as little personal data as possible. Build data (infrastructure configurations, project plans, risk logs) is stored locally in your browser by default and never leaves your device unless you explicitly enable cloud sync. The primary personal data processed is your email address, used only for authentication and cloud sync.
+  </div>
+
+  <h2>1. Definitions</h2>
+  <ul>
+    <li><strong>Controller:</strong> The Customer organisation that determines the purposes and means of processing personal data.</li>
+    <li><strong>Processor:</strong> Flourishing, the provider of OpsManifest, acting on the Controller's instructions.</li>
+    <li><strong>Personal Data:</strong> Any information relating to an identified or identifiable natural person as defined under applicable data protection law (including GDPR, UK GDPR, and the Indian Digital Personal Data Protection Act 2023).</li>
+    <li><strong>Processing:</strong> Any operation performed on Personal Data, including collection, storage, use, disclosure, and deletion.</li>
+  </ul>
+
+  <h2>2. Scope and Purpose of Processing</h2>
+  <p>The Processor processes Personal Data only to the extent necessary to deliver OpsManifest services to the Controller, specifically:</p>
+
+  <table>
+    <tr><th>Data category</th><th>Purpose</th><th>Legal basis</th><th>Stored where</th></tr>
+    <tr><td>Email address</td><td>Authentication; cloud sync account identity; plan management</td><td>Contract performance</td><td>Firebase Auth (Google), browser localStorage</td></tr>
+    <tr><td>Build data (project names, infrastructure configs, design fields, task lists, risk logs)</td><td>Core tool functionality — planning, documentation, export</td><td>Contract performance</td><td>Browser IndexedDB (local); Firebase Firestore (cloud sync, Pro+ only, opt-in)</td></tr>
+    <tr><td>AI input (build context sent to OpsMentor)</td><td>AI-powered guidance and risk analysis</td><td>Legitimate interest / consent</td><td>Cloudflare Worker (in-transit only, not stored); Groq API (transient)</td></tr>
+    <tr><td>Role assignments (names, email addresses of team members)</td><td>RACI table; RTM sign-off attribution</td><td>Contract performance</td><td>Browser IndexedDB; Firebase Firestore (cloud sync only)</td></tr>
+  </table>
+
+  <p>The Processor will not process Personal Data for any purpose other than those listed above, and will not process it beyond what is strictly necessary for those purposes.</p>
+
+  <h2>3. Data Minimisation by Design</h2>
+  <ul>
+    <li><strong>Local-first architecture:</strong> All build data defaults to browser-local storage (IndexedDB). No build data is transmitted to any server unless the user explicitly enables cloud sync.</li>
+    <li><strong>No tracking:</strong> OpsManifest does not use advertising trackers, third-party analytics, or cookies for profiling.</li>
+    <li><strong>Guest mode:</strong> Users can run the full core workflow without creating an account or providing any personal data.</li>
+    <li><strong>AI is optional:</strong> OpsMentor AI features are opt-in and clearly labelled. Disabling them eliminates all AI-related data transmission.</li>
+  </ul>
+
+  <h2>4. Sub-processors</h2>
+  <p>The Processor uses the following sub-processors. The Controller authorises their use by accepting this Agreement:</p>
+
+  <table>
+    <tr><th>Sub-processor</th><th>Purpose</th><th>Data processed</th><th>Location</th></tr>
+    <tr><td><strong>Google Firebase</strong> (Google LLC)</td><td>Authentication; cloud sync storage</td><td>Email address; build data (Pro+ only, opt-in)</td><td>US (EU data residency available on request)</td></tr>
+    <tr><td><strong>Cloudflare</strong> (Cloudflare, Inc.)</td><td>App hosting; Worker proxy for AI and TTS</td><td>In-transit build context for AI features; no persistent storage</td><td>Global edge network</td></tr>
+    <tr><td><strong>Groq</strong> (Groq, Inc.)</td><td>LLM inference for OpsMentor AI</td><td>Build context sent to AI (transient, not stored beyond request)</td><td>US</td></tr>
+    <tr><td><strong>Microsoft Azure</strong> (Microsoft Corp.)</td><td>Text-to-speech for OpsMentor voice</td><td>Text content sent to TTS (transient)</td><td>US</td></tr>
+    <tr><td><strong>endoflife.date</strong></td><td>Live EOL data lookups</td><td>Product name queries only (no personal data)</td><td>EU</td></tr>
+  </table>
+
+  <p>The Processor will notify the Controller of any material changes to sub-processors with at least 14 days notice, giving the Controller the opportunity to object.</p>
+
+  <h2>5. Data Retention and Deletion</h2>
+  <ul>
+    <li><strong>Local data:</strong> Stored in the user's browser until the user clears their browser data or requests deletion. The Controller (or end user) can delete local data at any time through browser settings.</li>
+    <li><strong>Cloud sync data (Pro+):</strong> Retained for the duration of the subscription plus 30 days after termination, after which it is permanently deleted from Firebase.</li>
+    <li><strong>Right to erasure:</strong> The Controller may request deletion of all cloud-stored data by emailing <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>. Deletion will be completed within 30 days.</li>
+    <li><strong>AI/TTS data:</strong> Not retained beyond the duration of the request. Groq and Azure do not store input data after processing.</li>
+  </ul>
+
+  <h2>6. Security Measures</h2>
+  <ul>
+    <li>HTTPS enforced on all connections (TLS 1.2 minimum, Cloudflare managed)</li>
+    <li>Firebase Firestore security rules restrict data access strictly to the authenticated account owner</li>
+    <li>No API keys are exposed in the browser bundle — all third-party API calls go through a Cloudflare Worker proxy</li>
+    <li>Content Security Policy headers restrict script and connection sources</li>
+    <li>No admin access to individual user build data without explicit consent</li>
+  </ul>
+
+  <h2>7. Data Subject Rights</h2>
+  <p>The Processor will assist the Controller in responding to data subject requests (access, rectification, erasure, portability, restriction, objection) within the timescales required by applicable law. To submit a data subject request, contact <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>.</p>
+
+  <h2>8. Data Breach Notification</h2>
+  <p>In the event of a personal data breach affecting data processed under this Agreement, the Processor will notify the Controller without undue delay and in any event within 72 hours of becoming aware of the breach. Notification will include: the nature of the breach, categories and approximate number of records affected, likely consequences, and measures taken or proposed to address the breach.</p>
+
+  <h2>9. International Data Transfers</h2>
+  <p>Some sub-processors (Firebase, Groq, Azure, Cloudflare) are based in the United States. Where personal data is transferred outside the EEA or UK, the Processor relies on: (a) Standard Contractual Clauses (SCCs) as incorporated in the sub-processors' terms; or (b) the sub-processor's certification under an applicable adequacy framework. Details are available on request.</p>
+
+  <h2>10. Audit Rights</h2>
+  <p>The Controller may request, no more than once per year, a written summary of the Processor's data protection practices and sub-processor list. The Processor will respond within 30 days. Physical audits require prior written agreement and are subject to confidentiality obligations.</p>
+
+  <h2>11. Contact</h2>
+  <p>Data protection enquiries: <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></p>
+
+  <div class="doc-links">
+    <a href="/tos.html">Terms of Service</a>
+    <a href="/sla.html">Service Level Agreement</a>
+    <a href="/msa.html">Master Service Agreement</a>
+    <a href="/privacy.html">Privacy Policy</a>
+    <a href="/aup.html">Acceptable Use Policy</a>
+  </div>
+</main>
+
+<footer>OpsManifest &copy; 2026 Flourishing &nbsp;|&nbsp; <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></footer>
+</body>
+</html>

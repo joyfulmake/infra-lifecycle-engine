@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Acceptable Use Policy — OpsManifest</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --navy: #0F1F35; --accent: #3B82F6; --teal: #0D9488; --text: #1E293B; --muted: #64748B; --border: #E2E8F0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #F8FAFC; color: var(--text); line-height: 1.7; }
+  header { background: var(--navy); color: #fff; padding: 20px 0; }
+  header .inner { max-width: 760px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-mark { width: 32px; height: 32px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--teal)); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #fff; flex-shrink: 0; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: #93C5FD; }
+  header a { color: rgba(255,255,255,0.6); font-size: 13px; margin-left: auto; text-decoration: none; }
+  header a:hover { color: #fff; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+  .meta { font-size: 13px; color: var(--muted); margin-bottom: 40px; }
+  h2 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  p { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+  ul { font-size: 14px; color: var(--text); padding-left: 20px; margin-bottom: 12px; }
+  ul li { margin-bottom: 5px; }
+  a { color: var(--accent); }
+  .callout { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; color: #1D4ED8; }
+  .no-list { background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; padding: 14px 18px; margin: 20px 0; }
+  .no-list ul { color: #9A3412; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px; border-top: 1px solid var(--border); }
+  .doc-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .doc-links a { font-size: 13px; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <div class="logo-mark">O</div>
+    <div class="logo-text">OpsManifest</div>
+    <a href="https://opsmanifest.pages.dev">&#8592; Back to app</a>
+  </div>
+</header>
+
+<main>
+  <h1>Acceptable Use Policy</h1>
+  <p class="meta">Effective date: 21 June 2026</p>
+
+  <div class="callout">
+    OpsManifest is built for professional infrastructure teams. This policy is short and practical — it describes what you can do freely, what is not permitted, and what happens if the policy is violated.
+  </div>
+
+  <h2>1. What You Can Do</h2>
+  <ul>
+    <li>Use OpsManifest to plan, document, and manage infrastructure migration and provisioning projects for your organisation or your clients.</li>
+    <li>Export build data (Gantt schedules, RTM documents, RAID logs, CAB packs) and use those exports in any professional context — internal documentation, client deliverables, regulatory submissions, CAB board presentations.</li>
+    <li>Share builds with team members within your organisation using the Team Workspace feature.</li>
+    <li>Use guest access to evaluate the tool before creating an account.</li>
+    <li>Run an offline (PWA or local build) copy of OpsManifest for testing within a secure enterprise environment.</li>
+  </ul>
+
+  <h2>2. What Is Not Permitted</h2>
+
+  <div class="no-list">
+    <ul>
+      <li><strong>Reselling or sublicensing:</strong> You may not resell, white-label, or provide access to OpsManifest as a standalone service to third parties without a written reseller agreement.</li>
+      <li><strong>Reverse engineering:</strong> You may not decompile, disassemble, or attempt to extract the source code or algorithms of OpsManifest.</li>
+      <li><strong>Automated abuse:</strong> You may not use automated scripts, bots, or crawlers to scrape, stress-test, or abuse the service or its APIs.</li>
+      <li><strong>Security attacks:</strong> You may not attempt to gain unauthorised access to the service, its infrastructure, or other users' data.</li>
+      <li><strong>Harmful content:</strong> You may not enter data designed to harm, harass, or defame individuals or organisations.</li>
+      <li><strong>Circumventing plan limits:</strong> You may not create multiple accounts or use technical means to exceed the limits of your plan.</li>
+      <li><strong>Illegal use:</strong> You may not use OpsManifest in connection with any activity that violates applicable law.</li>
+      <li><strong>Credential sharing:</strong> Account credentials must not be shared between individuals. Team plans include per-user seats; sharing a single account across multiple users is a violation of the plan terms.</li>
+    </ul>
+  </div>
+
+  <h2>3. AI Feature Use</h2>
+  <ul>
+    <li>OpsMentor AI outputs (risk analysis, design suggestions, task enrichment) are generated by a large language model and may contain inaccuracies. You are responsible for verifying all AI outputs before using them in production decisions.</li>
+    <li>Do not enter personally sensitive data (employee personal details, patient data, classified or secret government information) into AI features. AI input is transmitted to a third-party API (Groq) for processing.</li>
+    <li>AI features are for professional planning use only — not for generating content intended to mislead, deceive, or defraud.</li>
+  </ul>
+
+  <h2>4. Data You Enter</h2>
+  <ul>
+    <li>You are responsible for ensuring that the data you enter into OpsManifest complies with your organisation's data handling policies and applicable law.</li>
+    <li>Do not enter classified, regulated, or highly sensitive personal data (HIPAA, PCI-DSS card data, biometric data) unless you have confirmed with us in writing that your deployment configuration meets the required standards.</li>
+    <li>OpsManifest is a planning tool for infrastructure teams. It is not certified as a system of record for compliance purposes (e.g. PCI-DSS QSA, HIPAA Business Associate). Consult your compliance team before using it in a regulated environment.</li>
+  </ul>
+
+  <h2>5. Enforcement</h2>
+  <p>Violation of this policy may result in:</p>
+  <ul>
+    <li>Temporary suspension of access while the issue is investigated</li>
+    <li>Permanent termination of the account without refund for serious or repeated violations</li>
+    <li>Legal action where required by law or to protect the rights of other users</li>
+  </ul>
+  <p>We will make reasonable attempts to contact you before taking action, except where the violation poses an immediate risk to the service or other users.</p>
+
+  <h2>6. Reporting Violations</h2>
+  <p>If you believe another user is violating this policy, or if you have discovered a security vulnerability, please contact us at <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>. Security disclosures are handled confidentially.</p>
+
+  <h2>7. Changes to This Policy</h2>
+  <p>We may update this policy from time to time. Significant changes will be communicated to account holders by email with at least 14 days notice.</p>
+
+  <div class="doc-links">
+    <a href="/tos.html">Terms of Service</a>
+    <a href="/sla.html">Service Level Agreement</a>
+    <a href="/msa.html">Master Service Agreement</a>
+    <a href="/dpa.html">Data Processing Agreement</a>
+    <a href="/privacy.html">Privacy Policy</a>
+  </div>
+</main>
+
+<footer>OpsManifest &copy; 2026 Flourishing &nbsp;|&nbsp; <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></footer>
+</body>
+</html>

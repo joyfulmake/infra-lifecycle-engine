@@ -582,7 +582,7 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                           hello@opsmanifest.app
                         </a>.
                         By using a code you agree to OpsManifest's{' '}
-                        <a href="/privacy.html" className="text-teal-600 hover:underline" target="_blank" rel="noopener">terms of use</a>.
+                        <a href="/tos.html" className="text-teal-600 hover:underline" target="_blank" rel="noopener">Terms of Service</a>.
                       </div>
                     </div>
                   )}

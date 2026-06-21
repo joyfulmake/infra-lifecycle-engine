@@ -1974,9 +1974,14 @@ export default function PhasePanel() {
         <p style={{ fontSize: '10.5px', lineHeight: '1.6', color: 'rgba(255,255,255,0.72)', margin: 0 }}>
           OpsManifest guides infra teams through structured provisioning workflows — not a replacement for ITSM, CMDB, or platforms such as ServiceNow, Jira, or Confluence.
         </p>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '5px' }}>
-          <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none' }}>About this tool ↗</a>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '5px', flexWrap: 'wrap' }}>
+          <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none' }}>About ↗</a>
           <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>Privacy</a>
+          <a href="/tos.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>Terms</a>
+          <a href="/sla.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>SLA</a>
+          <a href="/msa.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>MSA</a>
+          <a href="/dpa.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>DPA</a>
+          <a href="/aup.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>AUP</a>
         </div>
       </div>
 

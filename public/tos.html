@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Terms of Service — OpsManifest</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --navy: #0F1F35; --accent: #3B82F6; --teal: #0D9488; --text: #1E293B; --muted: #64748B; --border: #E2E8F0; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #F8FAFC; color: var(--text); line-height: 1.7; }
+  header { background: var(--navy); color: #fff; padding: 20px 0; }
+  header .inner { max-width: 760px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 12px; }
+  .logo-mark { width: 32px; height: 32px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--teal)); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: #fff; flex-shrink: 0; }
+  .logo-text { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: #93C5FD; }
+  header a { color: rgba(255,255,255,0.6); font-size: 13px; margin-left: auto; text-decoration: none; }
+  header a:hover { color: #fff; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+  .meta { font-size: 13px; color: var(--muted); margin-bottom: 40px; }
+  h2 { font-size: 17px; font-weight: 700; color: var(--navy); margin: 36px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  p { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+  ul { font-size: 14px; color: var(--text); padding-left: 20px; margin-bottom: 12px; }
+  ul li { margin-bottom: 5px; }
+  a { color: var(--accent); }
+  .callout { background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px 18px; margin: 20px 0; font-size: 14px; color: #1D4ED8; }
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px; border-top: 1px solid var(--border); }
+  .doc-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+  .doc-links a { font-size: 13px; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="inner">
+    <div class="logo-mark">O</div>
+    <div class="logo-text">OpsManifest</div>
+    <a href="https://opsmanifest.pages.dev">&#8592; Back to app</a>
+  </div>
+</header>
+
+<main>
+  <h1>Terms of Service</h1>
+  <p class="meta">Effective date: 21 June 2026 &nbsp;|&nbsp; Governing law: India</p>
+
+  <div class="callout">
+    <strong>Plain English summary:</strong> OpsManifest is a browser-based infrastructure lifecycle tool. Your build data stays in your browser. We do not sell your data. You can cancel at any time. We are not liable for decisions made based on tool outputs.
+  </div>
+
+  <h2>1. Who We Are</h2>
+  <p>OpsManifest is operated by Flourishing (the "Provider", "we", "us"). The tool is available at <a href="https://opsmanifest.pages.dev">opsmanifest.pages.dev</a> and through the Microsoft Store. Enquiries: <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>.</p>
+
+  <h2>2. What OpsManifest Is</h2>
+  <p>OpsManifest is a structured pre-work guide for infrastructure project managers — covering server provisioning workflows from hardware and OS selection through system design, incident triage, CAB approval, RTM sign-off, and project closure. It is a planning and documentation tool. It is not a replacement for ServiceNow, Jira, Confluence, or your organisation's change management system.</p>
+  <p>Outputs from the tool (Gantt schedules, RTM documents, CAB packs, risk logs) are generated from information you enter. The accuracy and completeness of those outputs depends entirely on the accuracy and completeness of your inputs. You are responsible for verifying all outputs before use in a production environment.</p>
+
+  <h2>3. Accepting These Terms</h2>
+  <p>By creating an account or using OpsManifest in any capacity (including as a guest), you agree to these Terms. If you are using OpsManifest on behalf of an organisation, you represent that you have authority to bind that organisation to these Terms.</p>
+
+  <h2>4. Accounts and Access</h2>
+  <ul>
+    <li>Guest accounts can build and export without signing in, subject to usage limits.</li>
+    <li>Signed-in accounts are tied to an email address. You are responsible for keeping your credentials secure.</li>
+    <li>Google Workspace and Microsoft 365 sign-in is available via OAuth. We do not store your OAuth credentials.</li>
+    <li>We reserve the right to suspend accounts that violate these Terms or our Acceptable Use Policy.</li>
+  </ul>
+
+  <h2>5. Your Data</h2>
+  <ul>
+    <li><strong>Local storage:</strong> All build data (stack selections, design fields, Gantt tasks, RTM rows, RAID logs) is stored in your browser's IndexedDB. It does not leave your device unless you choose to enable cloud sync.</li>
+    <li><strong>Cloud sync (Pro+ only):</strong> If you enable cloud sync, your build data is stored in Google Firebase Firestore, scoped to your email address. Only you can access it.</li>
+    <li><strong>AI features:</strong> If you use OpsMentor AI, your build context is sent to a Cloudflare Worker proxy which forwards it to Groq's API. No build data is stored by the worker beyond the duration of the request.</li>
+    <li>We do not sell, share, or use your build data for any purpose other than delivering the service to you.</li>
+  </ul>
+
+  <h2>6. Plans and Payment</h2>
+  <ul>
+    <li>OpsManifest offers Free, Professional, Team, and Enterprise plans. Features available per plan are described in the app.</li>
+    <li>Paid plans are billed monthly or annually as agreed at the time of purchase.</li>
+    <li>Enterprise plans are agreed individually. A separate Master Service Agreement applies to enterprise customers.</li>
+    <li>We will give 30 days' written notice before changing pricing for existing paid subscribers.</li>
+    <li>Refunds are not provided for partial billing periods except where required by applicable law.</li>
+  </ul>
+
+  <h2>7. Intellectual Property</h2>
+  <ul>
+    <li>OpsManifest, its code, design, and documentation are owned by the Provider. You may not copy, resell, or reverse-engineer the tool.</li>
+    <li>All content you enter into the tool (project names, design fields, risk entries, etc.) remains yours. We claim no ownership over your data.</li>
+    <li>Excel exports and documents generated by the tool are yours to use freely — in CAB submissions, client reports, or internal documentation.</li>
+  </ul>
+
+  <h2>8. Limitation of Liability</h2>
+  <p>OpsManifest is provided as a planning aid. To the maximum extent permitted by applicable law:</p>
+  <ul>
+    <li>We are not liable for any production outage, data loss, project failure, or financial loss that results from decisions made using OpsManifest outputs.</li>
+    <li>Our total liability to you in any 12-month period shall not exceed the amount you paid us in that period.</li>
+    <li>We make no warranty that the tool will be error-free, uninterrupted, or suitable for any specific purpose.</li>
+  </ul>
+
+  <h2>9. Acceptable Use</h2>
+  <p>You agree not to use OpsManifest to: (a) violate any applicable law; (b) transmit malicious code or attempt to interfere with the service; (c) resell access without written permission; (d) submit false or misleading information that could harm other users or the Provider. Full details are in our <a href="/aup.html">Acceptable Use Policy</a>.</p>
+
+  <h2>10. Service Availability</h2>
+  <p>We target 99.5% monthly uptime for the web application. Planned maintenance will be announced with at least 48 hours notice where possible. Our <a href="/sla.html">Service Level Agreement</a> sets out uptime commitments and support response times.</p>
+
+  <h2>11. Changes to These Terms</h2>
+  <p>We may update these Terms from time to time. For material changes, we will notify signed-in users by email at least 14 days before the change takes effect. Continued use of the service after that date constitutes acceptance of the updated Terms.</p>
+
+  <h2>12. Termination</h2>
+  <p>You may stop using OpsManifest at any time. You can delete your account and all associated cloud data by contacting us at <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a>. We will process deletion requests within 30 days. Local browser data can be cleared at any time through your browser settings.</p>
+
+  <h2>13. Governing Law</h2>
+  <p>These Terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts in India. If you are an enterprise customer with a signed Master Service Agreement, the governing law in that agreement takes precedence.</p>
+
+  <h2>14. Contact</h2>
+  <p>For questions about these Terms: <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></p>
+
+  <div class="doc-links">
+    <a href="/privacy.html">Privacy Policy</a>
+    <a href="/sla.html">Service Level Agreement</a>
+    <a href="/msa.html">Master Service Agreement</a>
+    <a href="/dpa.html">Data Processing Agreement</a>
+    <a href="/aup.html">Acceptable Use Policy</a>
+  </div>
+</main>
+
+<footer>OpsManifest &copy; 2026 Flourishing &nbsp;|&nbsp; <a href="mailto:sriram.c76@gmail.com">sriram.c76@gmail.com</a></footer>
+</body>
+</html>
