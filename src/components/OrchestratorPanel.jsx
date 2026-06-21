@@ -1176,10 +1176,47 @@ Rules:
     }
   }
 
+  // Returns a single next-step sentence based on current workflow state, or null to stay silent.
+  // Called after confirmed actions complete so OpsMentor always knows where the build is.
+  function getWorkflowNudge(freshS, confirmedActions) {
+    // Major gate actions speak for themselves — the UI transitions visually. Stay silent.
+    const GATE_TYPES = new Set(['INJECT_PHASE2', 'APPLY_DESIGN', 'SUBMIT_CAB', 'SIGN_RTM',
+                                'PROMOTE', 'UNLOCK_FOR_REVISION', 'RESUBMIT_CAB']);
+    if ((confirmedActions || []).some(a => GATE_TYPES.has(a.type))) return null;
+
+    const { isBuilt, scanComplete, designApplied, phase2Active,
+            cabApproved, cabDeclined, rtmSigned, promoted, ctx } = freshS;
+
+    if (promoted) return null;
+    if (!isBuilt) {
+      const stackFull = ctx?.hw && ctx?.os && ctx?.db && ctx?.app;
+      return stackFull
+        ? 'Ready to continue — click **Build Environment** in the sidebar to set up your environment.'
+        : 'Set the remaining stack fields (hardware, OS, database, application) to continue.';
+    }
+    if (!scanComplete) return 'Click **AI Smart Scan** in the sidebar to detect EOL, CVE, and compatibility issues before designing.';
+    if (!designApplied) return 'Open the **System Design** tab — review the auto-filled 240 fields and apply the design to lock it.';
+    if (!phase2Active) return 'Click **Inject Phase 2** in the sidebar to activate incident and UUM scope and unlock Gantt and RTM.';
+    if (!cabApproved && !cabDeclined) return 'Review the **Gantt** tab for task schedule and scope — then submit to CAB when ready.';
+    if (!rtmSigned) return 'Head to **RTM** tab to verify all requirements are traced and signed off before cutover.';
+    if (!promoted) return 'Complete the **Closure** checklist and promote to live when all items are green.';
+    return null;
+  }
+
   function handleConfirm(actions) {
     setMessages(m => m.filter(msg => msg.role !== 'confirm'));
     pendingConfirmRef.current = null;
     applyActions(actions);
+
+    // Brief delay so the result pill renders first, then emit the next-step nudge.
+    setTimeout(() => {
+      const freshS = sRef.current;
+      const nudge  = getWorkflowNudge(freshS, actions);
+      if (nudge) {
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: nudge }]);
+        speakQueued(nudge);
+      }
+    }, 320);
   }
 
   function handleCancel() {
