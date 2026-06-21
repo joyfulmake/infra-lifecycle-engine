@@ -211,12 +211,12 @@ html,body{height:100%;background:#08101e;color:#e2e8f0;
     <!-- 4: Compatibility Intelligence -->
     <div class="scene" data-scene="4">
       <div class="kicker">Compatibility Intelligence</div>
-      <h1 class="scene-heading">Vendor PAM checks fire the moment you type a component name</h1>
+      <h1 class="scene-heading">Incompatible stacks flagged instantly — with a fix, not just a warning</h1>
       <div class="features">
-        <div class="feature"><div class="feature-icon">&#x26A0;&#xFE0F;</div><div class="feature-text"><h4>SAP ASE on RHEL Power</h4><p>Flagged immediately — no ppc64le build released. Vendor PAM link provided.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x274C;</div><div class="feature-text"><h4>Oracle DB 21c+ on AIX 7.3</h4><p>Blocked — Oracle dropped AIX 7.3 in 21c. Migration path to AIX 7.2 shown.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F6E1;&#xFE0F;</div><div class="feature-text"><h4>Override with auto-RAID risk</h4><p>Choose to override — a RAID risk is raised automatically with your rationale logged.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F5C3;&#xFE0F;</div><div class="feature-text"><h4>All 8 design sections</h4><p>Unix, web, app, DB, storage, backup, network, security — all sections checked.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x26A1;</div><div class="feature-text"><h4>Detected as you type</h4><p>Stack combinations that won't work together are caught the moment you select them — before any design is generated.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F504;</div><div class="feature-text"><h4>Compatible alternatives offered</h4><p>OpsMentor doesn't just warn — it proposes a compatible replacement and switches the build with one click.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F6E1;&#xFE0F;</div><div class="feature-text"><h4>Override with auto-RAID risk</h4><p>Choose to proceed anyway — a RAID risk is raised automatically with your rationale logged.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F4CB;</div><div class="feature-text"><h4>Raise as incident in one phrase</h4><p>Say "raise as incident" — OpsMentor creates the custom incident, feeds it into RTM, Matrix, and the task plan.</p></div></div>
       </div>
     </div>
 
@@ -378,8 +378,8 @@ const SCRIPT = [
   { scene:3, speaker:'jordan', text:"It runs cross-tab coherence checks, tracks live EOL for over sixty products, and now checks your stack against forty vendor Platform Availability Matrix rules — as you type.", pauseAfter:700 },
 
   // Scene 4 — Compatibility Intelligence
-  { scene:4, speaker:'jordan', text:"The moment you enter SAP ASE on a RHEL Power configuration, OpsManifest flags it — with the exact vendor reference, the severity, and the recommended action.", pauseAfter:500 },
-  { scene:4, speaker:'alex',   text:"If you choose to override, a RAID risk is automatically raised and logged with your rationale. Nothing gets buried in a comment thread or forgotten before go-live.", pauseAfter:700 },
+  { scene:4, speaker:'jordan', text:"The moment you select a stack combination that won't work together, OpsManifest flags it — and immediately offers a compatible alternative you can switch to with a single click.", pauseAfter:500 },
+  { scene:4, speaker:'alex',   text:"If you choose to proceed anyway, a RAID risk is automatically raised and logged with your rationale. And if you say 'raise as incident', it creates the incident, feeds it into RTM, Matrix, and the task plan — no form needed.", pauseAfter:700 },
 
   // Scene 5 — Voice and Identity
   { scene:5, speaker:'alex',   text:"Voice input is live in OpsMentor today. Speak your stack selection, describe a risk, log a task — all attributed to your signed-in account and role.", pauseAfter:500 },
