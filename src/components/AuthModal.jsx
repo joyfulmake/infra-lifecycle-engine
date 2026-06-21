@@ -379,8 +379,10 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                   <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                     <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                   </div>
-                  <div className="text-base font-semibold text-slate-800 mb-1">Inquiry received</div>
-                  <div className="text-sm text-slate-500">We'll respond within 1–2 business days with a personalised demo and trial access details.</div>
+                  <div className="text-base font-semibold text-slate-800 mb-1">Your email client should have opened</div>
+                  <div className="text-sm text-slate-500 mb-3">Your inquiry is pre-filled — just hit send. If the window didn't open, email us directly:</div>
+                  <a href={`mailto:${ENTERPRISE_CONTACT_EMAIL}`} className="text-sm font-semibold text-purple-600 underline break-all">{ENTERPRISE_CONTACT_EMAIL}</a>
+                  <div className="text-xs text-slate-400 mt-3">We respond within 1–2 business days.</div>
                 </div>
               ) : (
                 <div>
