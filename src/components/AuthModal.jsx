@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { PLANS, SEEDED_ACCOUNTS, signIn, signOut, resolvePromoCode, resolveInviteCode, generateInviteCode, getAllInvites, promoDaysRemaining } from '../lib/auth.js';
-import { FIREBASE_CONFIGURED, fbSignIn } from '../lib/firebase.js';
+import { FIREBASE_CONFIGURED, fbSignIn, fbSignInWithGoogle, fbSignInWithMicrosoft } from '../lib/firebase.js';
+import { WEB3FORMS_KEY, ENTERPRISE_CONTACT_EMAIL } from '../lib/enterpriseFormConfig.js';
 import { STRIPE_CONFIGURED, startCheckout, openCustomerPortal } from '../lib/stripe.js';
 import { RAZORPAY_CONFIGURED } from '../lib/razorpayConfig.js';
 import { razorpayPriceLabel } from '../lib/razorpay.js';
@@ -51,6 +52,15 @@ export default function AuthModal({ reason = 'signup', onClose }) {
   const [invites, setInvites] = useState(() => (typeof window !== 'undefined' ? getAllInvites() : {}));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(null); // 'google' | 'microsoft' | null
+
+  // Enterprise inquiry form state
+  const [entName, setEntName] = useState('');
+  const [entCompany, setEntCompany] = useState('');
+  const [entEmail, setEntEmail] = useState('');
+  const [entTeamSize, setEntTeamSize] = useState('');
+  const [entMsg, setEntMsg] = useState('');
+  const [entStatus, setEntStatus] = useState(null); // null | 'sending' | 'sent' | 'error'
 
   const isPro = ['professional', 'team', 'enterprise'].includes(selectedPlan);
   const needsCloudSync = isPro && FIREBASE_CONFIGURED;
@@ -139,6 +149,58 @@ export default function AuthModal({ reason = 'signup', onClose }) {
     signOut();
     setAuthUser(null);
     onClose();
+  }
+
+  async function handleOAuth(provider) {
+    setError('');
+    setOauthLoading(provider);
+    try {
+      const fbUser = provider === 'google'
+        ? await fbSignInWithGoogle()
+        : await fbSignInWithMicrosoft();
+      if (!fbUser) { setOauthLoading(null); return; } // user cancelled popup
+      // Derive plan: seeded accounts keep their plan; everyone else starts at starter
+      const seeded = SEEDED_ACCOUNTS[fbUser.email?.toLowerCase()];
+      const plan = seeded?.plan || seeded || (appliedPromoCode ? selectedPlan : 'starter');
+      const user = signIn(fbUser.email.toLowerCase(), plan, null, appliedPromoCode, appliedPromoDays);
+      setAuthUser(user);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Sign-in failed — please try again.');
+    } finally {
+      setOauthLoading(null);
+    }
+  }
+
+  async function handleEnterpriseSubmit(e) {
+    e.preventDefault();
+    if (!entName.trim() || !entEmail.trim()) return;
+    setEntStatus('sending');
+    try {
+      if (WEB3FORMS_KEY) {
+        const res = await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            access_key: WEB3FORMS_KEY,
+            subject: `OpsManifest Enterprise Inquiry — ${entCompany || entName}`,
+            from_name: entName,
+            email: entEmail,
+            message: `Company: ${entCompany || '—'}\nTeam size: ${entTeamSize || '—'}\n\n${entMsg || 'No additional message.'}`,
+            botcheck: '',
+          }),
+        });
+        const json = await res.json();
+        setEntStatus(json.success ? 'sent' : 'error');
+      } else {
+        // Fallback: open mailto with pre-filled subject and body
+        const body = encodeURIComponent(`Name: ${entName}\nCompany: ${entCompany}\nTeam size: ${entTeamSize}\n\n${entMsg}`);
+        window.open(`mailto:${ENTERPRISE_CONTACT_EMAIL}?subject=OpsManifest Enterprise Inquiry — ${encodeURIComponent(entCompany || entName)}&body=${body}`);
+        setEntStatus('sent');
+      }
+    } catch {
+      setEntStatus('error');
+    }
   }
 
   const planList = ['starter', 'professional', 'team', 'enterprise'];
@@ -312,18 +374,90 @@ export default function AuthModal({ reason = 'signup', onClose }) {
           <div className="max-w-md mx-auto pt-6">
 
             {selectedPlan === 'enterprise' ? (
-              <div className="text-center">
-                <div className="text-sm font-semibold text-slate-700 mb-2">Get in touch for Enterprise</div>
-                <div className="text-xs text-slate-500 mb-4">
-                  Includes SSO, custom integrations, on-premises bundle, and dedicated support SLA.
+              entStatus === 'sent' ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <div className="text-base font-semibold text-slate-800 mb-1">Inquiry received</div>
+                  <div className="text-sm text-slate-500">We'll respond within 1–2 business days with a personalised demo and trial access details.</div>
                 </div>
-                <a
-                  href="mailto:hello@opsmanifest.app?subject=Enterprise Enquiry"
-                  className="inline-block bg-purple-600 text-white rounded-lg px-6 py-2.5 text-sm font-semibold hover:bg-purple-700 transition-colors"
-                >
-                  Contact Sales →
-                </a>
-              </div>
+              ) : (
+                <div>
+                  <div className="text-sm font-semibold text-slate-800 mb-1">Enterprise inquiry</div>
+                  <div className="text-xs text-slate-500 mb-5 leading-relaxed">
+                    SSO (Google Workspace / Azure AD), custom domain, dedicated support, and team onboarding — configured within 2 weeks of advance confirmation.
+                  </div>
+                  <form onSubmit={handleEnterpriseSubmit} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Your name <span className="text-red-500">*</span></label>
+                        <input
+                          type="text" required
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                          value={entName} onChange={e => setEntName(e.target.value)}
+                          placeholder="Jane Smith"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Company / Organisation</label>
+                        <input
+                          type="text"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                          value={entCompany} onChange={e => setEntCompany(e.target.value)}
+                          placeholder="Acme Corp"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Work email <span className="text-red-500">*</span></label>
+                        <input
+                          type="email" required
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                          value={entEmail} onChange={e => setEntEmail(e.target.value)}
+                          placeholder="jane@company.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Team size</label>
+                        <select
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                          value={entTeamSize} onChange={e => setEntTeamSize(e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="1–5">1–5 people</option>
+                          <option value="6–20">6–20 people</option>
+                          <option value="21–100">21–100 people</option>
+                          <option value="100+">100+ people</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">What are you looking to solve?</label>
+                      <textarea
+                        rows={3}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
+                        value={entMsg} onChange={e => setEntMsg(e.target.value)}
+                        placeholder="Describe your infrastructure PM workflow, team, or integration requirements..."
+                      />
+                    </div>
+                    {entStatus === 'error' && (
+                      <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                        Could not send — please email us directly at <a href={`mailto:${ENTERPRISE_CONTACT_EMAIL}`} className="underline font-semibold">{ENTERPRISE_CONTACT_EMAIL}</a>.
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={entStatus === 'sending'}
+                      className="w-full bg-purple-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-60"
+                    >
+                      {entStatus === 'sending' ? 'Sending…' : 'Send Inquiry →'}
+                    </button>
+                    <div className="text-xs text-slate-400 text-center">We respond within 1–2 business days. No spam, ever.</div>
+                  </form>
+                </div>
+              )
             ) : (
               <>
                 <div className="text-sm font-semibold text-slate-700 mb-1 text-center">
@@ -332,6 +466,42 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                 <div className="text-xs text-slate-400 text-center mb-5">
                   Profile stored in your browser only — no server, no tracking. Export to Excel for permanent records.
                 </div>
+
+                {/* Google + Microsoft SSO — shows when Firebase is configured */}
+                {FIREBASE_CONFIGURED && (
+                  <div className="space-y-2 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => handleOAuth('google')}
+                      disabled={!!oauthLoading || submitting}
+                      className="w-full flex items-center justify-center gap-3 border border-slate-300 rounded-lg py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                    >
+                      {oauthLoading === 'google'
+                        ? <svg className="animate-spin w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                        : <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+                      }
+                      {oauthLoading === 'google' ? 'Signing in…' : 'Continue with Google'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOAuth('microsoft')}
+                      disabled={!!oauthLoading || submitting}
+                      className="w-full flex items-center justify-center gap-3 border border-slate-300 rounded-lg py-2.5 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                    >
+                      {oauthLoading === 'microsoft'
+                        ? <svg className="animate-spin w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                        : <svg width="18" height="18" viewBox="0 0 23 23"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>
+                      }
+                      {oauthLoading === 'microsoft' ? 'Signing in…' : 'Continue with Microsoft'}
+                    </button>
+                    <div className="flex items-center gap-3 pt-1">
+                      <div className="flex-1 h-px bg-slate-200" />
+                      <span className="text-xs text-slate-400">or use email</span>
+                      <div className="flex-1 h-px bg-slate-200" />
+                    </div>
+                  </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Email address</label>
