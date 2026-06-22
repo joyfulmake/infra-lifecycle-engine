@@ -50,8 +50,10 @@ export function isQATeamLead(authUser, roleAssignments) {
  */
 export function isPMOrDeputy(authUser, requirements) {
   if (!authUser?.email) return false;
-  const email = authUser.email;
-  return email === requirements?.pmEmail || email === requirements?.pmBackupEmail;
+  const email = authUser.email.toLowerCase();
+  if (!requirements?.pmEmail) return true; // no PM set — any signed-in user can manage
+  return email === requirements.pmEmail.toLowerCase() ||
+         email === (requirements.pmBackupEmail || '').toLowerCase();
 }
 
 /**

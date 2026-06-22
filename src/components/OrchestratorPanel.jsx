@@ -453,91 +453,100 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const st = state || s;
     const { hw, os, db, app } = st.ctx || {};
     const r = st.requirements || {};
-    const proj = r.projectName || 'this project';
-    const stack = [hw, os, db, app].filter(Boolean).join(' / ');
+    const proj = r.projectName;
     const goLive = r.goLiveDate ? ` — go-live ${r.goLiveDate}` : '';
-    const incCount = (st.selInc || []).length;
-    const uumCount = (st.selUUM || []).length;
 
     if (st.promoted)
-      return `${r.projectName ? `"${r.projectName}"` : 'The build'} is live. Closure is the final gate — hypercare monitoring, CMDB updates, lessons learned, and formal team sign-off. Every item must be green before the project is formally closed.`;
+      return `Hypercare window is open${proj ? ` for "${proj}"` : ''}. The first 48 hours are the highest-risk window — watch for connection pool exhaustion, job scheduler drift, and CMDB sync gaps. Those are the most common post-cutover surprises. Closure tab tracks every sign-off; export the audit trail once every item is green.`;
     if (st.rtmSigned && st.cabApproved)
-      return `All gates cleared for ${proj}${goLive}. RTM is signed, CAB has approved. Confirm your change window is active and all leads are on the bridge, then initiate cutover from the sidebar. That is the point of no return.`;
+      return `Every gate is cleared${goLive}. Before initiating cutover: confirm the bridge team is assembled, the rollback plan is rehearsed, and the change window is formally open with the CAB chair. The "Promote to Live" action in the sidebar is the point of no return.`;
     if (st.rtmSigned && !st.cabApproved)
-      return `RTM is signed for ${proj}. CAB approval is the remaining gate — submit to CAB from the sidebar when the Gantt schedule and scope are finalised.`;
+      return `RTM is signed — scope is locked. CAB is the remaining gate. The board will focus on RAID log completeness, the Gantt critical path, and design-to-RTM traceability. Review those three before submitting.`;
     if (st.cabApproved)
-      return `CAB has approved ${proj}${goLive}. Open RTM — mark every row PASS or N/A. Nothing moves to production with an outstanding FAIL. BLOCKED rows need an owner and a mitigation logged in the RAID log before sign-off.`;
+      return `CAB approved${goLive}. RTM sign-off is next — every requirement row needs a disposition. A single FAIL or BLOCKED row blocks cutover; BLOCKED rows need an owner and a mitigation in the RAID log before sign-off.`;
     if (st.cabDeclined)
-      return `CAB declined ${proj}. Unlock the tabs using the button below, address the board's feedback in the design and RAID log, then resubmit. I'll flag anything that could cause a second decline.`;
+      return `CAB declined. The board most often pushes back on three things: an incomplete RAID log, a Gantt schedule that doesn't account for change freeze windows, or a gap between the design fields and the RTM requirements. Unlock the tabs, address those specifically, then resubmit.`;
     if (st.phase2Active)
-      return `Phase 2 is active — ${incCount} incident${incCount !== 1 ? 's' : ''} and ${uumCount} UUM item${uumCount !== 1 ? 's' : ''} in scope for ${proj}. Review the Gantt to check the schedule holds, update the RAID log if new risks have surfaced, then submit to CAB.`;
+      return `Phase 2 is active — incident and change tasks are now on the schedule. Before going to CAB: open the Gantt and look at tasks flagged CP (critical path). Any delay on those propagates directly to the go-live date.`;
     if (st.designApplied)
-      return `System design is locked for ${proj}. Next step: inject Phase 2 from the sidebar — that brings in your incident response tasks and UUM change items so we can build the Gantt and go to CAB.`;
+      return `Design is the locked baseline — every downstream RTM row traces back to a field you just set. Phase 2 maps your incident codes and UUM items to real change tasks; that's what populates the Gantt and the full RTM requirement list.`;
     if (st.scanComplete)
-      return `AI scan is done for ${stack || proj}. I've flagged EOL windows, CVE exposure, and compatibility risks. Open System Design and work through all 8 sections — I'll challenge anything that looks inconsistent with the scan findings.`;
-    if (st.isBuilt)
-      return `${stack} stack is configured for ${proj}. Let's run the AI Smart Scan now — I'll check for EOL exposure, known CVEs, and version compatibility gaps before we touch the design.`;
+      return `Scan complete. System Design is next — all 8 sections (Network, Security, Storage, Backup, DR, Compliance, HA, Monitoring) set fields that downstream RTM rows will trace to. Gaps here become FAIL rows at sign-off, so go through each section deliberately.`;
+    if (st.isBuilt) {
+      if (/oracle/i.test(db) && /power|ppc/i.test(hw))
+        return `For this platform and database combination, the scan will surface ppc64le Oracle certification gaps and fix-pack currency issues — those are the two most common CAB blockers for Power migrations. Run it before touching the design.`;
+      if (/websphere/i.test(app))
+        return `WebSphere Traditional carries TLS 1.0/1.1 cipher exposure and fix-pack requirements that will surface in the scan — run it now so the compliance section in System Design reflects real findings, not assumptions.`;
+      if (/aix/i.test(os))
+        return `AIX migrations carry extended support window risk — the scan will quantify exactly where this platform sits on the EOL timeline. That finding feeds directly into the CAB migration urgency question.`;
+      if (/oracle/i.test(db))
+        return `Oracle on this stack will surface RAC compatibility flags and fix-pack currency issues in the scan — important to capture before the design locks in the database tier configuration.`;
+      return `The scan cross-checks this stack against live CVE feeds and EOL timelines — run it before locking 240+ fields of system design. Findings auto-populate the incident scope for Phase 2.`;
+    }
 
     if (!hw)
-      return `Welcome. I'm OpsMentor — built into OpsManifest to guide your team through the full server provisioning lifecycle, from platform selection all the way to production cutover. Let's start with the hardware platform. What are we provisioning?`;
-    if (!os)
-      return `${hw} selected. Now let's pick the operating system — this anchors your patch cycle, EOL timeline, and middleware compatibility. If it's AIX or Windows Server, flag it early; those have longer migration tails.`;
+      return `I'm OpsMentor — I guide the delivery team through the full provisioning lifecycle from platform selection to production cutover. Start with the hardware platform — AIX, IBM Power, and x86 each have fundamentally different middleware constraints, EOL timelines, and migration playbooks.`;
+    if (!os) {
+      const isAIX = /aix/i.test(hw);
+      return isAIX
+        ? `AIX is selected — the OS version will determine the extended support window and migration scope. AIX 7.1 is well into extended support; flag it early because the CAB board will ask.`
+        : `OS version anchors the patch cycle, EOL timeline, and middleware compatibility. It's the foundation every other selection sits on — pick deliberately.`;
+    }
     if (!db)
-      return `${hw} / ${os} set. Choose the database engine. If you're on Oracle RAC or a legacy Sybase version, I'll factor in the extended support windows and migration complexity from the start.`;
+      return `Database engine is the next critical layer — it determines the maintenance window, backup strategy, and migration complexity. Oracle RAC and legacy Sybase have the longest change tails.`;
     if (!app)
-      return `${hw} / ${os} / ${db} defined. Last layer — select the application or middleware. This determines your TLS configuration, session management approach, and clustering requirements.`;
+      return `Last layer — application or middleware determines TLS configuration, clustering requirements, and session management approach. WebSphere and JBoss have specific fix-pack dependencies worth knowing upfront.`;
     if (!r.projectName)
-      return `Stack is ${stack}. Give this build a project name — something the CAB board and RTM document will recognise. Keep it specific: system name, environment, and purpose in one phrase works well.`;
+      return `Give this build a name the CAB board will recognise — typically system name, environment, and purpose in one phrase. It appears on every export and every sign-off document.`;
     if (!r.envType)
-      return `"${proj}" — noted. What environment is this targeting? Production, QA, or Dev changes the SLA thresholds, change window rules, and how aggressive we can be with the schedule.`;
+      return `Environment type changes the approval path: Production means full CAB review and strict change windows. QA and Dev have faster tracks but different SLA thresholds and different RTM scrutiny.`;
     if (!r.projectStartDate)
-      return `${r.envType} environment confirmed. When does the project start? I'll use this to anchor the Gantt and flag any schedule risk against your go-live.`;
+      return `Project start date anchors the Gantt. The critical path calculation needs it to determine whether the go-live window is achievable given the full task scope.`;
     if (!r.goLiveDate)
-      return `Start date locked in. What's the target go-live date? I'll calculate the critical path and call out any tasks that look tight given the window.`;
+      return `Go-live date sets the constraint everything is measured against. Add it now — the Gantt will immediately show whether the window is comfortable or dangerously tight.`;
     if (!r.sla)
-      return `Almost there. Select the SLA tier — this sets your incident response targets, shapes the CAB criteria, and determines how we prioritise risk mitigation in the RAID log.`;
+      return `SLA tier sets incident response targets and shapes CAB criteria. High-SLA builds get more RTM scrutiny — the board will verify every row matches the declared SLA.`;
 
-    return `All fields are ready for "${proj}". Click Build in the sidebar — I'll confirm the stack and move straight into the AI scan.`;
+    return `All fields are set${proj ? ` for "${proj}"` : ''}. Click Build in the sidebar to lock the stack and start the AI scan workflow.`;
   }
 
-  // Voice prompt — natural spoken sentences, not command fragments.
+  // Voice prompt — natural spoken sentences, no parroting of visible state.
   function buildVoicePrompt(state) {
     const st = state || s;
     const { hw, os, db, app } = st.ctx || {};
     const r = st.requirements || {};
     const proj = r.projectName;
-    const stack = [hw, os, db, app].filter(Boolean).join(', ');
 
     if (st.promoted)
-      return proj ? `${proj} is live. Work through the closure checklist — every item needs sign-off before the project is formally closed.` : `The build is live. Work through the closure checklist.`;
+      return `Hypercare window is open${proj ? ` for ${proj}` : ''}. Watch for early post-cutover surprises and work through the closure checklist.`;
     if (st.rtmSigned && st.cabApproved)
-      return `All gates cleared. Confirm your change window is open and initiate cutover from the sidebar.`;
+      return `Every gate is cleared. Confirm the bridge team is assembled and initiate cutover when the change window opens.`;
     if (st.rtmSigned)
-      return `RTM is signed. Submit to CAB from the sidebar to get the final approval before cutover.`;
+      return `RTM signed. Review the RAID log and Gantt before submitting to CAB — those are what the board focuses on.`;
     if (st.cabApproved)
-      return `CAB approved. Open RTM and verify every row before we cut over.`;
+      return `CAB approved. Open RTM and verify every row — one unresolved FAIL blocks cutover.`;
     if (st.cabDeclined)
-      return `CAB declined the submission. Unlock the tabs, address the feedback, and resubmit.`;
+      return `CAB declined. Check the RAID log, Gantt schedule, and design-to-RTM traceability — those are the three most common decline reasons.`;
     if (st.phase2Active)
-      return `Phase 2 is active. Review the Gantt schedule, then submit to CAB when you're ready.`;
+      return `Phase 2 is active. Open the Gantt and check the critical path before submitting to CAB.`;
     if (st.designApplied)
-      return `System design is locked. Inject Phase 2 from the sidebar to bring in the incident and change tasks.`;
+      return `Design locked. Inject Phase 2 from the sidebar to bring in incident and change tasks.`;
     if (st.scanComplete)
-      return `AI scan is complete. Open System Design and work through all eight sections.`;
+      return `Scan complete. Open System Design and work through all eight sections carefully.`;
     if (st.isBuilt)
-      return stack ? `${stack} stack is ready. Let's run the AI Smart Scan.` : `Stack is ready. Let's run the AI Smart Scan.`;
+      return `Run the AI Smart Scan now — it flags EOL exposure and CVE gaps before you touch the design.`;
 
-    if (!hw) return `Welcome. I'm OpsMentor, your infrastructure delivery guide. Let's start with the hardware platform.`;
-    if (!os) return `${hw} selected. Now choose the operating system.`;
-    if (!db) return `${hw} and ${os} set. Choose the database engine.`;
+    if (!hw) return `Start with the hardware platform. It anchors every compatibility check downstream.`;
+    if (!os) return /aix/i.test(hw) ? `AIX selected — the OS version determines your extended support window.` : `Now pick the operating system — it anchors your patch cycle and EOL timeline.`;
+    if (!db) return `OS set. Choose the database engine — it determines your maintenance window and migration complexity.`;
     if (!app) return `Database set. Select the application or middleware layer.`;
-    if (!r.projectName) return `Stack is complete. Give this build a project name.`;
+    if (!r.projectName) return `Stack complete. Give this build a name the CAB board will recognise.`;
     if (!r.envType)     return `Project named. What environment are we targeting?`;
-    if (!r.projectStartDate) return `Environment confirmed. When does the project start?`;
-    if (!r.goLiveDate)  return `Start date set. What's the target go-live date?`;
+    if (!r.projectStartDate) return `Environment set. When does the project start?`;
+    if (!r.goLiveDate)  return `Start date set. Add the go-live target — the Gantt will immediately show whether the window is achievable.`;
     if (!r.sla)         return `Almost there. Select the SLA tier.`;
 
-    return proj ? `All fields are ready for ${proj}. Click Build in the sidebar.` : `All fields are ready. Click Build in the sidebar.`;
+    return proj ? `All set for ${proj}. Click Build in the sidebar.` : `All fields are ready. Click Build in the sidebar.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -796,7 +805,18 @@ Rules:
     if (!prev.isBuilt && s.isBuilt) {
       awaitingFieldRef.current = null;
       setChipsField(null);
-      orc.push(`Stack built. Run the AI Smart Scan now.`);
+      const _db = s.ctx?.db || '';
+      const _hw = s.ctx?.hw || '';
+      const _app = s.ctx?.app || '';
+      const _os = s.ctx?.os || '';
+      const scanHint = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
+        ? `Run the scan — ppc64le Oracle certification and fix-pack currency are the two most common CAB blockers for this stack type.`
+        : /websphere/i.test(_app)
+          ? `Run the scan — WebSphere TLS cipher gaps and fix-pack requirements will surface now, before they become design problems.`
+          : /aix/i.test(_os)
+            ? `Run the scan — it will quantify the AIX extended support position, which the CAB will ask about.`
+            : `Run the AI Smart Scan — EOL flags and CVE exposure surface here before you touch the design.`;
+      orc.push(scanHint);
     }
     if (!prev.scanComplete && s.scanComplete) {
       const incCount  = (s.selInc || []).length;
@@ -819,9 +839,7 @@ Rules:
     }
     if (!prev.phase2Active && s.phase2Active) {
       awaitingFieldRef.current = null;
-      const inc = (s.selInc || []).length;
-      const uum = (s.selUUM || []).length;
-      orc.push(`Phase 2 active — ${inc} incidents, ${uum} UUM items in scope. Open Gantt, review the schedule, then submit to CAB.`);
+      orc.push(`Phase 2 active. Open the Gantt and check tasks flagged CP — those are on the critical path and any delay there cascades to go-live. Verify the schedule holds before submitting to CAB.`);
     }
     if (!prev.cabApproved && s.cabApproved) {
       orc.push(`CAB approved. Open RTM — mark every row PASS or NA, then sign off.`);
