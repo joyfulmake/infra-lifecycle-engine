@@ -90,14 +90,14 @@ function ConfirmCard({ actions, onConfirm, onCancel }) {
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 space-y-2.5">
-      <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Ready to execute</div>
+      <div className="text-xs font-semibold text-amber-800">Here's what I'd do — your call</div>
       {[...immediate, ...significant].map((a, i) => (
         <div key={i} className="flex items-start gap-2 text-sm">
           <span className={[
             'mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold',
             a.requiresConfirmation ? 'bg-amber-500' : 'bg-teal-500',
           ].join(' ')} style={{ fontSize: 8 }}>
-            {a.requiresConfirmation ? '!' : '✓'}
+            {a.requiresConfirmation ? '?' : '✓'}
           </span>
           <span className="text-slate-700 leading-snug">{a.description}</span>
         </div>
@@ -810,12 +810,12 @@ Rules:
       const _app = s.ctx?.app || '';
       const _os = s.ctx?.os || '';
       const scanHint = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
-        ? `Run the scan — ppc64le Oracle certification and fix-pack currency are the two most common CAB blockers for this stack type.`
+        ? `Stack locked. Good moment for the scan — ppc64le Oracle cert gaps and fix-pack currency are the two most common CAB blockers for Power migrations. Want to run it?`
         : /websphere/i.test(_app)
-          ? `Run the scan — WebSphere TLS cipher gaps and fix-pack requirements will surface now, before they become design problems.`
+          ? `Stack locked. Run the scan now — WebSphere TLS cipher gaps surface here, before they become a design problem.`
           : /aix/i.test(_os)
-            ? `Run the scan — it will quantify the AIX extended support position, which the CAB will ask about.`
-            : `Run the AI Smart Scan — EOL flags and CVE exposure surface here before you touch the design.`;
+            ? `Stack locked. The scan will quantify exactly where AIX sits on the EOL timeline — that's the first thing CAB will ask about.`
+            : `Stack locked. Run the AI Smart Scan — EOL flags and CVE exposure surface before you touch the design.`;
       orc.push(scanHint);
     }
     if (!prev.scanComplete && s.scanComplete) {
@@ -830,34 +830,34 @@ Rules:
         `${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM items pre-selected`,
       ].filter(Boolean);
       log.push(summaryLines.join(' · '));
-      const crit = critical.length > 0 ? `${critical.length} CRITICAL. ` : '';
-      orc.push(`Scan done — ${crit}${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM items. Open System Design now.`);
+      const crit = critical.length > 0 ? `${critical.length} CRITICAL finding${critical.length !== 1 ? 's' : ''} — ` : '';
+      orc.push(`Scan done — ${crit}${incCount} incidents and ${uumCount} UUM items captured. System Design is next. Each section you fill becomes an RTM row — gaps become FAIL at sign-off.`);
     }
     if (!prev.designApplied && s.designApplied) {
       awaitingFieldRef.current = null;
-      orc.push(`Design locked. Next: inject Phase 2 from the sidebar.`);
+      orc.push(`Design is now the locked baseline. Ready for Phase 2? It maps your incident codes and UUM items to real Gantt tasks.`);
     }
     if (!prev.phase2Active && s.phase2Active) {
       awaitingFieldRef.current = null;
-      orc.push(`Phase 2 active. Open the Gantt and check tasks flagged CP — those are on the critical path and any delay there cascades to go-live. Verify the schedule holds before submitting to CAB.`);
+      orc.push(`Phase 2 is live — worth checking the Gantt before going to CAB. Tasks flagged CP are on the critical path; a slip on any of them shifts the go-live date. Anything look off?`);
     }
     if (!prev.cabApproved && s.cabApproved) {
-      orc.push(`CAB approved. Open RTM — mark every row PASS or NA, then sign off.`);
+      orc.push(`CAB approved. RTM is the last technical gate — every row needs a disposition. One unresolved FAIL or BLOCKED stops cutover. Want to go straight there?`);
     }
     if (!prev.cabDeclined && s.cabDeclined) {
-      orc.push(`CAB declined. Click "Unlock Tabs for Revision" in the sidebar, update scope or design, then resubmit.`);
+      orc.push(`CAB came back declined. Boards most often push back on RAID completeness, schedule vs freeze windows, or design-to-RTM traceability. Unlock the tabs, close those gaps, then resubmit. How would you like to proceed?`);
     }
     if (!prev.rtmSigned && s.rtmSigned) {
-      orc.push(`RTM signed. All pre-cutover gates are now clear — initiate cutover from the sidebar when your change window opens. Closure opens after the system goes live.`);
+      orc.push(`RTM signed — every pre-cutover gate is clear. The change window is the last thing between here and live. Any last concerns worth capturing before initiating?`);
     }
     if (!prev.promoted && s.promoted) {
-      orc.push(`System is live. The Closure tab is now active — work through hypercare, CMDB updates, and lessons learned. Export the full audit trail from the sidebar when complete.`);
+      orc.push(`System is live. First 48 hours are the highest-risk window — watch for connection pool exhaustion, job scheduler drift, and CMDB sync gaps. Closure tab tracks every sign-off.`);
     }
     if (!prev.rtmStale && s.rtmStale) {
-      log.push(`RTM drifted — scope changed after sign-off. Open RTM, re-review each row, and re-sign if requirements still hold.`);
+      orc.push(`Scope shifted after the RTM was signed — it's drifted out of sync with the current plan. Worth a re-check before cutover. How would you like to proceed?`);
     }
     if (!prev.tasksStaleReason && s.tasksStaleReason) {
-      log.push(`Gantt tasks are stale: ${s.tasksStaleReason}. Open Gantt and click Regenerate.`);
+      orc.push(`Gantt is flagged stale — ${s.tasksStaleReason}. The schedule may not reflect the current scope. How would you like to handle this?`);
     }
 
     const activeVulns = (s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length;
@@ -904,13 +904,13 @@ Rules:
       const nowPassed  = rtmPassCount + rtmNaCount;
       if (nowPassed > prevPassed) {
         if (nowPassed >= rtmTotalCount) {
-          orc.push(`All ${rtmTotalCount} RTM rows verified. Say "sign RTM" or use the sidebar to sign off.`);
+          orc.push(`All ${rtmTotalCount} RTM rows verified — clean sweep. Ready to sign off?`);
         } else if (nowPassed % 5 === 0 || nowPassed === Math.floor(rtmTotalCount / 2)) {
           log.push(`RTM: ${nowPassed}/${rtmTotalCount} rows verified (${Math.round(nowPassed / rtmTotalCount * 100)}%).`);
         }
       }
       if (rtmFailCount > (prev.rtmFailCount || 0)) {
-        log.push(`RTM: ${rtmFailCount} FAIL row${rtmFailCount !== 1 ? 's' : ''} — must be resolved before sign-off.`);
+        log.push(`RTM: ${rtmFailCount} FAIL row${rtmFailCount !== 1 ? 's' : ''} — needs resolution before sign-off.`);
       }
     }
 
@@ -923,7 +923,7 @@ Rules:
     // ── Deep sync: Closure checklist progress ─────────────────────────────────
     if (s.promoted && closureCheckCount > (prev.closureCheckCount || 0)) {
       if (closureTotalCount > 0 && closureCheckCount >= closureTotalCount) {
-        orc.push(`Closure complete. Export the audit trail from the sidebar.`);
+        orc.push(`Closure complete — every item signed off. Export the audit trail from the sidebar when you're ready.`);
       } else if (closureCheckCount % 3 === 0 && closureCheckCount > 0 && closureTotalCount > 0) {
         log.push(`Closure: ${closureCheckCount}/${closureTotalCount} items done.`);
       }
@@ -932,18 +932,19 @@ Rules:
     // ── Deep sync: Team RACI filling up ──────────────────────────────────────
     if (rolesFilledCount > (prev.rolesFilledCount || 0)) {
       if (rolesFilledCount >= 20 && prev.rolesFilledCount < 20) {
-        orc.push(`All 20 RACI roles assigned. Confirm email contacts in the Roles tab.`);
+        orc.push(`All 20 RACI roles assigned — good. Worth confirming the email contacts are current in the Roles tab.`);
       } else if (rolesFilledCount === 10 && (prev.rolesFilledCount || 0) < 10) {
-        log.push(`Team halfway there — ${rolesFilledCount}/20 roles assigned in the Roles tab.`);
+        log.push(`Halfway there — ${rolesFilledCount}/20 roles assigned.`);
       }
     }
 
-    // ── Deep sync: New coherence warnings ────────────────────────────────────
+    // ── Deep sync: New coherence warnings — voiced for warn severity ──────────
     if (coherenceWarnCount > (prev.coherenceWarnCount || 0)) {
       const warns = (s.coherenceAlerts || []).filter(a => a.severity === 'warn');
       if (warns.length > 0) {
         const latest = warns[warns.length - 1];
-        log.push(`Coherence alert: ${latest.message}${latest.action ? ' — ' + latest.action : ''}`);
+        const action = latest.action ? ` ${latest.action}.` : '';
+        orc.push(`One thing worth flagging — ${latest.message}.${action} How would you like to proceed?`);
       }
     }
 
