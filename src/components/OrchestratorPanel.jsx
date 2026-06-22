@@ -321,7 +321,13 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     }
     if (wasLocked && !welcomeSpokenRef.current) {
       welcomeSpokenRef.current = true;
-      speakQueued(buildVoicePrompt(sRef.current));
+      // Speak the last orchestrator message already in the chat (if any).
+      // Don't use buildVoicePrompt — it's state-driven and can say "Start with the
+      // hardware platform" even when the chat is showing the welcome/name-asking flow.
+      const lastOrc = [...(messagesRef.current || [])]
+        .reverse()
+        .find(m => m.role === 'orchestrator');
+      if (lastOrc?.text) speakQueued(lastOrc.text);
     }
   }
 
