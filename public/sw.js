@@ -6,7 +6,7 @@
 if (self.location.protocol === 'ms-appx-web:') { /* no-op */ }
 else {
 
-const CACHE = 'opsmanifest-v3';
+const CACHE = 'opsmanifest-v4';
 
 const PRECACHE = [
   '/',
@@ -49,6 +49,20 @@ self.addEventListener('fetch', event => {
     url.hostname.includes('endoflife.date')
   ) {
     return; // fall through to network
+  }
+
+  // EOL API calls — stale-while-revalidate (serve cache instantly, update in background)
+  if (url.pathname.startsWith('/api/eol')) {
+    event.respondWith(
+      caches.open(CACHE).then(async cache => {
+        const cached = await cache.match(event.request);
+        const fetchPromise = fetch(event.request)
+          .then(res => { if (res.ok) cache.put(event.request, res.clone()); return res; })
+          .catch(() => null);
+        return cached || fetchPromise;
+      })
+    );
+    return;
   }
 
   // HTML navigations — network first, cache fallback

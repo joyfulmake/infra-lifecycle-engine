@@ -1,9 +1,31 @@
 // Live endoflife.date API client
 // Docs: https://endoflife.date/docs/api/
 
-// Production: route through CF Pages Function edge proxy (/api/eol) for 1h edge cache.
-// Dev: call endoflife.date directly (Pages Functions not served by Vite dev server).
+// Production: CF Pages Function edge proxy (/api/eol) — 1h edge cache at CF PoP.
+// Dev: direct endoflife.date (Pages Functions not served by Vite dev server).
 const BASE = import.meta.env.PROD ? '/api/eol' : 'https://endoflife.date/api';
+
+// ── localStorage cache (24h TTL) ─────────────────────────────────────────────
+const LS_KEY = 'om_eol_v1';
+function lsGet(slug) {
+  try {
+    const store = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    const entry = store[slug];
+    if (entry && Date.now() - entry.ts < 86_400_000) return entry.data;
+    if (entry) return entry.data; // return stale data too — better than nothing
+  } catch {}
+  return null;
+}
+function lsSet(slug, data) {
+  try {
+    const store = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    store[slug] = { data, ts: Date.now() };
+    // Prune if store grows beyond 80 entries
+    const keys = Object.keys(store);
+    if (keys.length > 80) delete store[keys[0]];
+    localStorage.setItem(LS_KEY, JSON.stringify(store));
+  } catch {}
+}
 
 // Maps internal component display names / ctx values to endoflife.date product slugs
 export const EOL_SLUG_MAP = {
@@ -63,18 +85,39 @@ export const EOL_SLUG_MAP = {
   'JBoss EAP 7.4': { slug: 'jboss-eap', cycle: '7.4' },
 };
 
-// Fetch all cycles for a product slug
+import { getStaticEolCycles } from './eolFallback.js';
+
+// Fetch all cycles for a product slug — three-layer resilience:
+// 1. Live API (CF edge proxy, 1h cache) → 2. localStorage (24h, stale ok) → 3. bundled static data
 export async function fetchProductCycles(slug) {
-  const res = await fetch(`${BASE}/${slug}.json`);
-  if (!res.ok) throw new Error(`${slug}: ${res.status}`);
-  return res.json();
+  // Try live API
+  try {
+    const res = await fetch(`${BASE}/${slug}.json`);
+    if (res.ok) {
+      const data = await res.json();
+      lsSet(slug, data); // persist for next offline visit
+      return data;
+    }
+  } catch {}
+
+  // Fallback 1: localStorage (any age — stale data beats no data during a demo)
+  const cached = lsGet(slug);
+  if (cached) return cached;
+
+  // Fallback 2: bundled static data
+  const staticData = getStaticEolCycles(slug);
+  if (staticData) return staticData;
+
+  return null; // never throw — caller handles null gracefully
 }
 
-// Fetch the master product list
+// Fetch the master product list — silently returns empty on failure
 export async function fetchProductIndex() {
-  const res = await fetch(`${BASE}/all.json`);
-  if (!res.ok) throw new Error('Failed to fetch product index');
-  return res.json();
+  try {
+    const res = await fetch(`${BASE}/all.json`);
+    if (res.ok) return res.json();
+  } catch {}
+  return []; // silent empty — search just returns no results
 }
 
 // Search product index for a keyword
@@ -88,18 +131,15 @@ export async function searchProducts(query) {
 export async function fetchComponentLiveData(componentName) {
   const mapping = EOL_SLUG_MAP[componentName];
   if (!mapping) return null;
-  try {
-    const cycles = await fetchProductCycles(mapping.slug);
-    const matchedCycle = cycles.find(c => String(c.cycle) === String(mapping.cycle)) || cycles[0];
-    return {
-      slug: mapping.slug,
-      targetCycle: mapping.cycle,
-      matchedCycle,
-      allCycles: cycles.slice(0, 5),
-    };
-  } catch {
-    return null;
-  }
+  const cycles = await fetchProductCycles(mapping.slug);
+  if (!cycles || !cycles.length) return null;
+  const matchedCycle = cycles.find(c => String(c.cycle) === String(mapping.cycle)) || cycles[0];
+  return {
+    slug: mapping.slug,
+    targetCycle: mapping.cycle,
+    matchedCycle,
+    allCycles: cycles.slice(0, 5),
+  };
 }
 
 // Determine live status from a cycle object

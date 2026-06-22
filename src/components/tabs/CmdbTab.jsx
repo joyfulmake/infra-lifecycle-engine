@@ -390,8 +390,8 @@ function LiveApiSearch() {
         })
       );
       setResults(fetched.filter(r => r.cycles.length > 0));
-    } catch (e) {
-      setError('endoflife.date API unavailable — check network or CORS');
+    } catch {
+      // Silent — bundled fallback data is used automatically
     } finally {
       setSearching(false);
     }
@@ -801,7 +801,7 @@ function StackLiveCheck({ stackComponents, liveEolData, setLiveEolData }) {
                     {entry.loading ? (
                       <span className="text-slate-400 animate-pulse">Fetching…</span>
                     ) : entry.error ? (
-                      <span className="badge badge-amber text-xs" title={entry.error}>⚠ API Error</span>
+                      <span className="badge badge-slate text-xs">Offline</span>
                     ) : ls ? (
                       <span className={`badge ${statusColor[ls.status] || 'badge-slate'} font-bold`}>{ls.label}</span>
                     ) : (
