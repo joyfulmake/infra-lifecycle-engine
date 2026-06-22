@@ -663,12 +663,16 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       return;
     }
 
-    const hasData = !!(st.ctx?.hw || st.isBuilt || st.scanComplete || st.designApplied ||
-                       st.phase2Active || st.cabApproved || st.cabDeclined || st.rtmSigned ||
-                       st.promoted || st.requirements?.projectName);
+    // LLM assessment is only warranted once the workflow has genuinely started.
+    // Pre-build (stack selection, project naming) uses the guided chip interview instead —
+    // the LLM has nothing meaningful to assess without a stack, and its response would
+    // just be "select the hardware platform first", which undercuts the welcome flow.
+    const workflowStarted = !!(st.isBuilt || st.scanComplete || st.designApplied ||
+                                st.phase2Active || st.cabApproved || st.cabDeclined ||
+                                st.rtmSigned || st.promoted);
 
-    if (!hasData) {
-      // Signed in, blank build — greet first, then hw question as a separate beat
+    if (!workflowStarted) {
+      // Signed in, pre-build — greet, then pick up from wherever they left off
       const email = authUserRef.current?.email || '';
       const raw = email.split('@')[0].split('.')[0];
       const name = raw.charAt(0).toUpperCase() + raw.slice(1);
@@ -677,15 +681,23 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       setMessages([{ id: nextId(), role: 'orchestrator', text:
         `Welcome back, ${name}. I'm OpsMentor — here to keep your team aligned from platform selection to production cutover.`
       }]);
-      awaitingFieldRef.current = 'hw'; // gate input immediately
+      // Find the first missing Phase 1 field and prompt for it
+      const firstMissing = nextFieldPrompt(st, null);
+      awaitingFieldRef.current = firstMissing || null;
       setTimeout(() => {
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Which hardware platform are we targeting?' }]);
-        setChipsField('hw');
+        if (firstMissing) {
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[firstMissing] }]);
+          if (FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
+        } else {
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
+            `All Phase 1 fields are set. Click Build in the sidebar to lock the stack and start the AI scan.`
+          }]);
+        }
       }, 1000);
       return;
     }
 
-    // Build has data — show field chips for the next missing field while LLM assesses
+    // Workflow has started — show field chips for any missing stack field while LLM assesses
     if (!st.isBuilt) {
       const firstMissing = nextFieldPrompt(st, null);
       if (firstMissing) {
@@ -746,7 +758,15 @@ Rules:
       })
       .catch(() => {
         setThinking(false);
-        setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
+        // Don't use buildWelcome() here — it's designed for the pre-build welcome flow
+        // and says "Start with the hardware platform" when hw is empty, which is wrong
+        // for a build that has workflow progress (isBuilt / scan / design / etc.).
+        const st2 = sRef.current;
+        const stack = [st2.ctx?.hw, st2.ctx?.os, st2.ctx?.db, st2.ctx?.app].filter(Boolean).join(' / ');
+        const fallback = stack
+          ? `Here with you on the ${stack} build — ask me anything about this project.`
+          : `Here when you need me — ask me anything or use the sidebar to continue.`;
+        setMessages([{ id: nextId(), role: 'orchestrator', text: fallback }]);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
