@@ -1,9 +1,9 @@
 // Live endoflife.date API client
 // Docs: https://endoflife.date/docs/api/
 
-// Route through our CF Pages Function edge proxy for edge-cached, low-latency responses.
-// Falls back to direct endoflife.date if proxy unreachable.
-const BASE = '/api/eol';
+// Production: route through CF Pages Function edge proxy (/api/eol) for 1h edge cache.
+// Dev: call endoflife.date directly (Pages Functions not served by Vite dev server).
+const BASE = import.meta.env.PROD ? '/api/eol' : 'https://endoflife.date/api';
 
 // Maps internal component display names / ctx values to endoflife.date product slugs
 export const EOL_SLUG_MAP = {
