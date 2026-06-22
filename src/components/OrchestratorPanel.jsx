@@ -663,17 +663,20 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
         }]);
         awaitingNameRef.current = true;
       } else {
-        // Signed in — greet by first name and go straight to hw
+        // Signed in — greet first, then hw question as a separate beat
         const email = authUserRef.current?.email || '';
         const raw = email.split('@')[0].split('.')[0];
         const name = raw.charAt(0).toUpperCase() + raw.slice(1);
         userNameRef.current = name;
         setUserName(name);
         setMessages([{ id: nextId(), role: 'orchestrator', text:
-          `Welcome back, ${name}. Ready to start a new build — which hardware platform are we targeting?`
+          `Welcome back, ${name}. I'm OpsMentor — here to keep your team aligned from platform selection to production cutover.`
         }]);
-        awaitingFieldRef.current = 'hw';
-        setChipsField('hw');
+        awaitingFieldRef.current = 'hw'; // gate input immediately
+        setTimeout(() => {
+          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Which hardware platform are we targeting?' }]);
+          setChipsField('hw');
+        }, 1000);
       }
       return;
     }
@@ -1977,23 +1980,26 @@ Rules:
 
     const currS = sRef.current;
     const firstField = nextFieldPrompt(currS, null);
-    awaitingFieldRef.current = firstField;
-    if (firstField && FIELD_CHIPS[firstField]) setChipsField(firstField);
+    awaitingFieldRef.current = firstField; // gate input immediately
 
     const sc = generateScript(currS);
-    let reply;
+
     if (currS.isBuilt) {
       const step = sc.nextAction || 'All phases complete';
-      reply = name
-        ? `Good to know, ${name}. Build is already in progress — current step: ${step}. Ask me anything or tell me what you need.`
-        : `Build is already in progress — current step: ${step}. Ask me anything or tell me what you need.`;
+      const reply = name
+        ? `Good to know, ${name}. Your build is already in progress — ${step}. Ask me anything or tell me what you need.`
+        : `Build is already in progress — ${step}. Ask me anything.`;
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
     } else {
-      const fieldQ = firstField ? FIELD_QUESTIONS[firstField] : 'All Phase 1 fields are set — say "run scan" to continue.';
-      reply = name
-        ? `Good to know, ${name}. ${fieldQ}`
-        : fieldQ;
+      // Acknowledge name as its own beat, then field question after a pause
+      const ack = name ? `Good to know, ${name}.` : `Alright, let's get started.`;
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: ack }]);
+      setTimeout(() => {
+        const fieldQ = firstField ? FIELD_QUESTIONS[firstField] : 'All Phase 1 fields are set — say "run scan" to continue.';
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fieldQ }]);
+        if (firstField && FIELD_CHIPS[firstField]) setChipsField(firstField);
+      }, 900);
     }
-    setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
   }
 
   // ── Send message ─────────────────────────────────────────────────────────
