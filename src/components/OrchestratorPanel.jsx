@@ -1822,18 +1822,24 @@ Rules:
   }
 
   function handleMic() {
-    // Voice requires a signed-in account — actions are attributed to user + role
-    if (!authUser) {
-      setMessages(m => [...m, {
-        id: nextId(),
-        role: 'orchestrator',
-        text: 'Sign in to use voice input. Voice actions are attributed to your account and RACI role — guest sessions cannot log voice entries.',
-      }]);
-      return;
-    }
-
     unlockAudio();
     if (recording) { stopRecording(); return; }
+
+    // Guests: allow native SpeechRecognition for field input (no attribution needed
+    // for Phase 1 selection). Whisper requires a worker + account; block that path.
+    if (!authUser) {
+      const SRAvailable = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      if (!SRAvailable) {
+        setMessages(m => [...m, {
+          id: nextId(),
+          role: 'orchestrator',
+          text: 'This browser needs a transcription service for voice — sign in to unlock it. Chrome and Edge work without sign-in.',
+        }]);
+        return;
+      }
+      startNativeSpeech();
+      return;
+    }
 
     // Enterprise users: require Voice ID verification before first voice use per session
     if (isEnterpriseUser(authUser) && !voiceSessionActiveRef.current) {
@@ -1864,11 +1870,13 @@ Rules:
       setMessages(m => [...m, {
         id: nextId(),
         role: 'orchestrator',
-        text: `Voice session active — verified as ${authUser.email} · ${roleDesc}. Entries attributed to this role.`,
+        text: `Voice session active — ${authUser.email} · ${roleDesc}. Entries attributed to this role.`,
       }]);
     }
     transcribeFailCountRef.current = 0;
-    startWhisperRecording();
+    // Use native SpeechRecognition in Chrome/Edge (instant, no network).
+    // startNativeSpeech falls back to Whisper automatically if SR unavailable (Firefox, Safari).
+    startNativeSpeech();
   }
 
   function handleVoiceIdEnroll() {
