@@ -655,10 +655,26 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
                        st.promoted || st.requirements?.projectName);
 
     if (!hasData) {
-      // Truly blank — static warm intro + hw chips
-      setMessages([{ id: nextId(), role: 'orchestrator', text: buildWelcome() }]);
-      awaitingFieldRef.current = 'hw';
-      setChipsField('hw');
+      const isGuest = !authUserRef.current;
+      if (isGuest) {
+        // Guest on blank build — greet naturally, offer sign-in, ask name, THEN hw chips
+        setMessages([{ id: nextId(), role: 'orchestrator', text:
+          `Welcome to OpsManifest.\n\nI'm OpsMentor — I'll guide your team through the full provisioning lifecycle, from platform selection to production cutover.\n\nYou're in guest mode right now. Sign in any time (link at the bottom) to save and sync your builds — or let's go ahead as-is either way.\n\nWhat should I call you?`
+        }]);
+        awaitingNameRef.current = true;
+      } else {
+        // Signed in — greet by first name and go straight to hw
+        const email = authUserRef.current?.email || '';
+        const raw = email.split('@')[0].split('.')[0];
+        const name = raw.charAt(0).toUpperCase() + raw.slice(1);
+        userNameRef.current = name;
+        setUserName(name);
+        setMessages([{ id: nextId(), role: 'orchestrator', text:
+          `Welcome back, ${name}. Ready to start a new build — which hardware platform are we targeting?`
+        }]);
+        awaitingFieldRef.current = 'hw';
+        setChipsField('hw');
+      }
       return;
     }
 
@@ -1946,22 +1962,28 @@ Rules:
 
   function handleNameReply(text) {
     awaitingNameRef.current = false;
-    const raw = text.split(/[\s,!.]+/)[0];
-    const name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase().replace(/[^a-z]/g, '');
-    userNameRef.current = name;
+    const raw = text.trim().split(/[\s,!.]+/)[0];
+    const name = raw ? raw.charAt(0).toUpperCase() + raw.slice(1).replace(/[^a-zA-Z]/g, '') : '';
+    userNameRef.current = name || 'there';
     setUserName(name);
 
     const currS = sRef.current;
     const firstField = nextFieldPrompt(currS, null);
     awaitingFieldRef.current = firstField;
+    if (firstField && FIELD_CHIPS[firstField]) setChipsField(firstField);
 
     const sc = generateScript(currS);
-    const alreadyBuilt = currS.isBuilt;
     let reply;
-    if (alreadyBuilt) {
-      reply = `Great to meet you, ${name}! Your build is already in progress.\n\nCurrent step: ${sc.nextAction || 'All phases complete!'}\n\nYou can say things like:\n• "run scan", "inject phase 2", "approve CAB", "sign RTM", "go live"\n• "add task: [task name]" to add to Gantt or RAID\n• "set network firewall: pfsense" to update System Design\n• Ask me anything — I'll guide you!`;
+    if (currS.isBuilt) {
+      const step = sc.nextAction || 'All phases complete';
+      reply = name
+        ? `Good to know, ${name}. Build is already in progress — current step: ${step}. Ask me anything or tell me what you need.`
+        : `Build is already in progress — current step: ${step}. Ask me anything or tell me what you need.`;
     } else {
-      reply = `Great to meet you, ${name}! Let's build your infrastructure profile step by step.\n\n${firstField ? FIELD_QUESTIONS[firstField] : 'All Phase 1 fields are complete — say "run scan" to continue!'}`;
+      const fieldQ = firstField ? FIELD_QUESTIONS[firstField] : 'All Phase 1 fields are set — say "run scan" to continue.';
+      reply = name
+        ? `Good to know, ${name}. ${fieldQ}`
+        : fieldQ;
     }
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
   }
