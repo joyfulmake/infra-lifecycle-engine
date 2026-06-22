@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   base: './',
@@ -17,6 +16,16 @@ export default defineConfig({
           if (id.includes('firebase'))      return 'vendor-firebase';
         },
       },
+    },
+  },
+  test: {
+    environment: 'node',
+    globals: true,
+    include: ['src/__tests__/**/*.test.{js,jsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      include: ['src/lib/**/*.js'],
     },
   },
 })

@@ -1,7 +1,9 @@
 // Live endoflife.date API client
 // Docs: https://endoflife.date/docs/api/
 
-const BASE = 'https://endoflife.date/api';
+// Route through our CF Pages Function edge proxy for edge-cached, low-latency responses.
+// Falls back to direct endoflife.date if proxy unreachable.
+const BASE = '/api/eol';
 
 // Maps internal component display names / ctx values to endoflife.date product slugs
 export const EOL_SLUG_MAP = {

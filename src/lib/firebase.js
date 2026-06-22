@@ -59,6 +59,44 @@ export async function fbSignIn(email, syncPassword) {
   }
 }
 
+// Google OAuth — one tap sign-in, covers all Google Workspace institutions.
+// Returns { email, displayName, photoURL } on success, or null on failure/cancel.
+export async function fbSignInWithGoogle() {
+  if (!FIREBASE_CONFIGURED) return null;
+  const auth = await getAuthInstance();
+  if (!auth) return null;
+  const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const cred = await signInWithPopup(auth, provider);
+    return { email: cred.user.email, displayName: cred.user.displayName, photoURL: cred.user.photoURL };
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return null;
+    console.warn('[Firebase Auth] Google sign-in failed:', e.message);
+    return null;
+  }
+}
+
+// Microsoft OAuth — covers Azure AD / Entra ID institutions and personal Microsoft accounts.
+// Tenant is set to 'common' so both work/school and personal accounts are accepted.
+export async function fbSignInWithMicrosoft() {
+  if (!FIREBASE_CONFIGURED) return null;
+  const auth = await getAuthInstance();
+  if (!auth) return null;
+  const { OAuthProvider, signInWithPopup } = await import('firebase/auth');
+  try {
+    const provider = new OAuthProvider('microsoft.com');
+    provider.setCustomParameters({ prompt: 'select_account', tenant: 'common' });
+    const cred = await signInWithPopup(auth, provider);
+    return { email: cred.user.email, displayName: cred.user.displayName, photoURL: cred.user.photoURL };
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return null;
+    console.warn('[Firebase Auth] Microsoft sign-in failed:', e.message);
+    return null;
+  }
+}
+
 export async function fbSignOut() {
   if (!FIREBASE_CONFIGURED) return;
   const auth = await getAuthInstance();

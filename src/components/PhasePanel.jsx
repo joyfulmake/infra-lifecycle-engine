@@ -4,7 +4,8 @@ import { useStore, DESIGN_SECTIONS, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTI
 import { ALL_INC, FIXES } from '../lib/incidents.js';
 import { ALL_UUM } from '../lib/uumItems.js';
 import { getDefaultDesignValues } from '../lib/designDefaults.js';
-import { exportExcel } from '../lib/exportExcel.js';
+// exportExcel is lazy-loaded on first click to keep xlsx-js-style (~862 kB) out of the initial bundle
+let _exportExcel = null;
 import { runSmartScan } from '../lib/smartScan.js';
 import { matchSuggestKeys, buildContextSuggestions } from '../lib/suggestDb.js';
 import { getEolInfo } from '../lib/eolData.js';
@@ -900,13 +901,17 @@ export default function PhasePanel() {
     s.setActiveTab('closure');
   }
 
-  function handleExport() {
+  async function handleExport() {
     if (!canUseFeature(authUser, 'excel_export')) {
       openAuthModal('export');
       return;
     }
     try {
-      exportExcel({
+      if (!_exportExcel) {
+        const mod = await import('../lib/exportExcel.js');
+        _exportExcel = mod.exportExcel;
+      }
+      _exportExcel({
         ctx: s.ctx, selInc: s.selInc, selUUM: s.selUUM, selFix: s.selFix,
         promoted: s.promoted, cabApproved: s.cabApproved, rtmSigned: s.rtmSigned,
         sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,

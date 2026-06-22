@@ -46,6 +46,9 @@ export default function AgentInsights({ tab }) {
       <div
         className={`flex items-center justify-between rounded-lg border ${borderCls} ${bgCls} px-3 py-2 mb-3 gap-3 cursor-pointer select-none`}
         onClick={() => setExpanded(true)}
+        aria-live="polite"
+        aria-label={`${relevant.length} agent insight${relevant.length !== 1 ? 's' : ''}`}
+        role="status"
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotCls}`} />

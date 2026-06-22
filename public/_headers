@@ -1,8 +1,20 @@
 /*.html
   Cache-Control: no-store, must-revalidate
 
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/icon-192.png
+  Cache-Control: public, max-age=86400
+
+/icon-512.png
+  Cache-Control: public, max-age=86400
+
+/manifest.json
+  Cache-Control: public, max-age=3600
+
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseapp.com https://*.firebaseio.com wss://*.firebaseio.com https://api.anthropic.com https://endoflife.date https://*.workers.dev https://api.razorpay.com http://localhost:8787 https://speech.platform.bing.com wss://speech.platform.bing.com https://*.speech.microsoft.com wss://*.speech.microsoft.com https://www.google.com; img-src 'self' data: https:; media-src 'self' blob:; worker-src 'self'; frame-src https://api.razorpay.com;
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseapp.com https://*.firebaseio.com wss://*.firebaseio.com https://api.anthropic.com https://*.workers.dev https://api.razorpay.com http://localhost:8787 https://speech.platform.bing.com wss://speech.platform.bing.com https://*.speech.microsoft.com wss://*.speech.microsoft.com https://www.google.com; img-src 'self' data: https:; media-src 'self' blob:; worker-src 'self'; frame-src https://api.razorpay.com;
