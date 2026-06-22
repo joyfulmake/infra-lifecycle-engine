@@ -1,6 +1,11 @@
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
-// Inter loaded via Google Fonts link tag in index.html
+// Inter bundled locally — no external network request on startup.
+// fonts.googleapis.com is render-blocking and unreachable from ms-appx-web: context.
+import '@fontsource/inter/400.css'
+import '@fontsource/inter/500.css'
+import '@fontsource/inter/600.css'
+import '@fontsource/inter/700.css'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './lib/AuthContext.jsx'

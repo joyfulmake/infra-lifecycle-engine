@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.0.0.0'
+        default: '2.1.0.0'
 
 jobs:
   build-msix:
@@ -230,9 +230,13 @@ jobs:
 
             # Capabilities
             $w.WriteStartElement("Capabilities", $ns)
-              # Outbound internet - Firebase, Groq, Azure TTS, endoflife.date
+              # Outbound internet (client): Firebase, Groq, Azure TTS, endoflife.date
               $w.WriteStartElement("Capability", $ns)
               $w.WriteAttributeString("Name", "internetClient")
+              $w.WriteEndElement()
+              # Outbound internet (client+server): required for some WebView2 network paths
+              $w.WriteStartElement("Capability", $ns)
+              $w.WriteAttributeString("Name", "internetClientServer")
               $w.WriteEndElement()
               # Microphone - SpeechRecognition API + WebView2 voice input in OpsMentor
               # Without this DeviceCapability Windows refuses mic access even if WebView2 requests it
