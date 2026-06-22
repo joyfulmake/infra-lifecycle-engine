@@ -646,38 +646,42 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     }
   }
 
-  // Opening assessment — LLM for any build with data, static warm welcome only for blank
+  // Opening assessment — LLM for signed-in builds with data; natural greeting for guests and blank
   useEffect(() => {
     if (!open || messages.length !== 0) return;
+    const isGuest = !authUserRef.current;
     const st = sRef.current;
+
+    // Guests always get the natural greeting — no LLM, no hasData check.
+    // Guests can't save builds; any transient state in their session shouldn't
+    // skip the welcome and dump them into an LLM assessment.
+    if (isGuest) {
+      setMessages([{ id: nextId(), role: 'orchestrator', text:
+        `Welcome to OpsManifest.\n\nI'm OpsMentor — I'll guide your team through the full provisioning lifecycle, from platform selection to production cutover.\n\nYou're in guest mode right now. Sign in any time (link at the bottom) to save and sync your builds — or let's go ahead as-is either way.\n\nWhat should I call you?`
+      }]);
+      awaitingNameRef.current = true;
+      return;
+    }
+
     const hasData = !!(st.ctx?.hw || st.isBuilt || st.scanComplete || st.designApplied ||
                        st.phase2Active || st.cabApproved || st.cabDeclined || st.rtmSigned ||
                        st.promoted || st.requirements?.projectName);
 
     if (!hasData) {
-      const isGuest = !authUserRef.current;
-      if (isGuest) {
-        // Guest on blank build — greet naturally, offer sign-in, ask name, THEN hw chips
-        setMessages([{ id: nextId(), role: 'orchestrator', text:
-          `Welcome to OpsManifest.\n\nI'm OpsMentor — I'll guide your team through the full provisioning lifecycle, from platform selection to production cutover.\n\nYou're in guest mode right now. Sign in any time (link at the bottom) to save and sync your builds — or let's go ahead as-is either way.\n\nWhat should I call you?`
-        }]);
-        awaitingNameRef.current = true;
-      } else {
-        // Signed in — greet first, then hw question as a separate beat
-        const email = authUserRef.current?.email || '';
-        const raw = email.split('@')[0].split('.')[0];
-        const name = raw.charAt(0).toUpperCase() + raw.slice(1);
-        userNameRef.current = name;
-        setUserName(name);
-        setMessages([{ id: nextId(), role: 'orchestrator', text:
-          `Welcome back, ${name}. I'm OpsMentor — here to keep your team aligned from platform selection to production cutover.`
-        }]);
-        awaitingFieldRef.current = 'hw'; // gate input immediately
-        setTimeout(() => {
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Which hardware platform are we targeting?' }]);
-          setChipsField('hw');
-        }, 1000);
-      }
+      // Signed in, blank build — greet first, then hw question as a separate beat
+      const email = authUserRef.current?.email || '';
+      const raw = email.split('@')[0].split('.')[0];
+      const name = raw.charAt(0).toUpperCase() + raw.slice(1);
+      userNameRef.current = name;
+      setUserName(name);
+      setMessages([{ id: nextId(), role: 'orchestrator', text:
+        `Welcome back, ${name}. I'm OpsMentor — here to keep your team aligned from platform selection to production cutover.`
+      }]);
+      awaitingFieldRef.current = 'hw'; // gate input immediately
+      setTimeout(() => {
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Which hardware platform are we targeting?' }]);
+        setChipsField('hw');
+      }, 1000);
       return;
     }
 
