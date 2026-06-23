@@ -2,7 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>(function(){try{var t=localStorage.getItem('opsmanifest_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+    <script>
+      // Suppress errors in ms-appx-web: context BEFORE any module loads.
+      // Native WebView2 JS errors on Win 11 26200 crash the renderer if unhandled.
+      // This must run as an inline script, not in a module, to be earliest possible.
+      (function(){
+        try{var t=localStorage.getItem('opsmanifest_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}
+        if(window.location.protocol==='ms-appx-web:'){
+          window.onerror=function(){return true;};
+          window.addEventListener('unhandledrejection',function(e){e.preventDefault();});
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/icon-512.png" sizes="512x512" />

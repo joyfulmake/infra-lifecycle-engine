@@ -10,28 +10,22 @@ import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './lib/AuthContext.jsx'
 
-// Service worker handling — web context only, never MSIX packaged context.
-if ('serviceWorker' in navigator) {
-  if (window.location.href.startsWith('ms-appx-web:')) {
-    // MSIX packaged context: actively unregister any previously registered service workers.
-    // A SW installed by an older MSIX version can survive updates and will crash the
-    // WebView2 renderer on Windows 11 24H2 by intercepting ms-appx-web: scheme fetch events.
-    navigator.serviceWorker.getRegistrations()
-      .then(regs => regs.forEach(r => r.unregister()))
-      .catch(() => {});
-  } else {
-    // Web context — register SW for PWA offline support.
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    });
-  }
+// Error suppression for ms-appx-web: is set in index.html inline script (runs before modules).
+// Repeating here as a belt-and-suspenders in case the module loads on a path that wasn't caught.
+if (window.location.href.startsWith('ms-appx-web:')) {
+  window.onerror = () => true;
+  window.addEventListener('unhandledrejection', (e) => { e.preventDefault(); });
 }
 
-// In the MSIX packaged context: prevent unhandled errors from crashing WebView2.
-// Only suppress in ms-appx-web: — in the browser, let errors surface normally.
-if (window.location.href.startsWith('ms-appx-web:')) {
-  window.addEventListener('unhandledrejection', (e) => { e.preventDefault(); });
-  window.onerror = () => true;
+// Service worker — web context ONLY.
+// CRITICAL: never access navigator.serviceWorker in ms-appx-web: context.
+// Calling ANY serviceWorker API (including getRegistrations) in ms-appx-web: crashes
+// the WebView2 renderer on Windows 11 26200+ at the native level — no JS error is thrown,
+// the process just dies. sw.js is excluded from the MSIX package so no SW can activate.
+if (!window.location.href.startsWith('ms-appx-web:') && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
 
 // Root error boundary — prevents a React render crash from showing a blank screen
