@@ -712,6 +712,22 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       }
     }
 
+    // Extract name from email for all workflow-started builds (not just pre-build)
+    if (!userNameRef.current) {
+      const email = authUserRef.current?.email || '';
+      const raw   = email.split('@')[0].split('.')[0];
+      const n     = raw.charAt(0).toUpperCase() + raw.slice(1);
+      if (n) { userNameRef.current = n; setUserName(n); }
+    }
+    const openingName = userNameRef.current;
+
+    // Greet immediately — don't make the user wait for the LLM before being acknowledged.
+    // The assessment follows after the thinking indicator.
+    const greeting = openingName
+      ? `Good day, ${openingName}! I'm OpsMentor — here to keep your team aligned from platform selection to go-live. Let me pull up where this build stands.`
+      : `Good day! I'm OpsMentor — here to keep your team aligned from platform selection to go-live. Let me review this build.`;
+    setMessages([{ id: nextId(), role: 'orchestrator', text: greeting }]);
+
     // Generate intelligent opening assessment via LLM
     setThinking(true);
     const ctx = buildStateContext(st, authUserRef.current);
@@ -723,10 +739,13 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
 
     const assessmentPrompt = `INITIAL_ASSESSMENT
 
-You have full visibility into this build. Do NOT narrate what the user has already entered or tell them to do obvious next steps they already know about. Your job is to surface what is non-obvious.
+You have full visibility into this build. The user has already been greeted — do NOT introduce yourself or say hello. Get straight to the most important insight.
+
+Do NOT narrate what the user has already entered. Your job is to surface what is non-obvious.
 
 Current build snapshot:
 - Stack: ${stack || 'not yet selected'}
+- User: ${openingName || 'unknown'}
 - Project: ${st.requirements?.projectName || 'unnamed'} | Env: ${st.requirements?.envType || 'not set'}
 - Go-live: ${st.requirements?.goLiveDate || 'not set'} | SLA: ${st.requirements?.sla || 'not set'}
 - Phase: ${ctx.phase}
@@ -736,25 +755,25 @@ Current build snapshot:
 - Tasks stale: ${!!st.tasksStaleReason} | RTM stale: ${st.rtmStale}
 
 Respond with:
-1. The single most important risk or insight you see RIGHT NOW — be specific to the actual stack, dates, and configuration. Reference real component names and real EOL timelines if you know them.
-2. Whether the build is clear to advance to the next workflow state, or if there is a specific blocker. One sentence.
-3. If design sections are empty or sparse and the stack is known, include 2–3 SET_DESIGN_FIELD actions with specific realistic values derived from the stack — do not leave them as placeholders.
-4. If you see a risk worth logging, include an ADD_RAID_ENTRY action for it.
-5. If there is a critical missing task in the Gantt for this stack/incident combination, include an ADD_CUSTOM_TASK action.
+1. The single most important risk or insight for this build RIGHT NOW — specific to the actual stack, dates, and active warnings. Name real components and real EOL timelines where you know them. If there are active warnings, lead with the most critical one.
+2. Whether the build is clear to advance, or if there is a specific blocker. One sentence.
+3. If design sections are empty or sparse and the stack is known, include 2–3 SET_DESIGN_FIELD actions with specific realistic values derived from the stack.
+4. If you see a risk worth logging, include an ADD_RAID_ENTRY action.
+5. If there is a critical missing task for this stack/incident combination, include an ADD_CUSTOM_TASK action.
 
 Rules:
-- Do not ask the user what they entered — you can see it.
-- Do not tell the user to "run the scan" if it is already complete, or "open a tab" if the data is already there.
-- If there are no risks and the build looks clean, say so in one sentence and confirm what the natural next action is.
-- Lead with insight, not process narration.
-- Keep the reply to 2–4 sentences max. Let the actions speak for the rest.`;
+- Do not greet or introduce yourself — the greeting is already shown.
+- Do not tell the user to "run the scan" if it is already complete.
+- If the build looks clean with no warnings, say so in one sentence and confirm the natural next action.
+- Lead with the most important insight or warning, not a process summary.
+- Keep the reply to 2–4 sentences max. Let the actions carry the detail.`;
 
     sendChatMessage(assessmentPrompt, ctx, [])
       .then(result => {
         setThinking(false);
         const { reply, actions = [] } = result;
-        const msgId_ = nextId();
-        setMessages([{ id: msgId_, role: 'orchestrator', text: reply }]);
+        // Append the LLM assessment after the greeting (do not replace it)
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
         const immediate = actions.filter(a => !a.requiresConfirmation);
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
         if (immediate.length > 0) applyActionsWithRefs(immediate);
@@ -764,15 +783,13 @@ Rules:
       })
       .catch(() => {
         setThinking(false);
-        // Don't use buildWelcome() here — it's designed for the pre-build welcome flow
-        // and says "Start with the hardware platform" when hw is empty, which is wrong
-        // for a build that has workflow progress (isBuilt / scan / design / etc.).
+        // Worker unavailable — give a contextual fallback without echoing the stack
         const st2 = sRef.current;
-        const stack = [st2.ctx?.hw, st2.ctx?.os, st2.ctx?.db, st2.ctx?.app].filter(Boolean).join(' / ');
-        const fallback = stack
-          ? `Here with you on the ${stack} build — ask me anything about this project.`
+        const hasStack = !!(st2.ctx?.hw || st2.ctx?.db || st2.ctx?.app);
+        const fallback = hasStack
+          ? `Here with you on this build — ask me anything or use the sidebar to continue.`
           : `Here when you need me — ask me anything or use the sidebar to continue.`;
-        setMessages([{ id: nextId(), role: 'orchestrator', text: fallback }]);
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fallback }]);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -858,23 +875,26 @@ Rules:
       const _hw  = s.ctx?.hw  || '';
       const _app = s.ctx?.app || '';
       const _os  = s.ctx?.os  || '';
-      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
-      const stack = [_hw, _os, _db, _app].filter(Boolean).join(' + ');
-      const intro = stack ? `${stack} — Phase 1 locked${name}.` : `Phase 1 locked${name}.`;
+      const name = userNameRef.current ? ` ${userNameRef.current}` : '';
 
-      const context = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
-        ? `Power + Oracle is a serious combination. The two things CAB will push hardest on are ppc64le certification gaps and fix-pack currency — the scan pins down exactly where you stand on both.`
+      // Characterise the combination — never echo the component names back.
+      // Lead with what this combination MEANS: the specific risk profile,
+      // what CAB will scrutinise, and why the scan matters for THIS stack.
+      const msg = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
+        ? `Well done${name} — Phase 1 is locked. Power architecture with Oracle is a technically demanding combination: the ppc64le certification matrix restricts which fix-pack levels are officially supported, and that's typically the first thing CAB will interrogate. The scan surfaces those gaps before you invest time in the design. Worth running it now.`
         : /websphere/i.test(_app)
-          ? `WebSphere carries specific TLS cipher requirements that tend to surface late. Catching them in the scan now is the right move — they're easier to address here than in a design review.`
+          ? `Phase 1 locked${name ? ',' + name : ''}. The app tier you've chosen brings TLS cipher compliance into scope — CAB boards specifically look for TLS 1.0/1.1 deprecation, and it's the kind of thing that sends a build back for revision if it surfaces late. The scan makes it visible now, before it becomes design debt.`
           : /aix/i.test(_os)
-            ? `AIX's extended support timeline is almost always the first question CAB asks. The scan quantifies exactly where you sit on that — worth knowing before you start the design.`
+            ? `Phase 1 locked${name ? ',' + name : ''}. The OS you've chosen has a support timeline with a hard deadline, and that deadline tends to define the project window more than any other factor — it's almost always CAB's first question. The scan quantifies exactly where you sit, so you're not guessing when the board asks.`
             : /sql.?server|mssql/i.test(_db)
-              ? `SQL Server builds usually carry patch-level and Always On certification gaps worth surfacing now, before they become design constraints.`
+              ? `Phase 1 locked${name ? ',' + name : ''}. The database tier you've chosen typically surfaces two things in migrations: patch-level currency and Always On certification gaps. Both are easier to address before the design baseline is set. The scan checks for both — worth running now.`
               : /postgres|pg\b/i.test(_db)
-                ? `Good foundation. The scan checks for any version-specific CVEs and extension compatibility issues that could surface in CAB.`
-                : `The scan surfaces EOL flags and CVE exposure for this stack before you invest time in the design — cleaner to know now.`;
+                ? `Phase 1 locked${name ? ',' + name : ''}. Good selection — PostgreSQL is a clean migration target. The scan validates version-specific CVE exposure and extension compatibility, which occasionally surprises teams late in the process. Quick to run, and anything it finds is far easier to address here than after the design commits.`
+                : /oracle/i.test(_db)
+                  ? `Phase 1 locked${name ? ',' + name : ''}. The database platform you've chosen has specific patch-currency and certification requirements that vary by release and hardware combination — and they define what's actually supportable at go-live. The scan validates those against the current matrix before the design locks in.`
+                  : `Phase 1 locked${name ? ',' + name : ''}. This is the right moment to run the scan — any EOL exposure or CVE gaps in the stack are far easier to address here than after the design baseline is set. Everything the scan surfaces shapes both the design and the RTM.`;
 
-      orc.push(`${intro} ${context} Ready to run it?`);
+      orc.push(msg);
     }
     if (!prev.scanComplete && s.scanComplete) {
       const incCount = (s.selInc || []).length;
