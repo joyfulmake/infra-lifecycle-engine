@@ -964,7 +964,25 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
             ],
           };
         }
-        // Fall through to EOL scan or Groq for other fix intents without active alerts
+        // User said "fix the web issue" but there's no coherence alert with an auto-fix.
+        // Respond contextually instead of silently falling through to a generic handler.
+        if (/\bweb\b/i.test(m)) {
+          return {
+            reply: s.scanComplete
+              ? `No active alert with an auto-fix for the web section right now. If you saw a warning in the AgentInsights panel, it may be a TLS/cipher gap — say "fix TLS" and I'll apply NIST-recommended values directly. Otherwise, opening System Design → Web section for you.`
+              : `The web section in System Design covers SSL/TLS, WAF, rate limits, and reverse proxy config — each field becomes a traceable RTM row. Run the scan first; it flags which web-layer items need attention.`,
+            actions: s.scanComplete ? [{ type: 'NAVIGATE_TAB', params: { tab: 'design' }, description: 'Open System Design', requiresConfirmation: false }] : [],
+          };
+        }
+        // Other fix intent (network, storage, etc.) with no active auto-fixable alert
+        if (isFixIntent) {
+          const allAlerts = (s.coherenceAlerts || []);
+          if (allAlerts.length > 0) {
+            const lines = allAlerts.map(a => `• ${a.message.slice(0, 80)}`).join('\n');
+            return { reply: `These are the current alerts — none have an auto-fix, but I can help address them:\n\n${lines}\n\nTell me which one to work on and I'll guide you through it.` };
+          }
+          return { reply: `No active warnings right now — the build looks clean. If you see something flagged in AgentInsights, describe it and I'll help resolve it.` };
+        }
       } else {
         // Narrow to the section the user mentioned, or take all if no specific mention
         const mentionedSection =
@@ -1157,12 +1175,28 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
 
   // ── Encouragement / open-ended ─────────────────────────────────────────────
   if (/\b(thank|thanks|great|good|perfect|awesome)\b/.test(m)) {
-    return { reply: 'You\'re welcome! Let me know whenever you need guidance on the next step.' };
+    // Context-aware acknowledgment — no generic "next step" language
+    if (s.promoted) return { reply: 'System is live and closure is underway. Good work getting here.' };
+    if (s.rtmSigned) return { reply: 'RTM is signed — change window is the last gate.' };
+    if (s.cabApproved) return { reply: 'Good progress. RTM is the final technical gate before cutover.' };
+    if (s.phase2Active) return { reply: 'Making solid progress. Gantt and CAB package are next in line.' };
+    if (s.designApplied) return { reply: 'Design is locked. Phase 2 is ready to inject from the sidebar whenever you are.' };
+    if (s.scanComplete) return { reply: 'Scan is done — System Design is where the findings become traceable requirements.' };
+    if (s.isBuilt) return { reply: 'Stack locked. Scan is the next move.' };
+    return { reply: 'Glad to help — what would you like to work on?' };
   }
 
   if (/\b(hi|hello|hey|good morning|good afternoon)\b/.test(m)) {
+    // Greet contextually rather than listing a generic "next step"
+    if (s.promoted) return { reply: 'Hey — system is live. Anything specific you want to check?' };
+    if (s.rtmSigned) return { reply: 'Hey — RTM is signed. Change window is the last gate before go-live.' };
+    if (s.cabApproved) return { reply: 'Hey — CAB approved, RTM is open for sign-off.' };
+    if (s.phase2Active) return { reply: 'Hey — Phase 2 is live. Gantt has your full task plan when you\'re ready.' };
+    if (s.designApplied) return { reply: 'Hey — design is locked. Ready to inject Phase 2?' };
+    if (s.scanComplete) return { reply: 'Hey — scan is done. System Design is next.' };
+    if (s.isBuilt) return { reply: 'Hey — stack is locked. Run the scan to surface any EOL or CVE gaps.' };
     const next = nextPhase1Prompt(s);
-    return { reply: `Hello! I'm ready to help. ${next ? 'Where are we?\n\n' + next : generateScript(s).nextAction ? 'Next: ' + generateScript(s).nextAction : 'Your build is complete!'}` };
+    return { reply: next ? `Hey — ${next}` : 'Hey — what\'s on your mind?' };
   }
 
   // ── Share / can I / custom questions ──────────────────────────────────────

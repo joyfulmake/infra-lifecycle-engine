@@ -270,8 +270,23 @@ export default function SystemDesignTab() {
   const isReadOnly = s.phase2Active && !editOverride;
   const userRoles = getUserRolesForBuild(authUser, s.roleAssignments);
 
-  const totalFields = DESIGN_SECTIONS.reduce((n, sec) => n + sec.fields.filter(f => f !== 'notes').length, 0);
-  const filledFields = DESIGN_SECTIONS.reduce((n, sec) =>
+  // Web section is only relevant when the build includes a web-tier application.
+  // For pure DB migrations, OS migrations, or backend-only stacks, hide it to
+  // avoid confusion — web config fields become RTM rows and should only appear
+  // when there is genuinely a web tier to configure.
+  function isWebSectionRelevant() {
+    const app = (s.ctx?.app || '').toLowerCase();
+    if (/nginx|apache|httpd|iis|tomcat|jboss|weblogic|websphere|node\.?js|express|spring|lighttpd|caddy|haproxy|web server|django|flask|rails|sinatra/i.test(app)) return true;
+    // Show if user already filled something in the web section
+    const webData = s.sysDesignData?.web || {};
+    return Object.values(webData).some(v => v && String(v).trim());
+  }
+  const webRelevant = isWebSectionRelevant();
+
+  const visibleSections = DESIGN_SECTIONS.filter(sec => sec.key !== 'web' || webRelevant);
+
+  const totalFields = visibleSections.reduce((n, sec) => n + sec.fields.filter(f => f !== 'notes').length, 0);
+  const filledFields = visibleSections.reduce((n, sec) =>
     n + sec.fields.filter(f => f !== 'notes' && s.sysDesignData[sec.key]?.[f]?.trim()).length, 0);
   const overallPct = Math.round((filledFields / totalFields) * 100);
 
@@ -426,7 +441,7 @@ export default function SystemDesignTab() {
       )}
 
       {/* Sections */}
-      {DESIGN_SECTIONS.map(section => {
+      {visibleSections.map(section => {
         const roleOwnsSection = canEditDesignSection(userRoles, section.key);
         const sectionReadOnly = (isReadOnly && !techMode) && !roleOwnsSection;
         return (

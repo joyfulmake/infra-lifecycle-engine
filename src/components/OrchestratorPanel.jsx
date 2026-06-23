@@ -854,59 +854,84 @@ Rules:
     if (!prev.isBuilt && s.isBuilt) {
       awaitingFieldRef.current = null;
       setChipsField(null);
-      const _db = s.ctx?.db || '';
-      const _hw = s.ctx?.hw || '';
+      const _db  = s.ctx?.db  || '';
+      const _hw  = s.ctx?.hw  || '';
       const _app = s.ctx?.app || '';
-      const _os = s.ctx?.os || '';
-      const scanHint = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
-        ? `Stack locked. Good moment for the scan — ppc64le Oracle cert gaps and fix-pack currency are the two most common CAB blockers for Power migrations. Want to run it?`
+      const _os  = s.ctx?.os  || '';
+      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
+      const stack = [_hw, _os, _db, _app].filter(Boolean).join(' + ');
+      const intro = stack ? `${stack} — Phase 1 locked${name}.` : `Phase 1 locked${name}.`;
+
+      const context = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
+        ? `Power + Oracle is a serious combination. The two things CAB will push hardest on are ppc64le certification gaps and fix-pack currency — the scan pins down exactly where you stand on both.`
         : /websphere/i.test(_app)
-          ? `Stack locked. Run the scan now — WebSphere TLS cipher gaps surface here, before they become a design problem.`
+          ? `WebSphere carries specific TLS cipher requirements that tend to surface late. Catching them in the scan now is the right move — they're easier to address here than in a design review.`
           : /aix/i.test(_os)
-            ? `Stack locked. The scan will quantify exactly where AIX sits on the EOL timeline — that's the first thing CAB will ask about.`
-            : `Stack locked. Run the AI Smart Scan — EOL flags and CVE exposure surface before you touch the design.`;
-      orc.push(scanHint);
+            ? `AIX's extended support timeline is almost always the first question CAB asks. The scan quantifies exactly where you sit on that — worth knowing before you start the design.`
+            : /sql.?server|mssql/i.test(_db)
+              ? `SQL Server builds usually carry patch-level and Always On certification gaps worth surfacing now, before they become design constraints.`
+              : /postgres|pg\b/i.test(_db)
+                ? `Good foundation. The scan checks for any version-specific CVEs and extension compatibility issues that could surface in CAB.`
+                : `The scan surfaces EOL flags and CVE exposure for this stack before you invest time in the design — cleaner to know now.`;
+
+      orc.push(`${intro} ${context} Ready to run it?`);
     }
     if (!prev.scanComplete && s.scanComplete) {
-      const incCount  = (s.selInc || []).length;
-      const uumCount  = (s.selUUM || []).length;
-      const findings  = (s.scanResults?.findings || []);
-      const critical  = findings.filter(f => f.sev === 'CRITICAL');
-      const riskLvl   = s.scanResults?.riskLevel || 'UNKNOWN';
-      const summaryLines = [
+      const incCount = (s.selInc || []).length;
+      const uumCount = (s.selUUM || []).length;
+      const findings = (s.scanResults?.findings || []);
+      const critical = findings.filter(f => f.sev === 'CRITICAL');
+      const riskLvl  = s.scanResults?.riskLevel || 'UNKNOWN';
+      const name     = userNameRef.current ? `, ${userNameRef.current}` : '';
+
+      log.push([
         `Scan — Risk: ${riskLvl} · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`,
         critical.length > 0 ? `CRITICAL: ${critical.map(f => f.component).join(', ')}` : null,
-        `${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM items pre-selected`,
-      ].filter(Boolean);
-      log.push(summaryLines.join(' · '));
-      const crit = critical.length > 0 ? `${critical.length} CRITICAL finding${critical.length !== 1 ? 's' : ''} — ` : '';
-      orc.push(`Scan done — ${crit}${incCount} incidents and ${uumCount} UUM items captured. System Design is next. Each section you fill becomes an RTM row — gaps become FAIL at sign-off.`);
+        `${incCount} incident${incCount !== 1 ? 's' : ''}, ${uumCount} UUM items`,
+      ].filter(Boolean).join(' · '));
+
+      const critNote = critical.length > 0
+        ? `${critical.length} critical finding${critical.length !== 1 ? 's' : ''} need attention before the design — `
+        : '';
+      const scopeNote = incCount + uumCount >= 10
+        ? `That's real scope — `
+        : incCount + uumCount >= 5
+          ? `Good coverage — `
+          : incCount + uumCount === 0
+            ? `Lean scope — worth checking the selections before moving on. `
+            : '';
+      orc.push(`Scan done${name}. ${critNote}${scopeNote}${incCount} incident${incCount !== 1 ? 's' : ''} and ${uumCount} UUM operation${uumCount !== 1 ? 's' : ''} confirmed. Every item you keep here becomes a traceable row in the RTM — System Design is ready when you are.`);
     }
     if (!prev.designApplied && s.designApplied) {
       awaitingFieldRef.current = null;
-      orc.push(`Design is now the locked baseline. Ready for Phase 2? It maps your incident codes and UUM items to real Gantt tasks.`);
+      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
+      orc.push(`Design locked${name} — that's now the RTM baseline. Every field you filled is a traceable requirement that sign-off will verify before cutover. Phase 2 maps your incident scope into real Gantt tasks — inject it from the sidebar when ready.`);
     }
     if (!prev.phase2Active && s.phase2Active) {
       awaitingFieldRef.current = null;
-      orc.push(`Phase 2 is live — worth checking the Gantt before going to CAB. Tasks flagged CP are on the critical path; a slip on any of them shifts the go-live date. Anything look off?`);
+      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
+      orc.push(`Phase 2 is live${name}. Solid progress — the Gantt has your full task plan. Check the tasks flagged CP first: any slip on the critical path shifts your go-live date. Once the schedule looks right, CAB submission is ready from the sidebar.`);
     }
     if (!prev.cabApproved && s.cabApproved) {
-      orc.push(`CAB approved. RTM is the last technical gate — every row needs a disposition. One unresolved FAIL or BLOCKED stops cutover. Want to go straight there?`);
+      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
+      orc.push(`CAB approved${name} — well done. RTM is the final technical gate. Every row needs a clear disposition; one unresolved FAIL or BLOCKED is a hard stop before cutover. Worth going straight there now.`);
     }
     if (!prev.cabDeclined && s.cabDeclined) {
-      orc.push(`CAB came back declined. Boards most often push back on RAID completeness, schedule vs freeze windows, or design-to-RTM traceability. Unlock the tabs, close those gaps, then resubmit. How would you like to proceed?`);
+      orc.push(`CAB came back declined. Boards most often push back on RAID completeness, schedule vs freeze windows, or design-to-RTM traceability. Unlock the tabs, close those gaps, then resubmit. Where would you like to start?`);
     }
     if (!prev.rtmSigned && s.rtmSigned) {
-      orc.push(`RTM signed — every pre-cutover gate is clear. The change window is the last thing between here and live. Any last concerns worth capturing before initiating?`);
+      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
+      orc.push(`RTM signed${name} — every pre-cutover gate is cleared. The change window is the last thing between here and live. Any last concerns worth capturing in RAID before you initiate?`);
     }
     if (!prev.promoted && s.promoted) {
-      orc.push(`System is live. First 48 hours are the highest-risk window — watch for connection pool exhaustion, job scheduler drift, and CMDB sync gaps. Closure tab tracks every sign-off.`);
+      const name = userNameRef.current ? `, ${userNameRef.current}` : '';
+      orc.push(`You're live${name}. The first 48 hours carry the highest risk — watch for connection pool exhaustion, job scheduler drift, and CMDB sync gaps. Closure tab handles the remaining sign-offs.`);
     }
     if (!prev.rtmStale && s.rtmStale) {
-      orc.push(`Scope shifted after the RTM was signed — it's drifted out of sync with the current plan. Worth a re-check before cutover. How would you like to proceed?`);
+      orc.push(`Scope shifted after the RTM was signed — it's now out of sync with the current plan. Worth a re-check before initiating cutover.`);
     }
     if (!prev.tasksStaleReason && s.tasksStaleReason) {
-      orc.push(`Gantt is flagged stale — ${s.tasksStaleReason}. The schedule may not reflect the current scope. How would you like to handle this?`);
+      orc.push(`Gantt is flagged stale — ${s.tasksStaleReason}. The schedule may not reflect the current scope. Regenerate it from the Gantt tab or let me know how you'd like to handle it.`);
     }
 
     const activeVulns = (s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length;
