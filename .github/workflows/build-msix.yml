@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.3.0.0'
+        default: '2.4.0.0'
 
 jobs:
   build-msix:
@@ -127,12 +127,18 @@ jobs:
           # unnecessary and harmful on these specific OS builds.
           $htmlPath = "msix\index.html"
           $html = Get-Content $htmlPath -Raw -Encoding UTF8
-          $before = ([regex]::Matches($html, '\scrossorigin')).Count
-          $html = $html -replace ' crossorigin="[^"]*"', ''
-          $html = $html -replace ' crossorigin', ''
-          $after = ([regex]::Matches($html, '\scrossorigin')).Count
+          $before = ([regex]::Matches($html, '\bcrossorigin\b')).Count
+          # Pass 1: remove crossorigin="value" or crossorigin='' (any whitespace prefix, any value)
+          $html = [regex]::Replace($html, '\s+crossorigin(?:="[^"]*"|=''[^'']*'')?(?=[\s/>])', '')
+          # Pass 2: remove bare `crossorigin` boolean attribute (no value, any leading whitespace)
+          $html = [regex]::Replace($html, '\s+crossorigin\b', '')
+          $after = ([regex]::Matches($html, '\bcrossorigin\b')).Count
           Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
-          Write-Host "Stripped $before crossorigin attributes from index.html (remaining: $after)"
+          Write-Host "Stripped $before crossorigin occurrences (remaining: $after)"
+          if ($after -gt 0) {
+            Write-Error "FATAL: crossorigin attributes remain in index.html after stripping — Vite output format may have changed"
+            exit 1
+          }
 
       - name: Write AppxManifest.xml
         shell: powershell
@@ -258,11 +264,7 @@ jobs:
               $w.WriteStartElement("Capability", $ns)
               $w.WriteAttributeString("Name", "internetClientServer")
               $w.WriteEndElement()
-              # Microphone - SpeechRecognition API + WebView2 voice input in OpsMentor
-              # Without this DeviceCapability Windows refuses mic access even if WebView2 requests it
-              $w.WriteStartElement("DeviceCapability", $ns)
-              $w.WriteAttributeString("Name", "microphone")
-              $w.WriteEndElement()
+              # Note: microphone DeviceCapability removed — voice input has been removed from the app
             $w.WriteEndElement()
 
           $w.WriteEndElement() # Package

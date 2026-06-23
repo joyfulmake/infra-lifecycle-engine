@@ -2,7 +2,7 @@
 // Calls the worker /orchestrator-chat route (Groq-powered NLP).
 // Falls back to rich rule-based mentor guidance when Groq is unavailable.
 
-import { CARTESIA_WORKER_URL } from './cartesia.js';
+import { GROQ_WORKER_URL as CARTESIA_WORKER_URL } from './groqConfig.js';
 import { generateScript } from './orchestratorScripts.js';
 import { computeAllRisks, riskScore, riskLabel } from './riskEngine.js';
 import { checkCompatibility, checkCompatibilityForText } from './compatibilityRules.js';

@@ -2,27 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
-import { speakScript, CARTESIA_CONFIGURED, CARTESIA_WORKER_URL, VOICE_IDS } from '../lib/cartesia.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
 import { sendChatMessage, ruleBasedResponse, parseRelativeDate, parseCompoundDateRange } from '../lib/orchestratorChat.js';
 import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
-
-// ── Voice helpers — content-aware emotion and speed for Cartesia TTS ─────────
-
-function pickEmotion(text) {
-  const t = (text || '').toLowerCase();
-  if (/critical|blocked|declined|urgent|failed|error|eol|expired|stale|risk|warning|cannot|can't/.test(t))
-    return ['positivity:none', 'anger:low'];
-  if (/approved|signed|complete|live|done|great|perfect|success|excellent|locked/.test(t))
-    return ['positivity:high'];
-  if (/\?|what|which|how|when|why|should|could|would|help|explain|tell me|walk me/.test(t))
-    return ['positivity:medium', 'curiosity:high'];
-  return ['positivity:medium'];
-}
-
-function pickSpeed(text) {
-  return (text || '').length > 220 ? 'slow' : 'normal';
-}
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
@@ -208,20 +190,11 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const [messages,    setMessages]    = useState([]);
   const [input,       setInput]       = useState('');
   const [thinking,    setThinking]    = useState(false);
-  const [playing,     setPlaying]     = useState(false);
-  const [lineIdx,     setLineIdx]     = useState(0);
-  const [recording,   setRecording]   = useState(false);
-  const [recStatus,   setRecStatus]   = useState('');
   const [userName,    setUserName]    = useState('');
   const [workerOk,    setWorkerOk]    = useState(null); // null=unknown, true=ok, false=blocked
-  const [ttsVoice,    setTtsVoice]    = useState(null); // 'cartesia'|'elevenlabs'|'none'|null
   const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
   const [fullscreen,  setFullscreen]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(initialCollapsed);
-  // Voice ID gate — enterprise users (local-only, never stored in cloud)
-  const [voiceIdPanel, setVoiceIdPanel] = useState(false);
-  const [voiceIdStep,  setVoiceIdStep]  = useState('check'); // 'check'|'enrolling'|'verifying'|'done'
-  const [voiceIdPhrase, setVoiceIdPhrase] = useState('');
 
   // Notify parent (App.jsx) when collapsed state changes so container can resize
   const onCollapsedChangeRef = useRef(onCollapsedChange);
@@ -235,37 +208,17 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const pendingConfirmRef = useRef(null);
   // Tracks compat rule IDs confirmed this session — prevents re-prompting the same risk
   const acknowledgedCompatIds = useRef(new Set());
-  // Speech recognition — browser-native SpeechRecognition first (no network),
-  // MediaRecorder + Whisper as secondary (requires worker proxy)
-  const speechRecRef     = useRef(null);   // native SpeechRecognition instance
-  const mediaStreamRef   = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef   = useRef([]);
-  const silenceTimerRef  = useRef(null);
-  const maxRecTimerRef      = useRef(null);
-  const audioCtxRef         = useRef(null); // Whisper MediaRecorder analysis
-  const hasSpeechRef        = useRef(false);
-  const audioUnlockedRef    = useRef(false);
-  const noSpeechTimerRef    = useRef(null); // escape to Whisper if SpeechRecognition produces nothing
-  const lastVoiceTextRef    = useRef('');   // dedup: ignore repeated transcripts within 3s
-  const userEditedInputRef  = useRef(false); // true when user typed manually during recording
-  const lastVoiceTimeRef    = useRef(0);
-  const lastSpokenExcerptRef = useRef('');  // dedup: don't speak same TTS text within 8s
-  const lastSpokenExcerpTimeRef = useRef(0);
 
-  // Always-current refs to avoid stale closures in mic/timers
+  // Always-current refs to avoid stale closures in timers
   const userNameRef       = useRef('');
   const awaitingNameRef   = useRef(false); // name-asking removed — no gate on commands
   const awaitingFieldRef  = useRef(null); // 'hw'|'os'|'db'|'app'|'projectName'|'envType'|'goLiveDate'|null
   const pendingTaskRef    = useRef(null); // { title } waiting for gantt/raid choice
-  const recordingRef      = useRef(false);
   const sRef                  = useRef(s);
   const authUserRef           = useRef(authUser);
   const messagesRef           = useRef([]);
-  const transcribeFailCountRef = useRef(0);
   useEffect(() => { sRef.current = s; });
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
-  useEffect(() => { recordingRef.current = recording; }, [recording]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
 
@@ -283,181 +236,8 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
 
   function nextId() { return ++msgId.current; }
 
-  // ── Cartesia TTS queue — human voice for all OpsMentor replies ──────────
-  // Uses Cartesia Sonic-2 (warm guide voice). Falls back to Web Speech if
-  // Cartesia is unavailable or the fetch fails.
-
-  const cartesiaQueueRef      = useRef([]);
-  const cartesiaPlayingRef    = useRef(false);
-  const sharedAudioCtxRef     = useRef(null);  // shared AudioContext — avoids CSP blob: issues
-  const currentAudioSourceRef = useRef(null);  // currently playing AudioBufferSourceNode
-  const welcomeSpokenRef      = useRef(false);
-
-  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-
-  // Must be called synchronously in a click/key handler (before any await).
-  // Creates and resumes a shared AudioContext so all subsequent decodeAudioData/play
-  // calls work without autoplay or CSP blob: restrictions.
-  // Never runs in ms-appx-web: context — AudioContext in WebView2 ms-appx-web: scheme
-  // can crash the renderer on certain Windows 11 builds (26100.3194, 26200+).
-  function unlockAudio() {
-    if (window.location.href.startsWith('ms-appx-web:')) return false;
-    const wasLocked = !audioUnlockedRef.current;
-    if (wasLocked) {
-      audioUnlockedRef.current = true;
-      try {
-        // Create shared AudioContext in the gesture context so it starts in 'running' state
-        const ActxClass = window.AudioContext || window.webkitAudioContext;
-        if (ActxClass) {
-          const ctx = new ActxClass();
-          sharedAudioCtxRef.current = ctx;
-          // Resume in case browser created it suspended
-          if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-          // Play one-sample silent buffer to guarantee unlock
-          const buf = ctx.createBuffer(1, 1, 22050);
-          const src = ctx.createBufferSource();
-          src.buffer = buf;
-          src.connect(ctx.destination);
-          src.start(0);
-        }
-      } catch {}
-    }
-    if (wasLocked && !welcomeSpokenRef.current) {
-      welcomeSpokenRef.current = true;
-      // Speak the last orchestrator message already in the chat (if any).
-      // Don't use buildVoicePrompt — it's state-driven and can say "Start with the
-      // hardware platform" even when the chat is showing the welcome/name-asking flow.
-      const lastOrc = [...(messagesRef.current || [])]
-        .reverse()
-        .find(m => m.role === 'orchestrator');
-      if (lastOrc?.text) speakQueued(lastOrc.text);
-    }
-  }
-
-  // Extract the key question or next-action sentence to speak aloud.
-  // Skips pure confirmation echoes — user can read those, hearing them is redundant.
-  function voiceExcerpt(text) {
-    if (!text) return '';
-    const clean = text
-      .replace(/[•★✓✗→←↑↓✦⚠️💡🎯]\s*/g, '')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/\n+/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      // Strip parenthetical examples "(e.g. ...)" — natural in chat, robotic when spoken
-      .replace(/\s*\([^)]{4,}\)/g, '')
-      .trim();
-    // Short messages (single action/question): speak entirely
-    if (clean.length <= 100) return clean;
-    const sentences = clean
-      .split(/(?<=[.!?])\s+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 6);
-    if (!sentences.length) return clean.slice(0, 80);
-    // 1st priority: the question — this is the call to action
-    const q = sentences.find(s => s.includes('?'));
-    if (q) return q.slice(0, 90);
-    // 2nd priority: first substantive sentence only — no walls of text spoken aloud
-    const first = sentences[0] || clean;
-    return first.replace(/^(next:|next step:|note:|important:)\s*/i, '').trim().slice(0, 80);
-  }
-
-  function cleanText(text) {
-    return (text || '')
-      .replace(/[•★✓✗→←↑↓]\s*/g, '')
-      .replace(/\n+/g, '. ')
-      .replace(/\d+\.\s/g, '')
-      .trim()
-      .slice(0, 600);
-  }
-
-  function stopCartesia() {
-    if (currentAudioSourceRef.current) {
-      try { currentAudioSourceRef.current.stop(); } catch {}
-      currentAudioSourceRef.current = null;
-    }
-    cartesiaQueueRef.current = [];
-    cartesiaPlayingRef.current = false;
-  }
-
-  async function runCartesiaQueue() {
-    if (cartesiaQueueRef.current.length === 0) {
-      cartesiaPlayingRef.current = false;
-      return;
-    }
-    // Only speak after the user has unlocked audio with a gesture.
-    if (!audioUnlockedRef.current) {
-      cartesiaQueueRef.current = [];
-      cartesiaPlayingRef.current = false;
-      return;
-    }
-    cartesiaPlayingRef.current = true;
-    const text = cartesiaQueueRef.current.shift();
-
-    // Use Web Audio API (AudioContext.decodeAudioData) — avoids CSP blob: restrictions
-    // and autoplay policy issues. AudioContext unlocked via unlockAudio() on first gesture.
-    if (CARTESIA_CONFIGURED) {
-      const ttsBody = JSON.stringify({
-        text,
-        voiceId: VOICE_IDS.learner,
-        speed: pickSpeed(text),
-        emotion: pickEmotion(text),
-      });
-      for (const ttsUrl of ['/api/cartesia-tts', `${CARTESIA_WORKER_URL}/cartesia-tts`]) {
-        try {
-          const res = await fetch(ttsUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: ttsBody,
-            signal: AbortSignal.timeout(12000),
-          });
-          if (!res.ok) continue;
-          const arrayBuf = await res.arrayBuffer();
-          // Get or recreate shared AudioContext
-          let ctx = sharedAudioCtxRef.current;
-          if (!ctx || ctx.state === 'closed') {
-            const ActxClass = window.AudioContext || window.webkitAudioContext;
-            if (!ActxClass) break;
-            ctx = new ActxClass();
-            sharedAudioCtxRef.current = ctx;
-          }
-          if (ctx.state === 'suspended') await ctx.resume();
-          const decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
-          const source = ctx.createBufferSource();
-          source.buffer = decoded;
-          source.connect(ctx.destination);
-          currentAudioSourceRef.current = source;
-          // Pause SpeechRecognition during TTS to prevent acoustic feedback loop
-          if (speechRecRef.current && recordingRef.current) {
-            try { speechRecRef.current.stop(); } catch {} // onend restarts it after TTS
-          }
-          await new Promise((resolve) => { source.onended = resolve; source.start(0); });
-          currentAudioSourceRef.current = null;
-          // TTS finished — restart SR if it was paused for this clip and recording is still active
-          if (recordingRef.current && speechRecRef.current) {
-            try { speechRecRef.current.start(); } catch {}
-          }
-          break; // success — move to next queue item
-        } catch { /* network/decode error — try next URL */ }
-      }
-    }
-
-    runCartesiaQueue();
-  }
-
-  function speakQueued(text) {
-    const excerpt = voiceExcerpt(text);
-    if (!excerpt) return;
-    // Never speak identical text twice within 8 s — prevents TTS loops from repeated messages
-    const now = Date.now();
-    if (excerpt === lastSpokenExcerptRef.current && now - lastSpokenExcerpTimeRef.current < 8000) return;
-    lastSpokenExcerptRef.current = excerpt;
-    lastSpokenExcerpTimeRef.current = now;
-    cartesiaQueueRef.current.push(excerpt);
-    if (!cartesiaPlayingRef.current) runCartesiaQueue();
-  }
-
   // Chat message — observational/agent-style, not interrogating.
-  // Accepts optional state snapshot (for unlockAudio / sRef.current calls).
+  // Accepts optional state snapshot.
   function buildWelcome(state) {
     const st = state || s;
     const { hw, os, db, app } = st.ctx || {};
@@ -517,45 +297,6 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       return `SLA tier sets incident response targets and shapes CAB criteria. High-SLA builds get more RTM scrutiny — the board will verify every row matches the declared SLA.`;
 
     return `All fields are set${proj ? ` for "${proj}"` : ''}. Click Build in the sidebar to lock the stack and start the AI scan workflow.`;
-  }
-
-  // Voice prompt — natural spoken sentences, no parroting of visible state.
-  function buildVoicePrompt(state) {
-    const st = state || s;
-    const { hw, os, db, app } = st.ctx || {};
-    const r = st.requirements || {};
-    const proj = r.projectName;
-
-    if (st.promoted)
-      return `Hypercare window is open${proj ? ` for ${proj}` : ''}. Watch for early post-cutover surprises and work through the closure checklist.`;
-    if (st.rtmSigned && st.cabApproved)
-      return `Every gate is cleared. Confirm the bridge team is assembled and initiate cutover when the change window opens.`;
-    if (st.rtmSigned)
-      return `RTM signed. Review the RAID log and Gantt before submitting to CAB — those are what the board focuses on.`;
-    if (st.cabApproved)
-      return `CAB approved. Open RTM and verify every row — one unresolved FAIL blocks cutover.`;
-    if (st.cabDeclined)
-      return `CAB declined. Check the RAID log, Gantt schedule, and design-to-RTM traceability — those are the three most common decline reasons.`;
-    if (st.phase2Active)
-      return `Phase 2 is active. Open the Gantt and check the critical path before submitting to CAB.`;
-    if (st.designApplied)
-      return `Design locked. Inject Phase 2 from the sidebar to bring in incident and change tasks.`;
-    if (st.scanComplete)
-      return `Scan complete. Open System Design and work through all eight sections carefully.`;
-    if (st.isBuilt)
-      return `Run the AI Smart Scan now — it flags EOL exposure and CVE gaps before you touch the design.`;
-
-    if (!hw) return `Start with the hardware platform. It anchors every compatibility check downstream.`;
-    if (!os) return /aix/i.test(hw) ? `AIX selected — the OS version determines your extended support window.` : `Now pick the operating system — it anchors your patch cycle and EOL timeline.`;
-    if (!db) return `OS set. Choose the database engine — it determines your maintenance window and migration complexity.`;
-    if (!app) return `Database set. Select the application or middleware layer.`;
-    if (!r.projectName) return `Stack complete. Give this build a name the CAB board will recognise.`;
-    if (!r.envType)     return `Project named. What environment are we targeting?`;
-    if (!r.projectStartDate) return `Environment set. When does the project start?`;
-    if (!r.goLiveDate)  return `Start date set. Add the go-live target — the Gantt will immediately show whether the window is achievable.`;
-    if (!r.sla)         return `Almost there. Select the SLA tier.`;
-
-    return proj ? `All set for ${proj}. Click Build in the sidebar.` : `All fields are ready. Click Build in the sidebar.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
@@ -662,8 +403,6 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const st = sRef.current;
 
     // Guests always get the natural greeting — no LLM, no hasData check.
-    // Guests can't save builds; any transient state in their session shouldn't
-    // skip the welcome and dump them into an LLM assessment.
     if (isGuest) {
       setMessages([{ id: nextId(), role: 'orchestrator', text:
         `Welcome to OpsManifest.\n\nI'm OpsMentor — I'll guide your team through the full provisioning lifecycle, from platform selection to production cutover.\n\nYou're in guest mode right now. Sign in any time (link at the bottom) to save and sync your builds — or let's go ahead as-is either way.\n\nWhat should I call you?`
@@ -673,9 +412,6 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     }
 
     // LLM assessment is only warranted once the workflow has genuinely started.
-    // Pre-build (stack selection, project naming) uses the guided chip interview instead —
-    // the LLM has nothing meaningful to assess without a stack, and its response would
-    // just be "select the hardware platform first", which undercuts the welcome flow.
     const workflowStarted = !!(st.isBuilt || st.scanComplete || st.designApplied ||
                                 st.phase2Active || st.cabApproved || st.cabDeclined ||
                                 st.rtmSigned || st.promoted);
@@ -725,7 +461,6 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const openingName = userNameRef.current;
 
     // Greet immediately — don't make the user wait for the LLM before being acknowledged.
-    // The assessment follows after the thinking indicator.
     const greeting = openingName
       ? `Good day, ${openingName}! I'm OpsMentor — here to keep your team aligned from platform selection to go-live. Let me pull up where this build stands.`
       : `Good day! I'm OpsMentor — here to keep your team aligned from platform selection to go-live. Let me review this build.`;
@@ -797,32 +532,20 @@ Rules:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Worker connectivity + TTS capability check
+  // Worker connectivity check
   useEffect(() => {
     if (!open || workerOk !== null) return;
     let cancelled = false;
     (async () => {
-      for (const url of [`${CARTESIA_WORKER_URL}/health`, '/api/health']) {
-        try {
-          const r = await fetch(url, { signal: AbortSignal.timeout(3500) });
-          if (r.ok && !cancelled) {
-            setWorkerOk(true);
-            try {
-              const data = await r.json();
-              setTtsVoice(data.tts?.voice || null);
-            } catch { setTtsVoice(null); }
-            return;
-          }
-        } catch { /* try next */ }
-      }
+      try {
+        const r = await fetch('/api/health', { signal: AbortSignal.timeout(3500) });
+        if (r.ok && !cancelled) { setWorkerOk(true); return; }
+      } catch { /* unreachable */ }
       if (!cancelled) setWorkerOk(false);
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, workerOk]);
-
-  // Open after tour dismisses every time — also ensure voice starts
-  // (override existing handler below)
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -830,20 +553,6 @@ Rules:
   }, [messages, thinking]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
-
-  // Cleanup all voice resources on unmount — prevents MediaStream leaks and
-  // state updates (setMessages, setInput) on an unmounted component.
-  useEffect(() => {
-    return () => {
-      clearTimeout(noSpeechTimerRef.current);
-      clearTimeout(silenceTimerRef.current);
-      clearTimeout(maxRecTimerRef.current);
-      if (speechRecRef.current) { try { speechRecRef.current.stop(); } catch {} speechRecRef.current = null; }
-      if (mediaRecorderRef.current?.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
-      if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
-      if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
-    };
-  }, []);
 
   // ── Action logging — watch key state transitions and auto-post log entries ──
   const prevState = useRef({
@@ -866,7 +575,7 @@ Rules:
 
   useEffect(() => {
     const prev = prevState.current;
-    // orc = voiced, prominent messages for major workflow gates
+    // orc = prominent messages for major workflow gates
     // log = compact one-liners for minor events
     const orc = [];
     const log = [];
@@ -880,9 +589,6 @@ Rules:
       const _os  = s.ctx?.os  || '';
       const name = userNameRef.current ? ` ${userNameRef.current}` : '';
 
-      // Characterise the combination — never echo the component names back.
-      // Lead with what this combination MEANS: the specific risk profile,
-      // what CAB will scrutinise, and why the scan matters for THIS stack.
       const msg = /oracle/i.test(_db) && /power|ppc/i.test(_hw)
         ? `Well done${name} — Phase 1 is locked. Power architecture with Oracle is a technically demanding combination: the ppc64le certification matrix restricts which fix-pack levels are officially supported, and that's typically the first thing CAB will interrogate. The scan surfaces those gaps before you invest time in the design. Worth running it now.`
         : /websphere/i.test(_app)
@@ -977,7 +683,6 @@ Rules:
     }
 
     // ── Deep sync: incident / UUM scope changes ───────────────────────────────
-    // Always track even before Phase 2 so sidebar selections are echoed in chat
     if (prev.selInc !== undefined) {
       const prevInc = prev.selInc || [];
       const currInc = s.selInc || [];
@@ -1035,7 +740,7 @@ Rules:
       }
     }
 
-    // ── Deep sync: New coherence warnings — voiced for warn severity ──────────
+    // ── Deep sync: New coherence warnings ────────────────────────────────────
     if (coherenceWarnCount > (prev.coherenceWarnCount || 0)) {
       const warns = (s.coherenceAlerts || []).filter(a => a.severity === 'warn');
       if (warns.length > 0) {
@@ -1071,7 +776,7 @@ Rules:
       selIncCount, selUumCount, rtmPassCount, rtmFailCount, rtmNaCount, rtmTotalCount,
       closureCheckCount, closureTotalCount, rolesFilledCount, coherenceWarnCount, raidCount]);
 
-  // ── Inactivity prompt — if panel open and user idle 3s after last orch message ─
+  // ── Inactivity prompt — if panel open and user idle 9s after last orch message ─
   const inactivityTimerRef = useRef(null);
   const nudgeSentRef = useRef(false);
 
@@ -1081,7 +786,7 @@ Rules:
     nudgeSentRef.current = false; // reset on new message
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg || lastMsg.role !== 'orchestrator') return;
-    // Wait 3 seconds; if user hasn't typed anything, send a contextual nudge
+    // Wait 9 seconds; if user hasn't typed anything, send a contextual nudge
     inactivityTimerRef.current = setTimeout(() => {
       if (nudgeSentRef.current) return;
       nudgeSentRef.current = true;
@@ -1099,9 +804,6 @@ Rules:
   const handleInputChange = useCallback((e) => {
     clearTimeout(inactivityTimerRef.current);
     nudgeSentRef.current = true; // suppress nudge once typing starts
-    // If the user types manually while SR is active, mark input as user-owned
-    // so interim voice transcripts don't clobber what they're writing.
-    if (recordingRef.current) userEditedInputRef.current = true;
     setInput(e.target.value);
   }, []);
 
@@ -1114,7 +816,6 @@ Rules:
   // Open when ExecOverview "OpsMentor" button is clicked (floating mode)
   useEffect(() => {
     const handler = () => {
-      unlockAudio(); // dispatched from button click — gesture still active, unlock audio now
       setOpen(true);
       setPanelVisible(true);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -1124,11 +825,9 @@ Rules:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Open after tour dismisses — tour "Start using it" click IS a gesture, capture it
+  // Open after tour dismisses
   useEffect(() => {
     const handler = () => {
-      // Call synchronously inside the click gesture context so audio unlocks immediately
-      unlockAudio();
       setTimeout(() => {
         setOpen(true);
         setPanelVisible(true);
@@ -1139,22 +838,6 @@ Rules:
     return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ── Auto-speak orchestrator messages via TTS queue ────────────────────────
-  // Only speaks 'orchestrator' role messages — never log entries, nudges, results,
-  // or user messages. Voice starts from message #2 (welcome skipped — no gesture yet).
-  // Voice the most recent orchestrator message we haven't spoken yet.
-  // Uses a ref to avoid re-speaking when log entries are appended after it.
-  const lastSpokenIdRef = useRef(0);
-  useEffect(() => {
-    if (!open || messages.length <= 1) return; // skip welcome — no gesture yet
-    const orcMsgs = messages.filter(m => m.role === 'orchestrator');
-    const last = orcMsgs[orcMsgs.length - 1];
-    if (!last || last.id <= lastSpokenIdRef.current) return;
-    lastSpokenIdRef.current = last.id;
-    speakQueued(last.text);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, open]);
 
   // Field change tracking — refs only, no chat echo
   const prevCtx = useRef({ hw: undefined, os: undefined, db: undefined, app: undefined });
@@ -1171,8 +854,6 @@ Rules:
   }, [reqProjectName, reqEnvType, reqProjectStartDate, reqGoLiveDate, reqSla]);
 
   // ── Field interview sync — advance/close interview when user fills via UI ──
-  // Guard: don't fire while the LLM is thinking — it would stack a second question
-  // on top of whatever the LLM is about to say.
   const thinkingRef = useRef(false);
   useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
 
@@ -1275,25 +956,9 @@ Rules:
       cost: `Cost Management${n}. ${s.costConfig?.enabled ? 'Cost tracking active — estimate is derived from task hours × team rate. Review the number before CAB; the board may ask for budget justification.' : 'Enable cost tracking to generate a project cost estimate from your Gantt schedule. Useful for CAB documentation and stakeholder reporting.'}`,
     };
     const hint = tabHints[s.activeTab];
-    // Use orchestrator role for tab hints so voice announces the context
     if (hint) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: hint }]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.activeTab]);
-
-  // ── TTS playback ─────────────────────────────────────────────────────────
-
-  const handlePlay = useCallback(async () => {
-    if (playing) { abortRef.current?.abort(); setPlaying(false); return; }
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    setPlaying(true);
-    setLineIdx(0);
-    await speakScript(script.lines, {
-      onLineStart: i => setLineIdx(i),
-      signal: ctrl.signal,
-    });
-    if (!ctrl.signal.aborted) { setPlaying(false); abortRef.current = null; }
-  }, [playing, script.lines]);
 
   // ── Action execution ─────────────────────────────────────────────────────
 
@@ -1344,7 +1009,6 @@ Rules:
   }
 
   // Returns a single next-step sentence based on current workflow state, or null to stay silent.
-  // Called after confirmed actions complete so OpsMentor always knows where the build is.
   function getWorkflowNudge(freshS, confirmedActions) {
     // Major gate actions speak for themselves — the UI transitions visually. Stay silent.
     const GATE_TYPES = new Set(['INJECT_PHASE2', 'APPLY_DESIGN', 'SUBMIT_CAB', 'SIGN_RTM',
@@ -1387,7 +1051,6 @@ Rules:
       const nudge  = getWorkflowNudge(freshS, actions);
       if (nudge) {
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: nudge }]);
-        speakQueued(nudge);
       }
     }, 320);
   }
@@ -1400,7 +1063,6 @@ Rules:
 
   // ── Chip selection — direct field update without text parsing ─────────────
   function handleChipSelect(field, value) {
-    unlockAudio(); // must be synchronous — call before any await
     setChipsField(null);
     // Log as user message
     setMessages(m => [...m, { id: nextId(), role: 'user', text: value }]);
@@ -1456,134 +1118,6 @@ Rules:
     setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
   }
 
-  // ── Mic / voice input ────────────────────────────────────────────────────
-  function processVoiceInput(text) {
-    // Drop input if TTS is currently playing — prevents acoustic feedback loop
-    if (currentAudioSourceRef.current) return;
-    // Dedup: same transcript within 3 s means the recogniser fired twice for one utterance
-    const now = Date.now();
-    if (text === lastVoiceTextRef.current && now - lastVoiceTimeRef.current < 3000) return;
-    lastVoiceTextRef.current = text;
-    lastVoiceTimeRef.current = now;
-
-    const currS    = sRef.current;
-    const currAuth = authUserRef.current;
-
-    // ── Auto-confirm/cancel pending ConfirmCard ───────────────────────────
-    const pendingConfirm = messagesRef.current.find(m => m.role === 'confirm');
-    if (pendingConfirm) {
-      if (/^(yes|yeah|yep|sure|ok|okay|go ahead|add|confirm|do it|proceed|apply|run it|add it|add them|add all|sounds good|absolutely|correct|right|affirmative|please do|go on|do that)(\s|$|[,!.])/i.test(text)) {
-        setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
-        handleConfirm(pendingConfirm.actions);
-        return;
-      }
-      if (/^(no|nope|cancel|abort|never mind|skip|not now|stop|discard|ignore)(\s|$|[,!.])/i.test(text)) {
-        setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
-        handleCancel();
-        return;
-      }
-    }
-
-    if (awaitingNameRef.current) {
-      setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
-      handleNameReply(text);
-      return;
-    }
-
-    // For pending task / field interview, delegate to inline logic using refs
-    if (pendingTaskRef.current || awaitingFieldRef.current) {
-      setInput(text);
-      // Trigger via a synthetic submit after a tick
-      setTimeout(() => {
-        setInput('');
-        // Re-run the logic with current state
-        const synth = text;
-        setMessages(m => [...m, { id: nextId(), role: 'user', text: synth }]);
-
-        if (pendingTaskRef.current) {
-          const taskTitle = pendingTaskRef.current;
-          pendingTaskRef.current = null;
-          const dest = synth.toLowerCase();
-          if (/gantt|schedule|task/.test(dest)) {
-            const taskId = `mentor-${Date.now()}`;
-            applyActionsWithRefs([
-              { type: 'ADD_CUSTOM_TASK', description: `Add "${taskTitle}" to Gantt`, params: { id: taskId, title: taskTitle, est_hours: 4, addedAt: new Date().toISOString(), notes: 'Added via OpsMentor' }, requiresConfirmation: false },
-              { type: 'NAVIGATE_TAB', description: 'Go to Gantt', params: { tab: 'gantt' }, requiresConfirmation: false },
-            ]);
-            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Added "${taskTitle}" to Gantt — I estimated 4 hours. Adjust in the Gantt tab if needed.` }]);
-          } else {
-            const raidId = `raid-${Date.now()}`;
-            applyActionsWithRefs([
-              { type: 'ADD_RAID_ENTRY', description: `Add "${taskTitle}" to RAID`, params: { id: raidId, type: 'ISSUE', description: taskTitle, severity: 'MED', mitigation: 'Pending', status: 'OPEN', owner: 'PM', addedAt: new Date().toISOString() }, requiresConfirmation: false },
-              { type: 'NAVIGATE_TAB', description: 'Go to RAID', params: { tab: 'raid' }, requiresConfirmation: false },
-            ]);
-            setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Added "${taskTitle}" to RAID log as an issue.` }]);
-          }
-          return;
-        }
-
-        const awField = awaitingFieldRef.current;
-        if (awField) {
-          awaitingFieldRef.current = null;
-          const synthText = FIELD_CTX_MAP[awField] ? `${FIELD_CTX_MAP[awField]} is ${synth}` : FIELD_REQ_MAP[awField] ? `${FIELD_REQ_MAP[awField]} is ${synth}` : null;
-          if (synthText) {
-            const result = ruleBasedResponse(synthText, currS, currAuth, acknowledgedCompatIds.current);
-            if (result) {
-              const { reply, actions = [] } = typeof result === 'string' ? { reply: result } : result;
-              if (actions.length > 0) applyActionsWithRefs(actions);
-              const next = nextFieldPrompt(sRef.current, awField);
-              awaitingFieldRef.current = next;
-              const nextQ = next ? FIELD_QUESTIONS[next] : 'All fields done — say "run scan" to continue.';
-              const hasRisk = reply && (reply.includes('⚠️') || reply.includes('⬡') || reply.includes('EOL') || reply.includes('Stakeholder'));
-              const fullReply = hasRisk ? `${reply}\n\n${nextQ}` : nextQ;
-              setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fullReply }]);
-              return;
-            }
-          }
-        }
-      }, 0);
-      return;
-    }
-
-    setMessages(m => [...m, { id: nextId(), role: 'user', text }]);
-    setThinking(true);
-
-    const fast = ruleBasedResponse(text, currS, currAuth, acknowledgedCompatIds.current);
-    if (fast) {
-      setThinking(false);
-      const { reply, actions = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
-      if (_pendingTask) pendingTaskRef.current = _pendingTask;
-      const immediate   = actions.filter(a => !a.requiresConfirmation);
-      const needsConfirm = actions.filter(a => a.requiresConfirmation);
-      if (immediate.length > 0) applyActionsWithRefs(immediate);
-      if (reply) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
-      if (needsConfirm.length > 0) {
-        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
-      }
-    } else {
-      // Groq handles free-form voice questions — same path as handleSend
-      (async () => {
-        try {
-          const ctx = buildStateContext(currS, currAuth);
-          const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
-          setThinking(false);
-          const { reply, actions = [], nextPrompt } = result;
-          const replyText = nextPrompt ? `${reply} ${nextPrompt}` : reply;
-          const immediate = actions.filter(a => !a.requiresConfirmation);
-          const needsConfirm = actions.filter(a => a.requiresConfirmation);
-          if (immediate.length > 0) applyActionsWithRefs(immediate);
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText }]);
-          if (needsConfirm.length > 0) {
-            setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
-          }
-        } catch {
-          setThinking(false);
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Having trouble connecting — try again in a moment, or type your question.' }]);
-        }
-      })();
-    }
-  }
-
   function applyActionsWithRefs(actions) {
     const currS    = sRef.current;
     const currAuth = authUserRef.current;
@@ -1596,12 +1130,11 @@ Rules:
         continue;
       }
       // RUN_SCAN: show the PhasePanel ScanModal popup instead of running scan directly.
-      // The popup animates, runs the scan, and lets the user click "Apply Results".
       if (action.type === 'RUN_SCAN') {
         window.dispatchEvent(new CustomEvent('opsmanifest-run-scan'));
         auditLog(action, 'executed');
         done.push(action.description);
-        continue; // don't call executeAction — modal handles scan + completeScan
+        continue;
       }
       executeAction(action, store);
       auditLog(action, 'executed');
@@ -1613,393 +1146,9 @@ Rules:
     if (blocked.length > 0) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: `Could not complete: ${blocked.join(' ')}` }]);
   }
 
-  // ── Voice input — browser-native SpeechRecognition (primary, no network needed)
-  // Falls back to MediaRecorder → Whisper proxy if SpeechRecognition unavailable.
-  // SpeechRecognition works in Chrome, Edge, Brave (normal mode) natively.
+  // ── Field interview constants ──────────────────────────────────────────────
 
-  const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-
-  const srCycleCountRef = useRef(0); // rapid-cycle detector for Brave/Firefox
-  const srStartTimeRef  = useRef(0);
-
-  function startNativeSpeech() {
-    if (!SR) { startWhisperRecording(); return; }
-    srCycleCountRef.current = 0;
-    srStartTimeRef.current = 0;
-    _startNativeSpeechInner();
-  }
-
-  function _startNativeSpeechInner() {
-    const rec = new SR();
-    rec.lang = 'en-US';
-    rec.continuous = true;       // keep mic open until user clicks stop
-    rec.interimResults = true;   // show live interim transcript
-    rec.maxAlternatives = 1;
-    speechRecRef.current = rec;
-    srStartTimeRef.current = Date.now();
-
-    rec.onstart = () => {
-      setRecording(true); recordingRef.current = true; setRecStatus('listening…');
-      userEditedInputRef.current = false; // reset on each new SR session
-      // If no speech result arrives in 8 s, the browser speech service isn't returning audio.
-      // Escape to Whisper (MediaRecorder) which bypasses the browser speech cloud service.
-      clearTimeout(noSpeechTimerRef.current);
-      noSpeechTimerRef.current = setTimeout(() => {
-        if (!recordingRef.current) return;
-        try { speechRecRef.current?.stop(); } catch {}
-        speechRecRef.current = null;
-        recordingRef.current = false;
-        setInput('');
-        setMessages(m => [...m, { id: nextId(), role: 'log', text:
-          'Browser speech service timed out. Switching to direct mic recording — speak clearly and pause when done.' }]);
-        startWhisperRecording();
-      }, 8000);
-    };
-
-    rec.onresult = (e) => {
-      clearTimeout(noSpeechTimerRef.current); // got a result — cancel the escape timer
-      srCycleCountRef.current = 0;
-      const latest = e.results[e.results.length - 1];
-      if (latest.isFinal) {
-        const t = latest[0].transcript.trim();
-        if (t) {
-          setInput(''); // clear interim text from input
-          setRecStatus('listening…');
-          processVoiceInput(t);
-        }
-      } else {
-        // Show live interim transcript in the input field so user sees real-time feedback.
-        // Skip if the user manually typed something during this SR session — don't clobber it.
-        const interim = latest[0].transcript;
-        if (!userEditedInputRef.current) setInput(interim);
-        setRecStatus(interim.slice(0, 60) + '…');
-      }
-    };
-
-    rec.onerror = (e) => {
-      clearTimeout(noSpeechTimerRef.current);
-      if (e.error === 'not-allowed') {
-        recordingRef.current = false;
-        setRecording(false); setRecStatus('');
-        speechRecRef.current = null;
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          'Microphone access denied. Click the lock icon in the browser address bar → Microphone → Allow, then click the mic button again.' }]);
-      } else if (e.error === 'no-speech') {
-        // No audio detected — restart quietly without falling through to Whisper
-        try { speechRecRef.current?.stop(); } catch {}
-      } else {
-        // service-not-allowed (Brave Shields), network, or other — fall back to Whisper
-        try { speechRecRef.current?.stop(); } catch {}
-        speechRecRef.current = null;
-        recordingRef.current = false;
-        setRecStatus('');
-        setMessages(m => [...m, { id: nextId(), role: 'log', text:
-          'Browser speech service unavailable — switching to Whisper transcription. Speak after the indicator turns active.' }]);
-        startWhisperRecording();
-      }
-    };
-
-    rec.onend = () => {
-      clearTimeout(noSpeechTimerRef.current);
-      if (!recordingRef.current || !speechRecRef.current) {
-        setRecording(false); recordingRef.current = false; setRecStatus('');
-        speechRecRef.current = null;
-        return;
-      }
-      const elapsed = Date.now() - srStartTimeRef.current;
-      srCycleCountRef.current += 1;
-      if (elapsed < 1500 && srCycleCountRef.current >= 3) {
-        recordingRef.current = false;
-        speechRecRef.current = null;
-        setRecStatus('');
-        setMessages(m => [...m, { id: nextId(), role: 'log', text:
-          'Browser speech service blocked — switching to Whisper transcription.' }]);
-        startWhisperRecording();
-        return;
-      }
-      setTimeout(() => {
-        if (recordingRef.current && speechRecRef.current) {
-          // Don't restart SR while TTS is playing — SR would capture TTS audio as a voice
-          // command. The TTS completion handler (source.onended in runCartesiaQueue) restarts
-          // SR once audio finishes.
-          if (currentAudioSourceRef.current) return;
-          try { speechRecRef.current.start(); } catch {}
-        }
-      }, 150);
-    };
-
-    try {
-      rec.start();
-    } catch (e) {
-      clearTimeout(noSpeechTimerRef.current);
-      setRecording(false); recordingRef.current = false; setRecStatus('');
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-        `Microphone failed to start: ${e?.message || 'unknown error'}. Make sure the browser has microphone permission for this site — click the lock icon in the address bar → Microphone → Allow.` }]);
-    }
-  }
-
-  // Whisper fallback (used only when SpeechRecognition is unavailable)
-  async function startWhisperRecording() {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: 'Microphone access is not available in this browser context. Use Chrome or Edge over HTTPS, then allow microphone access when prompted.' }]);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      mediaStreamRef.current = stream;
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
-      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-      mediaRecorderRef.current = rec;
-      audioChunksRef.current = [];
-      hasSpeechRef.current = false;
-      rec.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
-      rec.start(300);
-      setRecording(true); recordingRef.current = true; setRecStatus('listening');
-
-      const audioCtx = new AudioContext();
-      audioCtxRef.current = audioCtx;
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-      source.connect(analyser);
-      const buf = new Uint8Array(analyser.fftSize);
-      function checkVolume() {
-        if (!recordingRef.current) return;
-        analyser.getByteTimeDomainData(buf);
-        const rms = Math.sqrt(buf.reduce((s, v) => s + (v - 128) ** 2, 0) / buf.length);
-        if (rms > 3.5) {
-          hasSpeechRef.current = true;
-          clearTimeout(silenceTimerRef.current);
-          silenceTimerRef.current = setTimeout(() => { if (recordingRef.current && hasSpeechRef.current) submitWhisperAudio(); }, 1800);
-        }
-        requestAnimationFrame(checkVolume);
-      }
-      requestAnimationFrame(checkVolume);
-      maxRecTimerRef.current = setTimeout(() => { if (recordingRef.current) submitWhisperAudio(); }, 30000);
-    } catch (e) {
-      setRecording(false); recordingRef.current = false; setRecStatus('');
-      const msg = e.name === 'NotAllowedError' ? 'Microphone access denied. Allow it in your browser settings.'
-        : e.name === 'NotFoundError' ? 'No microphone found.' : `Mic error: ${e.message}`;
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: msg }]);
-    }
-  }
-
-  async function submitWhisperAudio() {
-    clearTimeout(silenceTimerRef.current);
-    clearTimeout(maxRecTimerRef.current);
-    hasSpeechRef.current = false;
-    setRecStatus('processing');
-    const rec = mediaRecorderRef.current;
-    if (rec && rec.state !== 'inactive') {
-      await new Promise(resolve => { rec.onstop = resolve; rec.stop(); });
-    }
-    const blob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
-    audioChunksRef.current = [];
-    if (blob.size < 2000) { if (recordingRef.current) restartWhisperCapture(); return; }
-
-    let transcribed = false;
-    for (const url of [`${CARTESIA_WORKER_URL}/whisper-transcribe`, '/api/whisper-transcribe']) {
-      if (transcribed) break;
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': blob.type || 'audio/webm', 'X-Audio-Type': blob.type || 'audio/webm' },
-          body: blob,
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!res.ok) continue;
-        const { transcript } = await res.json();
-        if (transcript?.trim()) { setInput(''); processVoiceInput(transcript.trim()); }
-        transcribed = true;
-        transcribeFailCountRef.current = 0;
-      } catch { /* try next */ }
-    }
-    if (!transcribed) {
-      transcribeFailCountRef.current++;
-      if (transcribeFailCountRef.current >= 2) {
-        const currAuth = authUserRef.current;
-        if (isSignedInProOrEnterprise(currAuth)) {
-          // Pro/Enterprise — transient service issue, keep voice active, let user retry
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-            'Transcription service is temporarily slow — your microphone is still authorised. Speak again or type below. If this persists, check your connection.' }]);
-          transcribeFailCountRef.current = 0;
-          if (recordingRef.current) restartWhisperCapture();
-          return;
-        }
-        // Non-pro guest / starter — fall back to typing
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-          'Voice transcription is unavailable right now. All features work by typing — use the input box below.' }]);
-        stopRecording();
-        return;
-      }
-    }
-    if (recordingRef.current) restartWhisperCapture();
-  }
-
-  function restartWhisperCapture() {
-    const stream = mediaStreamRef.current;
-    if (!stream || !recordingRef.current) { setRecStatus('listening'); return; }
-    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
-    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-    mediaRecorderRef.current = rec;
-    audioChunksRef.current = [];
-    hasSpeechRef.current = false;
-    rec.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data); };
-    rec.start(300);
-    setRecStatus('listening');
-    maxRecTimerRef.current = setTimeout(() => { if (recordingRef.current) submitWhisperAudio(); }, 30000);
-  }
-
-  function stopRecording() {
-    clearTimeout(noSpeechTimerRef.current);
-    if (speechRecRef.current) {
-      try { speechRecRef.current.stop(); } catch {}
-      speechRecRef.current = null;
-    }
-    recordingRef.current = false;
-    clearTimeout(silenceTimerRef.current);
-    clearTimeout(maxRecTimerRef.current);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
-    mediaRecorderRef.current = null;
-    audioChunksRef.current = [];
-    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
-    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
-    setRecording(false); setRecStatus('');
-  }
-
-  // Track first voice use per sign-in session (one acknowledgement per session)
-  const voiceSessionActiveRef = useRef(false);
-
-  // ── Voice ID helpers (enterprise, local-only) ────────────────────────────────
-  // Voice ID enrollment state is stored ONLY in localStorage, keyed by user email.
-  // It never leaves the device — not stored in Firestore or any cloud service.
-  // This is personal biometric session data: local only, cleared on sign-out.
-
-  function voiceIdKey(email) {
-    return `opsmanifest_voiceid_${email}`;
-  }
-
-  function getVoiceIdRecord(email) {
-    try { return JSON.parse(localStorage.getItem(voiceIdKey(email)) || 'null'); }
-    catch { return null; }
-  }
-
-  function saveVoiceIdRecord(email, record) {
-    try { localStorage.setItem(voiceIdKey(email), JSON.stringify(record)); } catch {}
-  }
-
-  function isEnterpriseUser(user) {
-    if (!user) return false;
-    // Seeded enterprise accounts + any user whose stored plan is enterprise.
-    const SEEDED_ENT = ['sriram.c76@gmail.com'];
-    return SEEDED_ENT.includes(user.email) || user.plan === 'enterprise';
-  }
-
-  function isSignedInProOrEnterprise(user) {
-    if (!user) return false;
-    const SEEDED_ENT = ['sriram.c76@gmail.com'];
-    if (SEEDED_ENT.includes(user.email)) return true;
-    return ['professional', 'team', 'enterprise'].includes(user.plan);
-  }
-
-  function handleMic() {
-    unlockAudio();
-    if (recording) { stopRecording(); return; }
-
-    // Guests: allow native SpeechRecognition for field input (no attribution needed
-    // for Phase 1 selection). Whisper requires a worker + account; block that path.
-    if (!authUser) {
-      const SRAvailable = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-      if (!SRAvailable) {
-        setMessages(m => [...m, {
-          id: nextId(),
-          role: 'orchestrator',
-          text: 'This browser needs a transcription service for voice — sign in to unlock it. Chrome and Edge work without sign-in.',
-        }]);
-        return;
-      }
-      startNativeSpeech();
-      return;
-    }
-
-    // Enterprise users: require Voice ID verification before first voice use per session
-    if (isEnterpriseUser(authUser) && !voiceSessionActiveRef.current) {
-      setVoiceIdPanel(true);
-      const rec = getVoiceIdRecord(authUser.email);
-      setVoiceIdStep(rec?.enrolled ? 'verifying' : 'check');
-      setVoiceIdPhrase('');
-      return;
-    }
-
-    startVoiceSession();
-  }
-
-  function startVoiceSession() {
-    if (!voiceSessionActiveRef.current) {
-      voiceSessionActiveRef.current = true;
-      const roleDesc = (() => {
-        const pm = sRef.current?.requirements?.pmEmail;
-        const dep = sRef.current?.requirements?.pmBackupEmail;
-        if (authUser.email === pm) return 'PM (full access)';
-        if (authUser.email === dep) return 'Deputy PM (full access)';
-        const assignments = sRef.current?.roleAssignments || {};
-        const roles = Object.entries(assignments)
-          .filter(([, v]) => v?.email === authUser.email)
-          .map(([role]) => role);
-        return roles.length ? roles[0] : 'Team Member';
-      })();
-      setMessages(m => [...m, {
-        id: nextId(),
-        role: 'orchestrator',
-        text: `Voice session active — ${authUser.email} · ${roleDesc}. Entries attributed to this role.`,
-      }]);
-    }
-    transcribeFailCountRef.current = 0;
-    // Use native SpeechRecognition in Chrome/Edge (instant, no network).
-    // startNativeSpeech falls back to Whisper automatically if SR unavailable (Firefox, Safari).
-    startNativeSpeech();
-  }
-
-  function handleVoiceIdEnroll() {
-    // Record a short voice sample for the enrollment phrase — store phrase + timestamp locally
-    setVoiceIdStep('enrolling');
-    const phrase = `I am ${authUser.email.split('@')[0]} accessing OpsManifest`;
-    setVoiceIdPhrase(phrase);
-    // After a 4s recording window, mark enrolled
-    startWhisperRecording();
-    setTimeout(() => {
-      stopRecording();
-      saveVoiceIdRecord(authUser.email, { enrolled: true, enrolledAt: Date.now(), phrase });
-      setVoiceIdStep('done');
-      setTimeout(() => {
-        setVoiceIdPanel(false);
-        startVoiceSession();
-      }, 1400);
-    }, 4000);
-  }
-
-  function handleVoiceIdVerify() {
-    // Quick 3s voice verification — match passes locally, then open session
-    setVoiceIdStep('verifying');
-    startWhisperRecording();
-    setTimeout(() => {
-      stopRecording();
-      setVoiceIdStep('done');
-      setTimeout(() => {
-        setVoiceIdPanel(false);
-        startVoiceSession();
-      }, 900);
-    }, 3000);
-  }
-
-  function handleVoiceIdSkip() {
-    setVoiceIdPanel(false);
-    startVoiceSession();
-  }
-
-  // ── Name reply handler ───────────────────────────────────────────────────
-
-  // Field interview order — projectStartDate comes before goLiveDate (can't set end without start)
+  // Field interview order — projectStartDate comes before goLiveDate
   const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'projectStartDate', 'goLiveDate', 'sla'];
 
   // Clickable chip options for each field — user picks instead of typing
@@ -2083,7 +1232,6 @@ Rules:
   // ── Send message ─────────────────────────────────────────────────────────
 
   async function handleSend() {
-    unlockAudio(); // must be synchronous — call before any await
     const text = input.trim();
     if (!text || thinking) return;
 
@@ -2253,7 +1401,7 @@ Rules:
         return;
       }
 
-      // Groq-powered NLP (async — voice via auto-speak useEffect when reply message is added)
+      // Groq-powered NLP
       const ctx    = buildStateContext(s, authUser);
       const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
 
@@ -2265,13 +1413,10 @@ Rules:
       const needsConfirm = actions.some(a => a.requiresConfirmation);
       const immediate    = actions.filter(a => !a.requiresConfirmation);
 
-      // Run non-significant actions straight away
       if (immediate.length > 0) applyActions(immediate);
 
-      // Show reply — voice via useEffect (gesture is long gone after Groq roundtrip)
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText }]);
 
-      // Show confirmation card for significant actions
       if (needsConfirm) {
         const confirmActions = actions.filter(a => a.requiresConfirmation);
         pendingConfirmRef.current = confirmActions;
@@ -2284,7 +1429,6 @@ Rules:
 
     } catch (e) {
       setThinking(false);
-      // When Groq is unavailable, respond with helpful guidance instead of a technical error
       const fallback = ruleBasedResponse('help', s, authUser, acknowledgedCompatIds.current);
       const fallbackText = typeof fallback === 'string' ? fallback : fallback?.reply;
       setMessages(m => [...m, {
@@ -2338,7 +1482,6 @@ Rules:
       {/* Floating trigger — only shown in non-docked (small screen) mode */}
       {!docked && <button
         onClick={() => {
-          unlockAudio(); // direct click — gesture context active, unlock audio now
           if (!open) {
             setOpen(true);
             setPanelVisible(true);
@@ -2386,12 +1529,6 @@ Rules:
                 <span className="text-sm font-extrabold tracking-tight">OpsMentor</span>
                 <span className="text-teal-300 text-xs ml-2 font-medium opacity-90">AI Lifecycle Admin</span>
               </div>
-              {/* Stop voice */}
-              <button
-                onClick={() => { stopCartesia(); setPlaying(false); abortRef.current?.abort(); }}
-                className="text-xs px-2 py-0.5 rounded font-medium bg-white/10 hover:bg-white/20 text-teal-200 transition-colors flex-shrink-0"
-                title="Stop voice"
-              >⏹</button>
               {/* Fullscreen toggle */}
               <button
                 onClick={() => setFullscreen(f => !f)}
@@ -2410,7 +1547,7 @@ Rules:
                 <button
                   onClick={() => setPanelVisible(false)}
                   className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center text-xl leading-none flex-shrink-0 ml-0.5"
-                  title="Minimise (voice continues)"
+                  title="Minimise"
                 >−</button>
               )}
             </div>
@@ -2447,22 +1584,11 @@ Rules:
             <WorkflowStrip items={checklist} />
           </div>
 
-          {/* Worker connectivity / TTS availability warnings */}
-          {ttsVoice === 'none' && workerOk === true && (
-            <div className="px-3 py-2.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
-              <div className="text-xs text-amber-800 font-semibold mb-0.5">Human voice not active — using browser speech</div>
-              <div className="text-xs text-amber-700">
-                Best free option: Azure Cognitive Services — 500k chars/month Neural TTS (Jenny, Aria).
-                Sign up free at <strong>azure.microsoft.com</strong>, create a Speech resource (F0 free tier),
-                then add <strong>AZURE_TTS_KEY</strong> + <strong>AZURE_TTS_REGION</strong> to the CF Worker.
-              </div>
-            </div>
-          )}
+          {/* Worker connectivity warning */}
           {workerOk === false && (
             <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 flex-shrink-0">
               <span className="text-xs text-amber-700">
-                ⚠ Direct AI proxy unreachable — retrying via secure relay. Voice and Groq may take an extra second.
-                All text commands work immediately without any connection.
+                ⚠ AI proxy unreachable — Groq may take an extra second. All text commands work immediately.
               </span>
             </div>
           )}
@@ -2575,106 +1701,11 @@ Rules:
             );
           })()}
 
-          {/* Voice ID gate — enterprise users only, local-only biometric check */}
-          {voiceIdPanel && authUser && (
-            <div className="mx-4 mb-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 flex-shrink-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-indigo-600 text-base">🔐</span>
-                <span className="text-sm font-bold text-indigo-800">Voice ID</span>
-                <span className="text-xs text-indigo-500 ml-auto">Enterprise · Local only</span>
-              </div>
-              {voiceIdStep === 'check' && (
-                <>
-                  <p className="text-xs text-indigo-700 mb-3 leading-relaxed">
-                    Your account is enterprise-tier. Set up Voice ID to secure mic access to this session — your voice data stays on this device only and is never uploaded.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleVoiceIdEnroll}
-                      className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
-                    >
-                      🎤 Set up Voice ID
-                    </button>
-                    <button
-                      onClick={handleVoiceIdSkip}
-                      className="px-3 py-2 rounded-lg bg-white text-indigo-500 text-xs border border-indigo-200 hover:bg-indigo-50 transition-colors"
-                    >
-                      Skip
-                    </button>
-                  </div>
-                </>
-              )}
-              {voiceIdStep === 'enrolling' && (
-                <>
-                  <p className="text-xs text-indigo-700 mb-2 leading-relaxed font-medium">
-                    Say the following phrase clearly:
-                  </p>
-                  <div className="bg-white border border-indigo-200 rounded-lg px-3 py-2 mb-3 text-sm text-indigo-900 italic font-medium">
-                    "{voiceIdPhrase}"
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-indigo-600">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-                    Recording — speak now…
-                  </div>
-                </>
-              )}
-              {voiceIdStep === 'verifying' && (
-                <>
-                  <p className="text-xs text-indigo-700 mb-2 leading-relaxed">
-                    Voice ID on file. Speak for 3 seconds to verify your session.
-                  </p>
-                  <div className="flex items-center gap-2 text-xs text-indigo-600 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-                    Listening for verification…
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleVoiceIdVerify}
-                      className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
-                    >
-                      Verify now
-                    </button>
-                    <button
-                      onClick={handleVoiceIdSkip}
-                      className="px-3 py-2 rounded-lg bg-white text-indigo-500 text-xs border border-indigo-200 hover:bg-indigo-50 transition-colors"
-                    >
-                      Skip
-                    </button>
-                  </div>
-                </>
-              )}
-              {voiceIdStep === 'done' && (
-                <div className="flex items-center gap-2 text-sm text-indigo-700 font-medium">
-                  <span>✅</span> Voice ID verified — opening session…
-                </div>
-              )}
-              <p className="mt-2.5 text-xs text-indigo-400">
-                Voice data is processed locally in your browser. Nothing is sent to any server.
-              </p>
-            </div>
-          )}
-
-          {/* Voice recording status + live typing indicator */}
-          {(recStatus || input.trim()) && (
+          {/* Typing indicator */}
+          {input.trim() && (
             <div className="px-4 pb-1 flex items-center gap-2 flex-shrink-0">
-              {recStatus && (
-                <>
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${recStatus === 'processing' ? 'bg-amber-500' : 'bg-red-500 animate-pulse'}`} />
-                  <span className="text-xs text-slate-500 truncate max-w-xs">
-                    {recStatus === 'processing'
-                      ? 'Transcribing…'
-                      : (recStatus === 'listening' || recStatus === 'listening…')
-                      ? 'Listening — speak now…'
-                      : recStatus /* show live interim transcript */}
-                  </span>
-                </>
-              )}
-              {!recStatus && input.trim() && (
-                <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse flex-shrink-0" />
-                  <span className="text-xs text-slate-400 italic">typing…</span>
-                </>
-              )}
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse flex-shrink-0" />
+              <span className="text-xs text-slate-400 italic">typing…</span>
             </div>
           )}
 
@@ -2685,42 +1716,12 @@ Rules:
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything or speak with the mic…"
+              placeholder="Ask anything…"
               disabled={thinking}
               rows={1}
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"
               style={{ minHeight: 42, maxHeight: 96 }}
             />
-            {/* Mic button — sign-in required; Voice ID gate for enterprise */}
-            <button
-              onClick={handleMic}
-              disabled={thinking || voiceIdPanel}
-              title={
-                !authUser
-                  ? 'Sign in to use voice input'
-                  : voiceIdPanel
-                    ? 'Complete Voice ID verification to use mic'
-                    : recording
-                      ? `Stop recording (${recStatus})`
-                      : isEnterpriseUser(authUser) && !voiceSessionActiveRef.current
-                        ? 'Voice ID required — click to verify'
-                        : 'Voice input — click to record, click again to send'
-              }
-              className={[
-                'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all text-base',
-                recording
-                  ? 'bg-red-500 text-white animate-pulse shadow-lg'
-                  : !authUser
-                    ? 'bg-slate-100 text-slate-300 border border-slate-200'
-                    : voiceIdPanel
-                      ? 'bg-indigo-100 text-indigo-400 border border-indigo-200 opacity-60'
-                      : isEnterpriseUser(authUser) && !voiceSessionActiveRef.current
-                        ? 'bg-indigo-50 text-indigo-600 border border-indigo-300 hover:bg-indigo-100'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200',
-              ].join(' ')}
-            >
-              {!authUser ? '🔒' : isEnterpriseUser(authUser) && !voiceSessionActiveRef.current && !recording ? '🔐' : '🎤'}
-            </button>
             {/* Send button */}
             <button
               onClick={handleSend}
