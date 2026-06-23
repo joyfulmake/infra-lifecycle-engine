@@ -9,8 +9,18 @@
       (function(){
         try{var t=localStorage.getItem('opsmanifest_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}
         if(window.location.protocol==='ms-appx-web:'){
+          // Suppress JS errors before any module loads — belt-and-suspenders alongside
+          // the handlers in main.jsx. These run earlier (inline script, not module).
           window.onerror=function(){return true;};
           window.addEventListener('unhandledrejection',function(e){e.preventDefault();});
+          // Use Windows system fonts instead of @fontsource Inter.
+          // Prevents @font-face woff2 font files from being requested in ms-appx-web:
+          // context — some WebView2 builds crash when loading font files via @font-face
+          // from the ms-appx-web: scheme. Segoe UI is Windows' native UI font and looks
+          // excellent. The !important override ensures Inter @font-face rules are ignored.
+          var s=document.createElement('style');
+          s.textContent='*,*::before,*::after{font-family:"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif!important}';
+          document.head.appendChild(s);
         }
       })();
     </script>

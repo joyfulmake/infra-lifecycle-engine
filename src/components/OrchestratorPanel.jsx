@@ -298,7 +298,10 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   // Must be called synchronously in a click/key handler (before any await).
   // Creates and resumes a shared AudioContext so all subsequent decodeAudioData/play
   // calls work without autoplay or CSP blob: restrictions.
+  // Never runs in ms-appx-web: context — AudioContext in WebView2 ms-appx-web: scheme
+  // can crash the renderer on certain Windows 11 builds (26100.3194, 26200+).
   function unlockAudio() {
+    if (window.location.href.startsWith('ms-appx-web:')) return false;
     const wasLocked = !audioUnlockedRef.current;
     if (wasLocked) {
       audioUnlockedRef.current = true;

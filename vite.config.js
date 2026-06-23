@@ -5,6 +5,12 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
+    // Disable modulepreload link tags and their polyfill.
+    // Vite 8 (rolldown) emits <link rel="modulepreload" crossorigin> for every vendor chunk.
+    // The `crossorigin` attribute on local ms-appx-web: resources crashes WebView2 on
+    // certain Windows 11 builds (26100.3194). Disabling modulePreload removes those tags.
+    // Modern WebView2 supports ES modules natively — the polyfill is unnecessary.
+    modulePreload: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
