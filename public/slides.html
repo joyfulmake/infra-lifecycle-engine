@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- slides v2026-06-24c -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -88,6 +89,7 @@
   .dot.on { background: var(--accent2); transform: scale(1.25); }
   .counter { position: fixed; top: 24px; right: 32px; font-size: 18px; color: var(--muted); letter-spacing: 0.06em; z-index: 10; }
   .kbd-hint { position: fixed; top: 24px; left: 32px; font-size: 16px; color: rgba(255,255,255,0.2); }
+  .ver-badge { position: fixed; bottom: 16px; right: 20px; font-size: 11px; color: rgba(255,255,255,0.25); letter-spacing: 0.05em; z-index: 10; }
 
   /* ── Brand mark ── */
   .logo { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
@@ -697,6 +699,7 @@
 
 <div class="counter"><span id="cur">1</span> / <span id="total">7</span></div>
 <div class="kbd-hint">← → or click to navigate</div>
+<div class="ver-badge">v2026-06-24c</div>
 <div class="nav">
   <button id="prev" onclick="go(-1)" disabled>← Prev</button>
   <div class="dots" id="dots"></div>
