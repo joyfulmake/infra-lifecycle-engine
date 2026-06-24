@@ -165,9 +165,9 @@ jobs:
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="manifest"[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''manifest''[^>]*/>', '')
           if ($html -eq $before) {
-            Write-Warning "manifest link not found in index.html — check template"
+            Write-Warning "manifest link not found in index.html - check template"
           } else {
-            Write-Host "Stripped <link rel=manifest> from index.html"
+            Write-Host "Stripped manifest link from index.html"
           }
           Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
 
