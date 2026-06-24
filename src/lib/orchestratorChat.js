@@ -455,11 +455,94 @@ function isProjectDescription(text, found) {
   return fieldCount >= 2 || (fieldCount >= 1 && planningKeywords && Object.keys(found).length >= 2);
 }
 
+// ── Live input scanner — called as the user types (debounced in OrchestratorPanel) ──
+// Returns { eol: [], compat: [], detected: {} } — never throws, always fast.
+// All checks run against pre-built indexes so cost is O(matching entries), not O(all rules).
+export function scanInputLive(text, ctx) {
+  if (!text || text.length < 3) return { eol: [], compat: [], detected: {} };
+
+  const eol = [];
+  // Scan EOL_INDEX for all fields — single pass, O(total EOL entries)
+  for (const [field, entries] of EOL_INDEX) {
+    for (const e of entries) {
+      if (e.pattern.test(text)) {
+        eol.push({ field, short: e.short, eolDate: e.eolDate, severity: e.severity });
+        break; // one hit per field is enough for a hint
+      }
+    }
+  }
+
+  // Parse fields detected in the typed text, merge with current ctx
+  const desc = parseProjectDescription(text);
+  const ctxFields = ['hw', 'os', 'db', 'app'].filter(k => desc[k]);
+  const mergedCtx = { ...(ctx || {}), ...Object.fromEntries(ctxFields.map(k => [k, desc[k]])) };
+
+  // Run compat only when something new was detected (avoid re-scanning current stack on every keystroke)
+  const compat = ctxFields.length > 0 ? checkCompatibility(mergedCtx).slice(0, 2) : [];
+
+  return { eol, compat, detected: Object.fromEntries(ctxFields.map(k => [k, desc[k]])) };
+}
+
+// ── Off-topic guard — returns true when the message has no infrastructure relevance ──
+// Used in ruleBasedResponse to short-circuit before calling the LLM.
+const INFRA_KEYWORDS = /\b(server|host|db|database|oracle|postgres|mysql|rhel|linux|aix|windows|dell|hpe|ibm|cisco|deploy|migrat|upgrade|patch|build|scan|incident|uum|raid|rtm|cab|gantt|phase|design|closure|stack|hw|os|app|sla|rto|rpo|ssl|tls|cert|firewall|network|backup|storage|cloud|sync|export|excel|role|raci|risk|task|issue|decision|eol|cve|vuln|security|compat|license|cost|budget)\b/i;
+
+function isOffTopic(text) {
+  if (text.length < 3 || text.length > 200) return false; // very short or long = let through
+  if (INFRA_KEYWORDS.test(text)) return false;
+  if (COMMAND_TOKENS) { /* COMMAND_TOKENS is in OrchestratorPanel; we check infra keywords here */ }
+  return /^(hi|hello|hey|hola|sup|what'?s up|how are|tell me a|who are you|joke|weather|sport|news|thank|thanks|ok|okay|sure|yes|no|cool|great|nice|wow|lol|haha|bye|goodbye)/i.test(text.trim())
+    && !/build|scan|inject|status|phase|design|rtm|cab|gantt/i.test(text);
+}
+
+// ── Left-shift advisory — surfaces upcoming phase requirements proactively ────
+// Returns a one-paragraph string describing what the NEXT phase will demand,
+// so the user can prepare NOW rather than discover blockers later.
+function leftShiftHint(s) {
+  const { hw, os, db, app } = s.ctx || {};
+  if (!s.isBuilt) return null;
+
+  if (s.isBuilt && !s.designApplied) {
+    const warnings = [];
+    if (/oracle/i.test(db || '')) warnings.push('Oracle requires SGA/PGA sizing and listener config in the Database design section');
+    if (/aix/i.test(os || '')) warnings.push('AIX needs LPAR profile and LVM layout in the Unix/OS section');
+    if (/websphere/i.test(app || '')) warnings.push('WebSphere needs JVM heap, datasource, and classloader config in the Application section');
+    const base = `System Design (Phase 3) has 8 sections — all must be filled before you can generate tasks and proceed to CAB. The fields your stack most needs: Network (TLS/SSL version, firewall rules), Storage (LUN size, IOPS), Backup (RPO/RTO hours), and Security (SIEM, PAM, cipher suite).`;
+    return warnings.length > 0 ? `${base}\n\nStack-specific: ${warnings.join('; ')}.` : base;
+  }
+
+  if (s.designApplied && !s.phase2Active) {
+    return `Phase 2 injection activates the incident and UUM scope selection, unlocks the Gantt chart, and enables RAID log entries. CAB reviewers will expect every incident to have an owner, a mitigation plan, and a fix task in the Gantt.`;
+  }
+
+  if (s.phase2Active && !s.cabApproved && !s.cabDeclined) {
+    const pending = (s.selInc || []).length + (s.selUUM || []).length;
+    return `CAB reviewers will demand: (1) a Gantt schedule with no overdue critical-path tasks, (2) every RAID risk with a stated mitigation and owner, (3) stakeholder sign-offs for OS, DB, and App selections, and (4) a rollback plan. You have ${pending} incident/UUM item${pending !== 1 ? 's' : ''} in scope — each needs a corresponding Gantt task.`;
+  }
+
+  if (s.cabApproved && !s.rtmSigned) {
+    const counts = Object.values(s.rtmRows || {}).reduce((a, v) => { a[v] = (a[v] || 0) + 1; return a; }, {});
+    const pending = (counts.PENDING || 0) + (counts.FAIL || 0);
+    return `RTM sign-off requires every row to be PASS or N/A — no FAIL or PENDING rows permitted. ${pending > 0 ? `You have ${pending} row${pending !== 1 ? 's' : ''} still unresolved.` : 'All rows look ready.'} After sign-off, the Closure checklist unlocks.`;
+  }
+
+  if (s.rtmSigned && !s.promoted) {
+    return `Closure checklist has post-go-live items: monitoring confirmation, backup test result, rollback plan documented, and stakeholder sign-off. Promote to live only when all checklist items are ticked.`;
+  }
+
+  return null;
+}
+
 // acknowledgedCompatIds: optional Set of rule IDs already confirmed this session —
 // previously-acknowledged compat risks are skipped rather than re-prompted.
 export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   const m = message.toLowerCase().trim();
   const raw = message.trim();
+
+  // ── Off-topic guard — return immediately, no LLM call ────────────────────────
+  if (isOffTopic(m)) {
+    return { reply: "I'm here for your infra build — stack selection, design, risks, scheduling, and sign-off. Say \"status\" for a progress update or ask me anything about your build." };
+  }
 
   // ── Multi-field "describe my project" intake ─────────────────────────────────
   // Detects when the user provides 2+ stack fields (or 1 field + planning language) in
@@ -952,8 +1035,10 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   if (/\b(what.?s next|next step|what do i do|what should|guide me)\b/.test(m)) {
     const script = generateScript(s);
     const next = nextPhase1Prompt(s);
-    if (next && !s.isBuilt) return { reply: `Phase 1 isn't complete yet.\n\n${next}` };
-    return { reply: `Next: ${script.nextAction || 'Build is complete — all phases done.'}` };
+    if (next && !s.isBuilt) return { reply: `Phase 1 incomplete — ${next}` };
+    const hint = leftShiftHint(s);
+    const hintBlock = hint ? `\n\n**Left-shift — prepare now:**\n${hint}` : '';
+    return { reply: `**${script.nextAction || 'All phases done.'}**${hintBlock}` };
   }
 
   // ── Stack info ─────────────────────────────────────────────────────────────
@@ -987,20 +1072,24 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
 
   // ── Phase-specific hints ───────────────────────────────────────────────────
   if (/\b(system design|design tab|phase 3|design fields)\b/.test(m)) {
-    if (!s.scanComplete) return { reply: 'System Design unlocks after the AI Smart Scan. Run the scan from the left panel first.' };
-    if (!s.designApplied) return { reply: 'Go to the System Design tab. Fill in all 8 sections (Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA).\n\nThere are TWO ways to proceed:\n1. "Generate Task Plan" — builds your Gantt task schedule AND locks the design (recommended)\n2. "Apply Design (skip tasks)" — locks the design without generating tasks\n\nClick "Generate Task Plan" to do both in one step.' };
-    return { reply: 'System Design is locked and applied. Changes now will mark Gantt tasks as stale and require regeneration.' };
+    if (!s.scanComplete) return { reply: 'System Design is gated on the AI Smart Scan. Run it now from the left panel — it takes under 2 seconds and cross-references your stack against 500+ EOL signatures and compatibility rules.' };
+    if (!s.designApplied) {
+      const hint = leftShiftHint(s);
+      return { reply: `System Design tab — 8 sections to complete:\n1. Unix/OS  2. Network  3. Database  4. Application  5. Web  6. Storage  7. Backup/DR  8. Security\n\nClick **Generate Task Plan** (not just Apply Design) — this builds your Gantt schedule AND locks the design in one action. Skipping tasks means a manual Gantt entry for every phase operation.${hint ? '\n\n' + hint : ''}` };
+    }
+    return { reply: 'System Design is locked. Any field change now marks Gantt tasks stale and requires regeneration. If you need to revise, click Unlock for Revision only after CAB decline — not before.' };
   }
 
   if (/\b(gantt|schedule|tasks|timeline)\b/.test(m)) {
-    if (!s.phase2Active) return { reply: 'The Gantt chart unlocks after Phase 2 injection. Complete System Design and inject Phase 2 from the left panel.' };
-    if (s.tasksStaleReason) return { reply: `Gantt tasks are stale: ${s.tasksStaleReason}\n\nClick "Regenerate Tasks" in the Gantt tab to refresh.` };
-    return { reply: 'Open the Gantt tab to review the project schedule. You can adjust durations, set parallel tasks, and view the critical path.' };
+    if (!s.phase2Active) return { reply: 'Gantt is gated on Phase 2 injection. Complete System Design → click Generate Task Plan → then Inject Phase 2 from the sidebar. This unlocks incidents, UUM items, RAID, and the Gantt simultaneously.' };
+    if (s.tasksStaleReason) return { reply: `**Gantt is stale:** ${s.tasksStaleReason}\n\nClick Regenerate Tasks in the Gantt tab — this rebuilds from current scope. Do not submit to CAB with stale tasks; the critical-path dates will be wrong.` };
+    const hint = leftShiftHint(s);
+    return { reply: `Gantt tab is active. Check the Critical Path (red CP badge) — any delay on those tasks pushes the go-live date. Set parallel tasks where possible to buy float.${hint ? '\n\n' + hint : ''}` };
   }
 
   if (/\b(closure|close out|post.?go.?live|closing)\b/.test(m)) {
-    if (!s.rtmSigned) return { reply: 'Closure unlocks after RTM sign-off. Complete the RTM tab first.' };
-    return { reply: 'Go to the Closure tab to tick off post-go-live checks and add final notes. Once all checks are done, mark the build as promoted.' };
+    if (!s.rtmSigned) return { reply: 'Closure is gated on RTM sign-off. Open the RTM tab, resolve all FAIL/PENDING rows, then sign off. Every row must be PASS or N/A.' };
+    return { reply: 'Closure checklist is active. Confirm: monitoring alerts validated, backup test completed, rollback plan documented, stakeholder post-go-live sign-off received. Once all items are ticked, promote the system to live.' };
   }
 
   // ── Risk score / risk tracker ──────────────────────────────────────────────

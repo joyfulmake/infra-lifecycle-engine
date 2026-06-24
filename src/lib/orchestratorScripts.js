@@ -269,7 +269,7 @@ export function generateScript(s) {
           'normal', ['positivity:high'], 400),
         l('Should I review those defaults before applying?',
           'normal', ['curiosity:high'], 200),
-        g('Always. Open the System Design tab and step through each of the eight sections. When every field looks right, click Generate Task Plan — this builds your task schedule and locks the design in one step. If you want to skip task generation, use Apply Design instead.',
+        g('Always review, never skip. Open System Design and step through all eight sections — pay particular attention to TLS version, backup RPO/RTO, and SIEM. Those three are the most common CAB rejection triggers. When every field is set, click Generate Task Plan to lock the design and build the Gantt schedule in one action.',
           'slow', ['positivity:medium'], 0),
       ],
     };
@@ -300,11 +300,11 @@ export function generateScript(s) {
     nextAction: 'Select hardware, OS, DB, and App in the sidebar',
     nextTab: null,
     lines: [
-      g('Welcome to OpsManifest. I will guide you through the full infrastructure lifecycle — stack selection, design, incident triage, CAB approval, RTM sign-off, and go-live closure.',
+      g('I am OpsMentor — your embedded infrastructure lifecycle advisor. I read your entire build at every phase and surface the risks that matter, before they become blockers.',
         'slow', ['positivity:high'], 600),
-      l('Where do we start?',
+      l('What should I enter first?',
         'normal', ['curiosity:high'], 300),
-      g('In the left sidebar, select your hardware platform, operating system, database, and application tier. Then run the AI Smart Scan to check compatibility and generate your design baseline.',
+      g('Start in the left sidebar: Hardware, OS, Database, and Application. I cross-check for EOL dates and compatibility conflicts the moment each field is set. Once all four are in, I run the AI Smart Scan and generate your design baseline automatically.',
         'slow', ['positivity:medium'], 0),
     ],
   };

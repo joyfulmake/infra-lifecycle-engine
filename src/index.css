@@ -49,14 +49,15 @@
 
   body {
     margin: 0;
-    background-color: #F8FAFC;
+    background-color: #F1F5F9;
     color: #111827;
     font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    font-weight: 450;
-    line-height: 1.55;
+    font-size: 13.5px;
+    font-weight: 440;
+    line-height: 1.57;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.005em;
   }
   #root { width: 100%; height: 100vh; overflow: hidden; }
 }
@@ -67,13 +68,16 @@
   }
   .tab-btn {
     @apply px-4 py-2.5 text-xs font-semibold text-slate-500 rounded-t-lg border-b-2 border-transparent
-           transition-all duration-150 whitespace-nowrap hover:text-slate-700 hover:bg-slate-50;
-    letter-spacing: 0.02em;
+           transition-all duration-150 whitespace-nowrap hover:text-slate-700 hover:bg-slate-50/80;
+    letter-spacing: 0.025em;
+    font-size: 11.5px;
   }
   .tab-btn-active {
     color: var(--app-accent);
     border-bottom-color: var(--app-accent);
     background: var(--app-accent-soft);
+    font-weight: 700;
+    letter-spacing: 0.03em;
   }
   .btn-primary {
     @apply bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-md hover:bg-slate-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed w-full;
@@ -116,11 +120,16 @@
   .badge-blue  { @apply bg-blue-100 text-blue-700; }
 
   .exec-kpi-tile {
-    @apply rounded-xl border px-4 py-3 min-w-0 bg-white;
+    @apply rounded-xl border px-4 py-3 min-w-0;
+    background: white;
     border-color: var(--app-accent-border);
-    transition: box-shadow 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02);
+    transition: box-shadow 0.2s, transform 0.2s;
   }
-  .exec-kpi-tile:hover { box-shadow: 0 2px 12px var(--app-accent-soft); }
+  .exec-kpi-tile:hover {
+    box-shadow: 0 4px 16px var(--app-accent-soft), 0 1px 4px rgba(0,0,0,0.06);
+    transform: translateY(-1px);
+  }
 
   .milestone-line { @apply h-0.5 flex-shrink-0 mb-5; background: var(--app-accent-border); }
   .milestone-line.done { background: var(--app-accent); }
@@ -131,28 +140,29 @@
   z-index: 9999;
   background: white;
   border: 1px solid #E2E8F0;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.12);
-  max-height: 180px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  max-height: 200px;
   overflow-y: auto;
   min-width: 240px;
 }
 .suggest-item {
-  padding: 7px 12px;
-  font-size: 13px;
+  padding: 8px 14px;
+  font-size: 12.5px;
   cursor: pointer;
   border-bottom: 1px solid #F1F5F9;
   color: #374151;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 .suggest-item:hover, .suggest-item.highlight {
   background: #F0FDFA;
   color: #0D9488;
 }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(3px); }

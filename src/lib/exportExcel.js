@@ -106,6 +106,7 @@ function sheetBuilder(cols) {
     const ws = buildSheet(rows);
     ws['!cols'] = cols;
     if (merges.length) ws['!merges'] = [...(ws['!merges'] || []), ...merges];
+    applyRowHeights(ws);
     return ws;
   }
 
@@ -128,6 +129,18 @@ function buildSheet(rows) {
   });
   ref.e.r = rows.length - 1;
   ws['!ref'] = XLSX.utils.encode_range(ref);
+  return ws;
+}
+
+// Set minimum row heights so wrapped text is never clipped.
+// hdrHpx = header row height in px; dataHpx = data row height in px.
+function applyRowHeights(ws, hdrHpx = 24, dataHpx = 20) {
+  const ref = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+  const heights = [];
+  for (let r = ref.s.r; r <= ref.e.r; r++) {
+    heights.push({ hpx: r === 0 ? hdrHpx : dataHpx });
+  }
+  ws['!rows'] = heights;
   return ws;
 }
 
@@ -211,7 +224,7 @@ export function exportExcel(state) {
       [c('Production Status', ST.LABEL), c(promoted ? 'PROMOTED' : 'PENDING', promoted ? ST.PASS : ST.AMBER_V), '', c(promoted ? 'System live in production' : 'Awaiting cutover', ST.BODY)],
     ]);
     ws['!cols'] = [{ width: 28 }, { width: 38 }, { width: 28 }, { width: 38 }];
-    ws['!rows'] = [{ hpx: 24 }];
+    applyRowHeights(ws);
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
       { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
@@ -276,6 +289,7 @@ export function exportExcel(state) {
     ];
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 50 }, { width: 5 }, { width: 5 }, { width: 5 }, { width: 30 }, { width: 45 }];
+    applyRowHeights(ws);
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
       ...[2, 4, 6, 8, 10, 12, 14, 16, 18, 19].map(r => ({ s: { r, c: 0 }, e: { r, c: 3 } })),
@@ -321,6 +335,7 @@ export function exportExcel(state) {
     });
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 18 }, { width: 35 }, { width: 55 }, { width: 14 }, { width: 40 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'Platform Topology');
   }
@@ -542,6 +557,7 @@ export function exportExcel(state) {
     }
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 12 }, { width: 60 }, { width: 28 }, { width: 28 }, { width: 12 }, { width: 55 }, { width: 45 }, { width: 45 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'Incidents');
   }
@@ -595,6 +611,7 @@ export function exportExcel(state) {
     }
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 14 }, { width: 65 }, { width: 14 }, { width: 35 }, { width: 14 }, { width: 55 }, { width: 55 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'UUM Items');
   }
@@ -838,6 +855,7 @@ export function exportExcel(state) {
 
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 14 }, { width: 65 }, { width: 14 }, { width: 60 }, { width: 12 }, { width: 22 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'RAID Registry');
   }
@@ -921,6 +939,7 @@ export function exportExcel(state) {
 
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 38 }, ...roles.map(() => ({ width: 13 }))];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: roles.length } }];
     XLSX.utils.book_append_sheet(wb, ws, 'RACI Matrix');
   }
@@ -947,6 +966,7 @@ export function exportExcel(state) {
     });
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 16 }, { width: 40 }, { width: 20 }, { width: 12 }, { width: 22 }, { width: 60 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'Emergency Changes');
   }
@@ -972,6 +992,7 @@ export function exportExcel(state) {
     });
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 55 }, { width: 60 }, { width: 12 }, { width: 14 }, { width: 12 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'OpsMentor Tasks');
   }
@@ -1028,6 +1049,7 @@ export function exportExcel(state) {
 
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 45 }, { width: 25 }, { width: 12 }, { width: 16 }, { width: 55 }, { width: 16 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'Vulnerability Registry');
   }
@@ -1051,6 +1073,7 @@ export function exportExcel(state) {
     });
     const ws = buildSheet(rows);
     ws['!cols'] = [{ width: 20 }, { width: 20 }, { width: 65 }, { width: 14 }, { width: 22 }];
+    applyRowHeights(ws);
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
     XLSX.utils.book_append_sheet(wb, ws, 'Audit Log');
   }

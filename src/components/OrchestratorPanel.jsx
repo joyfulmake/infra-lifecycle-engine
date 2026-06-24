@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 // ── Pre-built command token set — O(1) per word vs O(regex_count × text_len) ──
 // Words/phrases that signal the user is issuing a command, not answering a field prompt.
@@ -34,7 +34,7 @@ import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
-import { sendChatMessage, ruleBasedResponse, parseRelativeDate, parseCompoundDateRange } from '../lib/orchestratorChat.js';
+import { sendChatMessage, ruleBasedResponse, parseRelativeDate, parseCompoundDateRange, scanInputLive } from '../lib/orchestratorChat.js';
 import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
 // ── Message bubble ────────────────────────────────────────────────────────────
@@ -241,6 +241,7 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const [chipsField,  setChipsField]  = useState(null); // 'hw'|'os'|'db'|'app'|'envType'|null
   const [fullscreen,  setFullscreen]  = useState(false);
   const [collapsed,   setCollapsed]   = useState(initialCollapsed);
+  const [liveHints,   setLiveHints]   = useState(null); // { eol, compat, detected } from scanInputLive
 
   // Notify parent (App.jsx) when collapsed state changes so container can resize
   const onCollapsedChangeRef = useRef(onCollapsedChange);
@@ -254,6 +255,10 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const pendingConfirmRef = useRef(null);
   // Tracks compat rule IDs confirmed this session — prevents re-prompting the same risk
   const acknowledgedCompatIds = useRef(new Set());
+  // Rate limiter: timestamps of recent LLM calls — max 10 per minute
+  const msgTimestampsRef = useRef([]);
+  // Live input scanner timer
+  const liveHintTimerRef = useRef(null);
 
   // Always-current refs to avoid stale closures in timers
   const userNameRef       = useRef('');
@@ -846,11 +851,22 @@ Rules:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length, open]);
 
-  // Cancel inactivity timer when user starts typing
+  // Cancel inactivity timer when user starts typing; trigger live keyword scan with 280ms debounce
   const handleInputChange = useCallback((e) => {
     clearTimeout(inactivityTimerRef.current);
     nudgeSentRef.current = true; // suppress nudge once typing starts
-    setInput(e.target.value);
+    const val = e.target.value;
+    setInput(val);
+    // Live scan: debounce to avoid scanning on every keystroke
+    clearTimeout(liveHintTimerRef.current);
+    if (val.length < 4) { setLiveHints(null); return; }
+    liveHintTimerRef.current = setTimeout(() => {
+      try {
+        const hints = scanInputLive(val, sRef.current?.ctx);
+        const hasHints = hints.eol.length > 0 || hints.compat.length > 0 || Object.keys(hints.detected).length > 0;
+        setLiveHints(hasHints ? hints : null);
+      } catch { setLiveHints(null); }
+    }, 280);
   }, []);
 
   // When docked, always open immediately — no button needed
@@ -1217,6 +1233,19 @@ Rules:
     goLiveDate:       "What's the target go-live date? (type a date e.g. 2026-11-30 or use the sidebar date picker)",
     sla:              'SLA tier — Tier 1 (99.99%), Tier 2 (99.9%), or Tier 3 (99.5%)?',
   };
+  // Editable placeholder text shown in the input when the agent is awaiting a specific field.
+  // User sees a pre-filled suggestion they can modify or replace entirely before sending.
+  const FIELD_PLACEHOLDERS = {
+    hw:               'e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9',
+    os:               'e.g. RHEL 8.6, Ubuntu 22.04 LTS, Windows Server 2022, AIX 7.2',
+    db:               'e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022',
+    app:              'e.g. WebSphere 9.0, JBoss EAP 7.4, Apache Tomcat 10, nginx',
+    projectName:      'e.g. Q3 Server Migration — Oracle to PostgreSQL',
+    envType:          'e.g. Production',
+    projectStartDate: 'e.g. 2026-09-01 or "in 2 weeks" or "next Monday"',
+    goLiveDate:       'e.g. 2026-11-30 or "Q4 2026" or "in 3 months"',
+    sla:              'e.g. Tier 1 (99.99%)',
+  };
   const FIELD_CTX_MAP = {
     hw: 'hardware', os: 'OS', db: 'database', app: 'application',
   };
@@ -1281,7 +1310,24 @@ Rules:
     const text = input.trim();
     if (!text || thinking) return;
 
+    // Duplicate-send guard: ignore if identical to the last user message sent
+    const lastUser = messagesRef.current.filter(m => m.role === 'user').slice(-1)[0];
+    if (lastUser?.text?.trim().toLowerCase() === text.toLowerCase()) {
+      setInput('');
+      return;
+    }
+
+    // Rate limit: max 12 LLM messages per 60 seconds
+    const now = Date.now();
+    msgTimestampsRef.current = msgTimestampsRef.current.filter(t => now - t < 60000);
+    if (msgTimestampsRef.current.length >= 12) {
+      setMessages(m => [...m, { id: nextId(), role: 'nudge', text: 'Slow down a moment — I\'m still processing your last few requests. Try again in a few seconds.' }]);
+      return;
+    }
+    msgTimestampsRef.current.push(now);
+
     setInput('');
+    setLiveHints(null);
 
     // First reply = user's name
     if (awaitingNameRef.current) {
@@ -1760,6 +1806,27 @@ Rules:
             </div>
           )}
 
+          {/* Live hints strip — shown while typing when keywords detected */}
+          {liveHints && (
+            <div className="px-4 pb-1.5 flex flex-wrap gap-1.5">
+              {Object.entries(liveHints.detected).map(([k, v]) => (
+                <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200">
+                  <span className="font-bold">{k.toUpperCase()}</span> {v}
+                </span>
+              ))}
+              {liveHints.eol.map((e, i) => (
+                <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${e.severity === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  ⚠ EOL: {e.short} ({e.eolDate})
+                </span>
+              ))}
+              {liveHints.compat.map((r, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                  🔴 {r.title.slice(0, 48)}{r.title.length > 48 ? '…' : ''}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Input */}
           <div className="orch-input-area flex gap-2 px-4 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
             <textarea
@@ -1767,7 +1834,11 @@ Rules:
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything…"
+              placeholder={
+                awaitingFieldRef.current && FIELD_PLACEHOLDERS[awaitingFieldRef.current]
+                  ? FIELD_PLACEHOLDERS[awaitingFieldRef.current]
+                  : 'Ask anything about your build…'
+              }
               disabled={thinking}
               rows={1}
               className="orch-input flex-1 resize-none text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 placeholder:text-slate-400 disabled:opacity-50 transition-all"

@@ -317,6 +317,19 @@ export function executeAction(action, store) {
 
 // ── Compact state context for Groq ────────────────────────────────────────────
 
+// Strip characters that could be used for prompt injection from user-supplied free text.
+// Removes angle brackets, backtick blocks, and "ignore/forget/disregard" trigger phrases.
+function sanitizeForLlm(text, maxLen = 120) {
+  if (!text) return '';
+  return String(text)
+    .replace(/<[^>]*>/g, '')                            // no HTML / XML tags
+    .replace(/`{1,3}[\s\S]*?`{1,3}/g, '')              // no code blocks
+    .replace(/\b(ignore|forget|disregard|override|bypass|pretend|act as|you are now|system prompt|assistant:)\b.*/gi, '') // injection phrases
+    .replace(/[\x00-\x1F\x7F]/g, ' ')                  // no control chars
+    .trim()
+    .slice(0, maxLen);
+}
+
 export function buildStateContext(s, authUser) {
   const isPM     = !!(authUser?.email && authUser.email === s.requirements?.pmEmail);
   const userRoles = getUserRolesForBuild(authUser, s.roleAssignments || {});
@@ -347,11 +360,11 @@ export function buildStateContext(s, authUser) {
 
   return {
     phase,
-    stack:    `${s.ctx?.hw || '?'}/${s.ctx?.os || '?'}/${s.ctx?.db || '?'}/${s.ctx?.app || '?'}`,
-    project:  s.requirements?.projectName || 'Unnamed',
-    envType:  s.requirements?.envType     || 'Production',
-    goLive:   s.requirements?.goLiveDate  || 'not set',
-    sla:      s.requirements?.sla         || 'not set',
+    stack:    `${sanitizeForLlm(s.ctx?.hw, 40) || '?'}/${sanitizeForLlm(s.ctx?.os, 40) || '?'}/${sanitizeForLlm(s.ctx?.db, 40) || '?'}/${sanitizeForLlm(s.ctx?.app, 40) || '?'}`,
+    project:  sanitizeForLlm(s.requirements?.projectName, 80) || 'Unnamed',
+    envType:  sanitizeForLlm(s.requirements?.envType, 30)      || 'Production',
+    goLive:   sanitizeForLlm(s.requirements?.goLiveDate, 20)   || 'not set',
+    sla:      sanitizeForLlm(s.requirements?.sla, 30)          || 'not set',
     incidents: s.selInc?.length || 0,
     uumItems:  s.selUUM?.length || 0,
     rtmCounts,
