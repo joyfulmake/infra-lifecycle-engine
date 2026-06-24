@@ -220,6 +220,77 @@
     border-radius: 12px; padding: 14px 20px;
   }
   .ver-strip .ver-label { font-size: 17px; font-weight: 700; letter-spacing: 0.07em; color: var(--teal2); margin-bottom: 10px; }
+
+  /* ── Comparison table ── */
+  .comp-table { border-collapse: collapse; width: 100%; }
+  .comp-table th, .comp-table td { padding: 7px 11px; }
+  .ct-feat {
+    background: rgba(255,255,255,0.06); color: #94A3B8;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+    text-align: left; width: 190px; white-space: nowrap;
+  }
+  .ct-om {
+    background: rgba(20,184,166,0.14); border-left: 3px solid #14B8A6;
+    color: #2DD4BF; font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.06em; font-weight: 700; text-align: center; width: 120px;
+  }
+  .ct-tool {
+    background: rgba(255,255,255,0.035); color: #64748B;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    font-weight: 600; text-align: center;
+  }
+  .ct-feat-cell {
+    background: rgba(255,255,255,0.025); border-top: 1px solid rgba(255,255,255,0.05);
+    color: #DDE6F0; font-weight: 500; font-size: 15px; white-space: nowrap;
+  }
+  .ct-yes {
+    color: #2DD4BF; font-weight: 800; font-size: 15px; text-align: center;
+    background: rgba(20,184,166,0.07); border-top: 1px solid rgba(255,255,255,0.05);
+    border-left: 2px solid rgba(20,184,166,0.25);
+  }
+  .ct-no {
+    color: #F87171; font-weight: 700; font-size: 15px; text-align: center;
+    background: rgba(239,68,68,0.04); border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .ct-partial {
+    color: #FCD34D; font-weight: 600; font-size: 13px; text-align: center;
+    background: rgba(245,158,11,0.04); border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .ct-expensive {
+    color: #FCD34D; font-weight: 600; font-size: 13px; text-align: center;
+    background: rgba(245,158,11,0.04); border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .comp-wrap {
+    max-width: 1040px; width: 100%; overflow-x: auto;
+    border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  /* ── Voice button ── */
+  #voiceBtn {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    color: var(--muted);
+    cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+    backdrop-filter: blur(8px);
+  }
+  #voiceBtn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.25); color: var(--text); }
+  #voiceBtn.speaking {
+    background: rgba(20,184,166,0.15);
+    border-color: rgba(20,184,166,0.5);
+    color: var(--teal2);
+    animation: voicePulse 1.2s ease-in-out infinite;
+  }
+  #voiceBtn svg .voice-wave { transition: opacity 0.3s; opacity: 0.25; }
+  #voiceBtn svg .voice-wave-big { transition: opacity 0.3s; opacity: 0; }
+  #voiceBtn.speaking svg .voice-wave { opacity: 1; }
+  #voiceBtn.speaking svg .voice-wave-big { opacity: 0.7; }
+  @keyframes voicePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(20,184,166,0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(20,184,166,0); }
+  }
 </style>
 </head>
 <body>
@@ -229,7 +300,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 1 — Title
   ══════════════════════════════════════════════════════ -->
-  <div class="slide active" id="s0">
+  <div class="slide active" id="s0" data-voice-text="OpsManifest is a practitioner-grade infrastructure lifecycle engine that walks infra teams through every stage of server provisioning — from hardware selection through CAB approval, RTM sign-off, and project closure. OpsMentor is an intelligent AI advisor that guides every step of the build. Start building as a guest immediately — no account, no card required.">
     <div class="logo">
       <div class="logo-mark">O</div>
       <div class="logo-text">OpsManifest</div>
@@ -239,7 +310,7 @@
     <p class="sub">
       A practitioner-grade guide for infra teams — from hardware selection through
       CAB approval, RTM sign-off, risk tracking, and project closure.
-      Now with <strong style="color:#fff;">OpsMentor</strong>: voice + text AI that sees and controls the entire build.
+      Now with <strong style="color:#fff;">OpsMentor</strong>: an intelligent AI advisor that guides every step of the build.
     </p>
     <div class="pills">
       <span class="pill pill-blue">No sign-in wall — build freely as guest</span>
@@ -253,7 +324,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 2 — OpsMentor
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s1">
+  <div class="slide" id="s1" data-voice-text="OpsMentor opens on your build and delivers a concise expert brief on the single most important risk — it does not narrate what you have already entered. It proactively adds RAID risks, Gantt tasks, and design fields the moment it spots a gap, before you ask. After every confirmed action, it tells you exactly what to do next in the workflow.">
     <div class="accent-bar" style="background:linear-gradient(90deg,#14B8A6,#3B82F6,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">OpsMentor — Embedded AI Advisor</div>
     <h2>Opens with an expert read — not a status report</h2>
@@ -264,7 +335,7 @@
         <div class="feat-list fl1">
           <div class="feat"><div class="feat-dot" style="background:#2DD4BF;"></div><span>Opens on any build and delivers a 2–4 sentence expert brief on the single most important risk — no narration of what you entered</span></div>
           <div class="feat"><div class="feat-dot" style="background:#2DD4BF;"></div><span>Proactively adds RAID risks, Gantt tasks, and Design fields the moment it spots a gap — before you ask</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Voice-enabled: Azure Neural TTS speaks the assessment as it arrives</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Smart transitions: after every confirmed action, tells you exactly what to do next in the workflow</span></div>
         </div>
       </div>
 
@@ -298,7 +369,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 3 — Full Workflow + CMDB
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s2">
+  <div class="slide" id="s2" data-voice-text="OpsManifest enforces seven workflow phases from build spec to go-live, including a 240-field System Design auto-filled from stack selection, Gantt with Critical Path and change-period blocks, and a 14-sheet styled Excel export. Live EOL data from the endoflife.date API keeps you ahead of end-of-life surprises for over 500 products.">
     <div class="accent-bar" style="background:linear-gradient(90deg,#3B82F6,#14B8A6,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">Seven-Phase Workflow · Live EOL Intelligence</div>
     <h2>From build spec to go-live — every gate enforced, every date tracked</h2>
@@ -376,7 +447,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 4 — Risk Intelligence (simplified, no dense mockups)
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s3">
+  <div class="slide" id="s3" data-voice-text="Every tab feeds the risk picture automatically. The Risk Tracker aggregates signals from EOL data, the Vulnerability Registry, stale Gantt, RAID log, and coherence alerts into one scored view. Nothing slips through — and OpsMentor reads the risk score on demand in plain English.">
     <div class="accent-bar" style="background:linear-gradient(90deg,#EF4444,#F59E0B,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">Risk · Vulnerability · Cost — Always in Sync</div>
     <h2>Every tab feeds the risk picture — nothing slips through</h2>
@@ -422,7 +493,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 5 — FSM Intelligence + Cross-Stack Matrix
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s4">
+  <div class="slide" id="s4" data-voice-text="Every task in OpsManifest is modelled as a physical state change — with hardware dimension, pre-condition, exec engine, post-validation, blast radius, and downstream dependencies all derived automatically. The Cross-Stack Dependency Matrix maps all eight infrastructure layers so you know exactly what breaks if any task fails.">
     <div class="accent-bar" style="width:80px;height:6px;"></div>
     <div class="eyebrow">FSM Task Intelligence · Cross-Stack Dependency Matrix</div>
     <h2>Every task is a physical state change — blast radius mapped before cutover</h2>
@@ -493,9 +564,101 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════════
-       SLIDE 6 — Get Started / CTA
+       SLIDE 6 — Why OpsManifest? (Competitive Analysis)
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s5">
+  <div class="slide" id="s5" data-voice-text="OpsManifest is the only tool built specifically for infrastructure lifecycle management. Unlike MS Planner, JIRA, ServiceNow, Confluence, or Monday dot com, it provides phase gates, CAB approval, RTM sign-off, live EOL data for over 500 products, and a cross-tab AI coherence engine — all free to use with zero installation. Day one ready: no implementation project required.">
+    <div class="accent-bar" style="background:linear-gradient(90deg,#2DD4BF,#3B82F6,#8B5CF6);width:80px;height:6px;"></div>
+    <div class="eyebrow">Why OpsManifest?</div>
+    <h2 style="font-size:clamp(28px,3.6vw,48px);margin-bottom:14px;">Built for infra — not bolted on to a generic PM tool</h2>
+
+    <div class="comp-wrap">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th class="ct-feat">Feature</th>
+            <th class="ct-om">OpsManifest</th>
+            <th class="ct-tool">MS Planner</th>
+            <th class="ct-tool">JIRA</th>
+            <th class="ct-tool">ServiceNow</th>
+            <th class="ct-tool">Confluence</th>
+            <th class="ct-tool">Monday.com</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ct-feat-cell">Infra lifecycle phase gates</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
+            <td class="ct-partial">Partial</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">CAB approval workflow</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">RTM sign-off tracking</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
+            <td class="ct-no">✗</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">Live EOL data (500+ products)</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+            <td class="ct-no">✗</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">AI coherence engine (cross-tab)</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+            <td class="ct-partial">Partial</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">RAID log integrated</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
+            <td class="ct-partial">Partial</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">14-sheet Excel export</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+            <td class="ct-expensive">Expensive</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">Free guest use</td>
+            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+            <td class="ct-no">✗</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">No installation / setup</td>
+            <td class="ct-yes">✓</td><td class="ct-partial">Partial</td><td class="ct-partial">Partial</td>
+            <td class="ct-no">✗</td><td class="ct-partial">Partial</td><td class="ct-partial">Partial</td>
+          </tr>
+          <tr>
+            <td class="ct-feat-cell">Role-based access control</td>
+            <td class="ct-yes">✓</td><td class="ct-partial">Partial</td><td class="ct-yes">✓</td>
+            <td class="ct-yes">✓</td><td class="ct-partial">Partial</td><td class="ct-partial">Partial</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:14px;margin-top:16px;flex-wrap:wrap;justify-content:center;">
+      <div style="background:rgba(20,184,166,0.12);border:1px solid rgba(20,184,166,0.3);border-radius:12px;padding:11px 18px;text-align:center;min-width:190px;">
+        <div style="font-size:24px;font-weight:800;color:#2DD4BF;line-height:1.1;">7</div>
+        <div style="font-size:13px;color:#94A3B8;margin-top:3px;line-height:1.45;">workflow gates automated<br>vs 0 in Planner/Confluence</div>
+      </div>
+      <div style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:12px;padding:11px 18px;text-align:center;min-width:190px;">
+        <div style="font-size:24px;font-weight:800;color:#60A5FA;line-height:1.1;">500+</div>
+        <div style="font-size:13px;color:#94A3B8;margin-top:3px;line-height:1.45;">live EOL signatures<br>vs 0 in JIRA/Monday</div>
+      </div>
+      <div style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);border-radius:12px;padding:11px 18px;text-align:center;min-width:220px;">
+        <div style="font-size:24px;font-weight:800;color:#C4B5FD;line-height:1.1;">Day 1</div>
+        <div style="font-size:13px;color:#94A3B8;margin-top:3px;line-height:1.45;">ready — no implementation project<br>vs 6–18 months for ServiceNow</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 7 — Get Started / CTA
+  ══════════════════════════════════════════════════════ -->
+  <div class="slide" id="s6" data-voice-text="OpsManifest is live now at opsmanifest.pages.dev. No account needed — start building as a guest immediately. Pro features including cloud sync and OpsMentor are available on a 14-day demo. Pick a stack, run a Smart Scan, and walk the full lifecycle in minutes.">
     <div class="accent-bar" style="background:linear-gradient(90deg,#14B8A6,#3B82F6);width:80px;height:6px;"></div>
     <div class="eyebrow">Get Started — No Account Needed</div>
     <h2>See it in action — live at opsmanifest.pages.dev</h2>
@@ -545,17 +708,26 @@
 
 </div><!-- /deck -->
 
-<div class="counter"><span id="cur">1</span> / <span id="total">6</span></div>
+<div class="counter"><span id="cur">1</span> / <span id="total">7</span></div>
 <div class="kbd-hint">← → or click to navigate</div>
 <div class="nav">
   <button id="prev" onclick="go(-1)" disabled>← Prev</button>
   <div class="dots" id="dots"></div>
   <button id="next" onclick="go(1)">Next →</button>
+  <button id="voiceBtn" title="Enable voice narration" onclick="toggleVoice()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+      <path class="voice-wave" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+      <path class="voice-wave-big" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+    </svg>
+  </button>
 </div>
 
 <script>
   const slides = Array.from(document.querySelectorAll('.slide'));
   let cur = 0;
+  let voiceActive = false;
+  const voiceBtn = document.getElementById('voiceBtn');
 
   const dots = document.getElementById('dots');
   slides.forEach((_, i) => {
@@ -565,6 +737,29 @@
     dots.appendChild(d);
   });
 
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.95; utt.pitch = 1.0; utt.lang = 'en-US';
+    utt.onend = () => voiceBtn.classList.remove('speaking');
+    voiceBtn.classList.add('speaking');
+    speechSynthesis.speak(utt);
+  }
+
+  function toggleVoice() {
+    voiceActive = !voiceActive;
+    if (!voiceActive) {
+      speechSynthesis.cancel();
+      voiceBtn.classList.remove('speaking');
+      voiceBtn.title = 'Enable voice narration';
+    } else {
+      voiceBtn.title = 'Stop narration';
+      const text = slides[cur].dataset.voiceText;
+      if (text) speak(text);
+    }
+  }
+
   function update() {
     slides.forEach((s, i) => { s.className = 'slide' + (i === cur ? ' active' : ''); });
     document.querySelectorAll('.dot').forEach((d, i) => d.className = 'dot' + (i === cur ? ' on' : ''));
@@ -572,6 +767,10 @@
     document.getElementById('total').textContent = slides.length;
     document.getElementById('prev').disabled = cur === 0;
     document.getElementById('next').disabled = cur === slides.length - 1;
+    if (voiceActive) {
+      const text = slides[cur].dataset.voiceText;
+      if (text) speak(text);
+    }
   }
 
   function go(d) { jump(cur + d); }
