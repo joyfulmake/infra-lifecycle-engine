@@ -166,7 +166,7 @@ export default function PmTabs() {
     <div className="flex flex-col h-full min-h-0">
       {/* Revision mode banner */}
       {s.unlockedForRevision && (
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+        <div className="flex items-center gap-2 px-6 py-2 bg-amber-50 border-b border-amber-200 flex-shrink-0">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 animate-pulse" />
           <span className="text-xs text-amber-700 font-semibold">Revision Mode</span>
           <span className="text-xs text-amber-600">— All tabs unlocked. Update scope, design, or tasks then resubmit to CAB from the sidebar.</span>
@@ -174,7 +174,7 @@ export default function PmTabs() {
       )}
 
       {/* Tab bar */}
-      <div className="flex items-end gap-0.5 px-4 pt-2 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
+      <div className="flex items-end gap-1 px-6 pt-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
         {TABS.map(tab => {
           const unlocked = isTabUnlocked(tab);
           const isActive = activeTab === tab.id;
@@ -197,7 +197,7 @@ export default function PmTabs() {
             >
               {tab.label}
               {isNext && (
-                <span className="inline-block ml-1 text-xs bg-teal-500 text-white font-bold rounded px-1 py-0 leading-tight animate-pulse">
+                <span className="inline-block ml-1 text-xs text-white font-bold rounded px-1 py-0 leading-tight animate-pulse" style={{ background: 'var(--app-accent)' }}>
                   Next
                 </span>
               )}
@@ -210,7 +210,7 @@ export default function PmTabs() {
                 <span className="inline-block ml-1 w-1.5 h-1.5 rounded-full bg-amber-400 align-middle animate-pulse" title="Needs attention" />
               )}
               {showInsightDot && (
-                <span className="inline-block ml-0.5 w-1.5 h-1.5 rounded-full bg-blue-400 align-middle" title={`${insightCount} agent insight(s)`} />
+                <span className="inline-block ml-0.5 w-1.5 h-1.5 rounded-full align-middle" style={{ background: 'var(--app-accent)' }} title={`${insightCount} agent insight(s)`} />
               )}
               {tab.id === 'exec' && s.promoted && (
                 <span className="inline-block ml-1 text-xs bg-green-100 text-green-700 font-bold rounded px-1 py-0 leading-tight">Live</span>
@@ -226,7 +226,7 @@ export default function PmTabs() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden px-0.5">
         <TabContent activeTab={activeTab} />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PhasePanel from './components/PhasePanel.jsx';
 import ExecOverview from './components/ExecOverview.jsx';
 import PmTabs from './components/PmTabs.jsx';
@@ -6,12 +6,27 @@ import AuthModal from './components/AuthModal.jsx';
 import DemoTour from './components/DemoTour.jsx';
 import OrchestratorPanel from './components/OrchestratorPanel.jsx';
 import { useAuth } from './lib/AuthContext.jsx';
+import { useStore } from './store/useStore.js';
 
 export default function App() {
   const { showAuthModal, setShowAuthModal, authModalReason } = useAuth();
   // Start collapsed on viewports too narrow for all three panels (sidebar 320 + center ≥ 400 + panel 360 = 1080 min).
   const initialCollapsed = window.innerWidth < 1100;
   const [mentorCollapsed, setMentorCollapsed] = useState(initialCollapsed);
+  const ctx = useStore(s => s.ctx);
+
+  useEffect(() => {
+    const db = (ctx?.db || '').toLowerCase();
+    const os = (ctx?.os || '').toLowerCase();
+    const hw = (ctx?.hw || '').toLowerCase();
+    let theme = '';
+    if (/oracle/.test(db)) theme = 'oracle';
+    else if (/aix/.test(os) || /power/.test(hw)) theme = 'aix';
+    else if (/sql.?server|mssql/.test(db)) theme = 'mssql';
+    else if (/postgres|pg\b/.test(db)) theme = 'postgres';
+    else if (/rhel|red.?hat/.test(os)) theme = 'rhel';
+    document.documentElement.setAttribute('data-stack-theme', theme);
+  }, [ctx]);
 
   return (
     <>

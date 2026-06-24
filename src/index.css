@@ -23,6 +23,18 @@
 }
 
 @layer base {
+  :root {
+    --app-accent: #0D9488;
+    --app-accent-2: #14B8A6;
+    --app-accent-soft: rgba(13,148,136,0.08);
+    --app-accent-border: rgba(13,148,136,0.2);
+  }
+  [data-stack-theme="oracle"]   { --app-accent:#F97316; --app-accent-2:#FB923C; --app-accent-soft:rgba(249,115,22,0.08); --app-accent-border:rgba(249,115,22,0.22); }
+  [data-stack-theme="aix"]      { --app-accent:#8B5CF6; --app-accent-2:#A78BFA; --app-accent-soft:rgba(139,92,246,0.08); --app-accent-border:rgba(139,92,246,0.22); }
+  [data-stack-theme="mssql"]    { --app-accent:#3B82F6; --app-accent-2:#60A5FA; --app-accent-soft:rgba(59,130,246,0.08); --app-accent-border:rgba(59,130,246,0.22); }
+  [data-stack-theme="postgres"] { --app-accent:#0EA5E9; --app-accent-2:#38BDF8; --app-accent-soft:rgba(14,165,233,0.08); --app-accent-border:rgba(14,165,233,0.22); }
+  [data-stack-theme="rhel"]     { --app-accent:#DC2626; --app-accent-2:#EF4444; --app-accent-soft:rgba(220,38,38,0.08); --app-accent-border:rgba(220,38,38,0.22); }
+
   * { box-sizing: border-box; }
 
   /* WCAG 2.1 AA: visible focus ring for keyboard navigation */
@@ -54,10 +66,14 @@
     @apply bg-white border border-slate-200 rounded-lg;
   }
   .tab-btn {
-    @apply px-3 py-2 text-xs font-semibold text-slate-500 border-b-2 border-transparent transition-all duration-150 whitespace-nowrap hover:text-slate-700;
+    @apply px-4 py-2.5 text-xs font-semibold text-slate-500 rounded-t-lg border-b-2 border-transparent
+           transition-all duration-150 whitespace-nowrap hover:text-slate-700 hover:bg-slate-50;
+    letter-spacing: 0.02em;
   }
   .tab-btn-active {
-    @apply text-teal border-teal;
+    color: var(--app-accent);
+    border-bottom-color: var(--app-accent);
+    background: var(--app-accent-soft);
   }
   .btn-primary {
     @apply bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-md hover:bg-slate-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed w-full;
@@ -98,6 +114,16 @@
   .badge-slate { @apply bg-slate-100 text-slate-600; }
   .badge-green { @apply bg-green-100 text-green-700; }
   .badge-blue  { @apply bg-blue-100 text-blue-700; }
+
+  .exec-kpi-tile {
+    @apply rounded-xl border px-4 py-3 min-w-0 bg-white;
+    border-color: var(--app-accent-border);
+    transition: box-shadow 0.2s;
+  }
+  .exec-kpi-tile:hover { box-shadow: 0 2px 12px var(--app-accent-soft); }
+
+  .milestone-line { @apply h-0.5 flex-shrink-0 mb-5; background: var(--app-accent-border); }
+  .milestone-line.done { background: var(--app-accent); }
 }
 
 .suggest-dropdown {

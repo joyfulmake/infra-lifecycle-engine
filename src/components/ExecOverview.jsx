@@ -6,21 +6,20 @@ import { PLANS, promoDaysRemaining } from '../lib/auth.js';
 import { PLAN_BADGE } from './AuthModal.jsx';
 
 function KpiTile({ label, value, sub, color }) {
-  const colors = {
-    red:   'border-red-200 bg-red-50',
-    amber: 'border-amber-200 bg-amber-50',
-    teal:  'border-teal/30 bg-teal/5',
-    slate: 'border-slate-200 bg-white',
-    green: 'border-green-200 bg-green-50',
-  };
   const valueColors = {
     red: 'text-red-600', amber: 'text-amber-600', teal: 'text-teal', slate: 'text-slate-700', green: 'text-green-700',
   };
+  const valueClass = valueColors[color] || valueColors.slate;
   return (
-    <div className={`rounded-lg border px-3 py-2 min-w-0 ${colors[color] || colors.slate}`}>
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide truncate">{label}</div>
-      <div className={`text-xl font-bold leading-tight mt-0.5 ${valueColors[color] || valueColors.slate}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-400 truncate">{sub}</div>}
+    <div className="exec-kpi-tile">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: 'var(--app-accent)' }} />
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest truncate">{label}</div>
+          <div className={`text-xl font-bold leading-tight ${valueClass}`}>{value}</div>
+        </div>
+      </div>
+      {sub && <div className="text-xs text-slate-400 truncate pl-3">{sub}</div>}
     </div>
   );
 }
@@ -28,7 +27,10 @@ function KpiTile({ label, value, sub, color }) {
 function MilestoneDot({ label, done }) {
   return (
     <div className="flex flex-col items-center gap-1 min-w-0">
-      <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${done ? 'bg-teal border-teal' : 'bg-white border-slate-300'}`}>
+      <div
+        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 ${done ? '' : 'bg-white border-slate-300'}`}
+        style={done ? { background: 'var(--app-accent)', borderColor: 'var(--app-accent)' } : {}}
+      >
         {done && <svg className="w-full h-full text-white p-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
       </div>
       <div className="text-xs text-slate-500 text-center leading-tight w-12">{label}</div>
@@ -72,7 +74,7 @@ export default function ExecOverview() {
           <div className="text-slate-500 text-sm">Build your platform topology in the left panel to begin</div>
           <div className="flex gap-2 justify-center mt-3 flex-wrap">
             {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(label => (
-              <span key={label} className="badge badge-slate text-xs">{label}</span>
+              <span key={label} className="badge badge-slate text-xs px-3 py-1" style={{ border: '1px solid var(--app-accent-border)' }}>{label}</span>
             ))}
           </div>
         </div>
@@ -134,9 +136,9 @@ export default function ExecOverview() {
   }
 
   return (
-    <div className="h-full bg-white border-b border-slate-200 px-4 py-3 flex gap-4 items-start">
+    <div className="h-full min-h-[96px] bg-white border-b border-slate-200 px-6 py-3 flex gap-4 items-start">
       {/* KPI Tiles */}
-      <div className="grid grid-cols-4 gap-2 flex-1 min-w-0 relative">
+      <div className="grid grid-cols-4 gap-3 flex-1 min-w-0 relative">
         <KpiTile
           label="Active Incidents"
           value={activeInc}
@@ -196,7 +198,7 @@ export default function ExecOverview() {
             <div key={m.label} className="flex items-center gap-0.5">
               <MilestoneDot label={m.label} done={m.done} />
               {i < milestones.length - 1 && (
-                <div className={`w-3 h-0.5 flex-shrink-0 mb-5 ${m.done && milestones[i+1].done ? 'bg-teal' : 'bg-slate-200'}`} />
+                <div className={`w-3 milestone-line ${m.done && milestones[i+1].done ? 'done' : ''}`} />
               )}
             </div>
           ))}
