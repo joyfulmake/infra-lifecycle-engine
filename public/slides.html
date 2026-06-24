@@ -278,32 +278,6 @@
     border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
   }
 
-  /* ── Voice button ── */
-  #voiceBtn {
-    width: 48px; height: 48px; border-radius: 50%;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.14);
-    color: var(--muted);
-    cursor: pointer; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.2s, border-color 0.2s, color 0.2s;
-    backdrop-filter: blur(8px);
-  }
-  #voiceBtn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.25); color: var(--text); }
-  #voiceBtn.speaking {
-    background: rgba(20,184,166,0.15);
-    border-color: rgba(20,184,166,0.5);
-    color: var(--teal2);
-    animation: voicePulse 1.2s ease-in-out infinite;
-  }
-  #voiceBtn svg .voice-wave { transition: opacity 0.3s; opacity: 0.25; }
-  #voiceBtn svg .voice-wave-big { transition: opacity 0.3s; opacity: 0; }
-  #voiceBtn.speaking svg .voice-wave { opacity: 1; }
-  #voiceBtn.speaking svg .voice-wave-big { opacity: 0.7; }
-  @keyframes voicePulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(20,184,166,0.4); }
-    50% { box-shadow: 0 0 0 8px rgba(20,184,166,0); }
-  }
 </style>
 </head>
 <body>
@@ -313,7 +287,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 1 — Title
   ══════════════════════════════════════════════════════ -->
-  <div class="slide active" id="s0" data-voice-text="OpsManifest is a practitioner-grade infrastructure lifecycle engine that walks infra teams through every stage of server provisioning — from hardware selection through CAB approval, RTM sign-off, and project closure. OpsMentor is an intelligent AI advisor that guides every step of the build. Start building as a guest immediately — no account, no card required.">
+  <div class="slide active" id="s0">
     <div class="logo">
       <div class="logo-mark">O</div>
       <div class="logo-text">OpsManifest</div>
@@ -337,7 +311,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 2 — OpsMentor
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s1" data-voice-text="OpsMentor opens on your build and delivers a concise expert brief on the single most important risk — it does not narrate what you have already entered. It proactively adds RAID risks, Gantt tasks, and design fields the moment it spots a gap, before you ask. After every confirmed action, it tells you exactly what to do next in the workflow.">
+  <div class="slide" id="s1">
     <div class="accent-bar" style="background:linear-gradient(90deg,#14B8A6,#3B82F6,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">OpsMentor — Embedded AI Advisor</div>
     <h2>Opens with an expert read — not a status report</h2>
@@ -382,7 +356,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 3 — Full Workflow + CMDB
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s2" data-voice-text="OpsManifest enforces seven workflow phases from build spec to go-live, including a 240-field System Design auto-filled from stack selection, Gantt with Critical Path and change-period blocks, and a 14-sheet styled Excel export. Live EOL data from the endoflife.date API keeps you ahead of end-of-life surprises for over 500 products.">
+  <div class="slide" id="s2">
     <div class="accent-bar" style="background:linear-gradient(90deg,#3B82F6,#14B8A6,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">Seven-Phase Workflow · Live EOL Intelligence</div>
     <h2>From build spec to go-live — every gate enforced, every date tracked</h2>
@@ -460,7 +434,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 4 — Risk Intelligence (simplified, no dense mockups)
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s3" data-voice-text="Every tab feeds the risk picture automatically. The Risk Tracker aggregates signals from EOL data, the Vulnerability Registry, stale Gantt, RAID log, and coherence alerts into one scored view. Nothing slips through — and OpsMentor reads the risk score on demand in plain English.">
+  <div class="slide" id="s3">
     <div class="accent-bar" style="background:linear-gradient(90deg,#EF4444,#F59E0B,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">Risk · Vulnerability · Cost — Always in Sync</div>
     <h2>Every tab feeds the risk picture — nothing slips through</h2>
@@ -506,7 +480,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 5 — FSM Intelligence + Cross-Stack Matrix
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s4" data-voice-text="Every task in OpsManifest is modelled as a physical state change — with hardware dimension, pre-condition, exec engine, post-validation, blast radius, and downstream dependencies all derived automatically. The Cross-Stack Dependency Matrix maps all eight infrastructure layers so you know exactly what breaks if any task fails.">
+  <div class="slide" id="s4">
     <div class="accent-bar" style="width:80px;height:6px;"></div>
     <div class="eyebrow">FSM Task Intelligence · Cross-Stack Dependency Matrix</div>
     <h2>Every task is a physical state change — blast radius mapped before cutover</h2>
@@ -579,7 +553,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 6 — Why OpsManifest? (Competitive Analysis)
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s5" data-voice-text="OpsManifest is the only tool built specifically for infrastructure lifecycle management. Unlike MS Planner, JIRA, ServiceNow, Confluence, or Monday dot com, it provides phase gates, CAB approval, RTM sign-off, live EOL data for over 500 products, and a cross-tab AI coherence engine — all free to use with zero installation. Day one ready: no implementation project required.">
+  <div class="slide" id="s5">
     <div class="accent-bar" style="background:linear-gradient(90deg,#2DD4BF,#3B82F6,#8B5CF6);width:80px;height:6px;"></div>
     <div class="eyebrow">Competitive Analysis — Slide 6 of 7</div>
     <h2 style="font-size:clamp(28px,3.6vw,48px);margin-bottom:14px;">Built for infra — not bolted on to a generic PM tool</h2>
@@ -671,7 +645,7 @@
   <!-- ══════════════════════════════════════════════════════
        SLIDE 7 — Get Started / CTA
   ══════════════════════════════════════════════════════ -->
-  <div class="slide" id="s6" data-voice-text="OpsManifest is live now at opsmanifest.pages.dev. No account needed — start building as a guest immediately. Pro features including cloud sync and OpsMentor are available on a 14-day demo. Pick a stack, run a Smart Scan, and walk the full lifecycle in minutes.">
+  <div class="slide" id="s6">
     <div class="accent-bar" style="background:linear-gradient(90deg,#14B8A6,#3B82F6);width:80px;height:6px;"></div>
     <div class="eyebrow">Get Started — No Account Needed</div>
     <h2>See it in action — live at opsmanifest.pages.dev</h2>
@@ -727,20 +701,11 @@
   <button id="prev" onclick="go(-1)" disabled>← Prev</button>
   <div class="dots" id="dots"></div>
   <button id="next" onclick="go(1)">Next →</button>
-  <button id="voiceBtn" title="Enable voice narration" onclick="toggleVoice()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-      <path class="voice-wave" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-      <path class="voice-wave-big" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-    </svg>
-  </button>
 </div>
 
 <script>
   const slides = Array.from(document.querySelectorAll('.slide'));
   let cur = 0;
-  let voiceActive = false;
-  const voiceBtn = document.getElementById('voiceBtn');
 
   const dots = document.getElementById('dots');
   slides.forEach((_, i) => {
@@ -750,29 +715,6 @@
     dots.appendChild(d);
   });
 
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 0.95; utt.pitch = 1.0; utt.lang = 'en-US';
-    utt.onend = () => voiceBtn.classList.remove('speaking');
-    voiceBtn.classList.add('speaking');
-    speechSynthesis.speak(utt);
-  }
-
-  function toggleVoice() {
-    voiceActive = !voiceActive;
-    if (!voiceActive) {
-      speechSynthesis.cancel();
-      voiceBtn.classList.remove('speaking');
-      voiceBtn.title = 'Enable voice narration';
-    } else {
-      voiceBtn.title = 'Stop narration';
-      const text = slides[cur].dataset.voiceText;
-      if (text) speak(text);
-    }
-  }
-
   function update() {
     slides.forEach((s, i) => { s.className = 'slide' + (i === cur ? ' active' : ''); });
     document.querySelectorAll('.dot').forEach((d, i) => d.className = 'dot' + (i === cur ? ' on' : ''));
@@ -780,10 +722,6 @@
     document.getElementById('total').textContent = slides.length;
     document.getElementById('prev').disabled = cur === 0;
     document.getElementById('next').disabled = cur === slides.length - 1;
-    if (voiceActive) {
-      const text = slides[cur].dataset.voiceText;
-      if (text) speak(text);
-    }
   }
 
   function go(d) { jump(cur + d); }
