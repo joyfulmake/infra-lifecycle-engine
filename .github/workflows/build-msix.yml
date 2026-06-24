@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.4.0.0'
+        default: '2.5.0.0'
 
 jobs:
   build-msix:
@@ -139,6 +139,37 @@ jobs:
             Write-Error "FATAL: crossorigin attributes remain in index.html after stripping. Vite output format may have changed."
             exit 1
           }
+
+      - name: Remove web-only files and strip manifest link from MSIX package
+        shell: powershell
+        run: |
+          # ── Remove files that are only meaningful on the web host ──────────────
+          # demo.html: contains new AudioContext() — even inside click handlers,
+          # some WebView2 builds (26200.8655) pre-compile or eagerly evaluate all
+          # scripts found in the package root, triggering a native renderer crash.
+          # _headers / 404.html: Cloudflare Pages config, irrelevant in MSIX.
+          $remove = @("demo.html", "_headers", "404.html")
+          foreach ($f in $remove) {
+            Remove-Item "msix\$f" -ErrorAction SilentlyContinue
+            Write-Host "Removed msix\$f"
+          }
+
+          # ── Strip <link rel="manifest"> from index.html ───────────────────────
+          # PWA manifest is meaningless inside an MSIX package (the app is already
+          # installed). On WebView2 26200.8655 the manifest fetch triggers internal
+          # state-machine transitions in the renderer that can produce a native
+          # crash (Error: N/A) before any JS executes.
+          $htmlPath = "msix\index.html"
+          $html = Get-Content $htmlPath -Raw -Encoding UTF8
+          $before = $html
+          $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="manifest"[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''manifest''[^>]*/>', '')
+          if ($html -eq $before) {
+            Write-Warning "manifest link not found in index.html — check template"
+          } else {
+            Write-Host "Stripped <link rel=manifest> from index.html"
+          }
+          Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
 
       - name: Write AppxManifest.xml
         shell: powershell
