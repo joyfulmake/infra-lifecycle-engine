@@ -1,4 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+
+// ── Pre-built command token set — O(1) per word vs O(regex_count × text_len) ──
+// Words/phrases that signal the user is issuing a command, not answering a field prompt.
+// Compiled once at module load; checked by splitting the message into words.
+const COMMAND_TOKENS = new Set([
+  'build','build it','build now','run scan','scan','skip','next','cancel','help',
+  'status','what','done','ready','inject','submit cab','sign rtm','go live','promote',
+  'ai scan','add','set','update','log','record','note','track','create','insert',
+  'risk','task','issue','decision','assumption','gantt','raid','design','incident',
+  'uum','field','section','network','storage','backup','security','server','firewall',
+  'load balancer','tls','ssl','certificate','patch','monitoring','alert','sla','rto',
+  'rpo','add to','update in','set in','change in','what is','what are','show me',
+  'how do','explain','describe','list','overview','summary',
+]);
+// Single-word trigger prefixes — message starts with these AND is > 10 chars
+const COMMAND_PREFIXES = new Set(['add','set','update','log','note','create','show','explain']);
+
+function isCommandMessage(tl) {
+  // Fast path: split into unigrams and bigrams, check against Set
+  const words = tl.split(/\s+/);
+  for (const w of words) {
+    if (COMMAND_TOKENS.has(w)) return true;
+  }
+  // Bigram check
+  for (let i = 0; i < words.length - 1; i++) {
+    if (COMMAND_TOKENS.has(`${words[i]} ${words[i + 1]}`)) return true;
+  }
+  // Prefix check: starts with command word + long enough to not be a field value
+  if (COMMAND_PREFIXES.has(words[0]) && tl.length > 10) return true;
+  return false;
+}
 import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
@@ -1318,14 +1349,9 @@ Rules:
     if (awField && !awaitingNameRef.current) {
       const tl = text.toLowerCase().trim();
 
-      // Let workflow commands AND free-form content commands escape the field interview
-      const isCommand = /^(build|build it|build now|run scan|scan|skip|next|cancel|help|status|what|done|ready)(\s|$)/.test(tl)
-        || /\b(run scan|ai scan|inject|submit cab|sign rtm|go live|promote)\b/.test(tl)
-        // Dynamic content: user is adding/setting something to a specific section
-        || /\b(add|set|update|log|record|note|track|create|insert)\b.{0,30}\b(risk|task|issue|decision|assumption|gantt|raid|design|incident|uum|field|section|network|storage|backup|security|server|firewall|load balancer|tls|ssl|certificate|patch|monitoring|alert|sla|rto|rpo)\b/.test(tl)
-        || /\b(add to|update in|set in|change in)\b.{0,20}\b(gantt|raid|design|rtm|system|closure|exec)\b/.test(tl)
-        // Raw free-form commands like "add a task for load testing"
-        || /^(add|set|update|log|note|create)\b/.test(tl) && tl.length > 10;
+      // Let workflow commands AND free-form content commands escape the field interview.
+      // Uses pre-built COMMAND_TOKENS Set — O(words) not O(regex_count × text_length).
+      const isCommand = isCommandMessage(tl);
 
       if (!isCommand) {
         // Date fields — check for compound range first ("from today to 3 months")

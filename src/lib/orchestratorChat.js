@@ -5,7 +5,7 @@
 import { GROQ_WORKER_URL as CARTESIA_WORKER_URL } from './groqConfig.js';
 import { generateScript } from './orchestratorScripts.js';
 import { computeAllRisks, riskScore, riskLabel } from './riskEngine.js';
-import { checkCompatibility, checkCompatibilityForText } from './compatibilityRules.js';
+import { checkCompatibility, checkCompatibilityForText, COMPAT_RULES } from './compatibilityRules.js';
 
 // ── Relative date parser — understands natural language date inputs ────────────
 // Returns ISO "YYYY-MM-DD" string or null if not recognised.
@@ -211,12 +211,43 @@ const STAKEHOLDER_CHECKS = [
   },
 ];
 
+// ── Pre-built indexes — computed once at module load, O(1) per field lookup ───
+
+// EOL_INDEX: field → EOL_KNOWN entries for that field
+const EOL_INDEX = new Map();
+EOL_KNOWN.forEach(e => {
+  if (!EOL_INDEX.has(e.field)) EOL_INDEX.set(e.field, []);
+  EOL_INDEX.get(e.field).push(e);
+});
+
+// STAKEHOLDER_INDEX: field → STAKEHOLDER_CHECKS entries for that field
+const STAKEHOLDER_INDEX = new Map();
+STAKEHOLDER_CHECKS.forEach(c => {
+  if (!STAKEHOLDER_INDEX.has(c.field)) STAKEHOLDER_INDEX.set(c.field, []);
+  STAKEHOLDER_INDEX.get(c.field).push(c);
+});
+
 function getStakeholderChecks(field, value) {
-  return STAKEHOLDER_CHECKS.filter(c => c.field === field && c.pattern.test(value));
+  return (STAKEHOLDER_INDEX.get(field) || []).filter(c => c.pattern.test(value));
 }
 
+// checkEolForField — O(entries for this field) instead of O(all EOL_KNOWN)
 function checkEolForField(field, value) {
-  return EOL_KNOWN.filter(e => e.field === field && e.pattern.test(value));
+  return (EOL_INDEX.get(field) || []).filter(e => e.pattern.test(value));
+}
+
+// checkEolForCtx — check all four stack fields in one pass, returns flat array of hits.
+// Each hit is augmented with the field key so callers can group or deduplicate.
+function checkEolForCtx(ctx) {
+  const hits = [];
+  for (const [field, entries] of EOL_INDEX) {
+    const val = ctx?.[field];
+    if (!val) continue;
+    for (const e of entries) {
+      if (e.pattern.test(val)) hits.push({ ...e, _field: field, _value: val });
+    }
+  }
+  return hits;
 }
 
 // Check full stack for any EOL hits
@@ -475,6 +506,40 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
           ? `\n\nStill needed: **${missing.map(k => ({ hw: 'Hardware', os: 'OS', db: 'Database', app: 'Application' }[k])).join(', ')}** — tell me or select from the sidebar.`
           : '\n\nAll four stack fields are set. Ready to click **Build Environment** in the sidebar.';
 
+        // Build merged ctx to check compat NOW — not on the next message
+        const mergedCtx = { ...(s.ctx || {}), ...Object.fromEntries(ctxFields.map(k => [k, desc[k]])) };
+        const prevCompatIdSet = new Set(checkCompatibility(s.ctx || {}).map(r => r.id));
+        const mergedCompatHits = checkCompatibility(mergedCtx)
+          .filter(r => !acknowledgedCompatIds?.has(r.id) && !prevCompatIdSet.has(r.id));
+
+        // EOL check across all detected ctx fields — single pass via checkEolForCtx
+        const mergedEolHits = checkEolForCtx(mergedCtx).filter(h => ctxFields.includes(h._field));
+
+        if (mergedCompatHits.length > 0) {
+          const compatLines = mergedCompatHits.map(r => {
+            const sev = r.severity === 'critical' ? '🔴' : r.severity === 'warn' ? '⚠' : 'ℹ';
+            return `${sev} ${r.title}`;
+          });
+          lines.push('', ...compatLines);
+          mergedCompatHits.forEach(r => {
+            (r.compatFix?.alternatives || []).forEach(alt => {
+              actions.push({
+                type: 'SET_CTX',
+                description: `Switch to ${alt.label}`,
+                params: { key: alt.ctxKey, value: alt.ctxValue },
+                requiresConfirmation: true,
+                confirmLabel: `Use ${alt.ctxValue}`,
+              });
+            });
+          });
+        }
+
+        if (mergedEolHits.length > 0) {
+          mergedEolHits.forEach(h => {
+            lines.push(`⚠️ EOL: ${h.short} — ${h.eolDate}`);
+          });
+        }
+
         const chips = missing.length
           ? []
           : [{ label: 'Run AI Smart Scan', action: 'OPEN_SCAN' }];
@@ -559,11 +624,19 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
     const next = nextPhase1Prompt({ ...s, ctx: updatedCtx });
     const allFilled = !!(updatedCtx.hw && updatedCtx.os && updatedCtx.db && updatedCtx.app);
 
-    // EOL / incompatibility detection
+    // EOL check — O(entries for this field) via pre-built index
     const eolHits = checkEolForField(ctxField.field, ctxField.value);
     const eolWarnings = eolHits.map(h =>
       `⚠️ EOL DETECTED: "${ctxField.value}" matches "${h.short}" — ${h.description} (EOL: ${h.eolDate})`
     ).join('\n');
+
+    // Compat check against updatedCtx — catches conflicts the moment the field is set,
+    // not one message later. Filter out rules already acknowledged this session.
+    const newCompatHits = checkCompatibility(updatedCtx)
+      .filter(r => !acknowledgedCompatIds?.has(r.id));
+    const prevCompatIds = new Set(checkCompatibility(s.ctx || {}).map(r => r.id));
+    // Only surface conflicts that are NEW after this field was set (not pre-existing)
+    const freshCompatHits = newCompatHits.filter(r => !prevCompatIds.has(r.id));
 
     const actions = [
       {
@@ -682,8 +755,29 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
       ? 'Stack complete — running AI Smart Scan now.'
       : next || '';
 
+    // Fresh compat conflicts — surface immediately, not one message later
+    let compatNote = '';
+    if (freshCompatHits.length > 0) {
+      compatNote = freshCompatHits.map(r => {
+        const sev = r.severity === 'critical' ? '🔴 CRITICAL' : r.severity === 'warn' ? '⚠ WARNING' : 'ℹ Info';
+        return `${sev}: ${r.title}\n${r.detail}`;
+      }).join('\n\n');
+      // Add compat fix alternatives as confirmation actions
+      freshCompatHits.forEach(r => {
+        (r.compatFix?.alternatives || []).forEach(alt => {
+          actions.push({
+            type: 'SET_CTX',
+            description: `Switch to ${alt.label}`,
+            params: { key: alt.ctxKey, value: alt.ctxValue },
+            requiresConfirmation: true,
+            confirmLabel: `Use ${alt.ctxValue}`,
+          });
+        });
+      });
+    }
+
     // Only echo if there is risk content — never repeat what the user just typed
-    const riskContent = [eolNote, stakeholderNote].filter(Boolean).join('\n\n');
+    const riskContent = [compatNote, eolNote, stakeholderNote].filter(Boolean).join('\n\n');
     const reply = riskContent || nextNote || '';
 
     return { reply, actions };

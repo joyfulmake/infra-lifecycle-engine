@@ -188,9 +188,15 @@ export function executeAction(action, store) {
       break;
     }
 
-    case 'ADD_CUSTOM_TASK':
-      store.addCustomMentorTask(params);
+    case 'ADD_CUSTOM_TASK': {
+      // Dedup: skip if a mentor task with the same title (case-insensitive) already exists.
+      const normTitle = t => (t || '').toLowerCase().trim();
+      const existingTasks = useStore.getState().customMentorTasks || [];
+      const newTitle = normTitle(params.title || params.name || '');
+      const isTaskDupe = newTitle && existingTasks.some(t => normTitle(t.title || t.name || '') === newTitle);
+      if (!isTaskDupe) store.addCustomMentorTask(params);
       break;
+    }
 
     case 'ADD_SECTION_TASK': {
       const groupKey = params.groupKey;
@@ -200,25 +206,39 @@ export function executeAction(action, store) {
       break;
     }
 
-    case 'ADD_RAID_ENTRY':
-      store.addCustomRaidEntry(params);
+    case 'ADD_RAID_ENTRY': {
+      // Dedup: skip if an entry with the same normalised description already exists.
+      // normalise = lowercase, strip punctuation, collapse whitespace to 30 chars.
+      const norm = s => (s || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      const existingRaid = useStore.getState().customRaidEntries || [];
+      const newNorm = norm(params.description || params.title || '');
+      const isDupe = newNorm && existingRaid.some(e => norm(e.description || e.title || '') === newNorm);
+      if (!isDupe) store.addCustomRaidEntry(params);
       break;
+    }
 
     case 'ADD_INCIDENT': {
       // params: { id, code, short, txt, grp, sev, owner, layers }
       const incId = params.id || params.code || `INC-MENTOR-${Date.now()}`;
-      const incRecord = {
-        id: incId,
-        code: incId,
-        short: params.short || params.title || incId,
-        txt: params.txt || params.description || params.short || '',
-        grp: params.grp || params.group || 'Custom',
-        sev: params.sev || params.severity || 'HIGH',
-        owner: params.owner || 'SysAdmin',
-        layers: params.layers || [],
-      };
-      store.addCustomInc(incRecord);
-      store.toggleInc(incId);
+      const shortLabel = params.short || params.title || incId;
+      // Dedup: skip if custom incident with same short label already exists
+      const normInc = s => (s || '').toLowerCase().trim();
+      const existingInc = useStore.getState().customInc || [];
+      const isIncDupe = existingInc.some(e => normInc(e.short || '') === normInc(shortLabel));
+      if (!isIncDupe) {
+        const incRecord = {
+          id: incId,
+          code: incId,
+          short: shortLabel,
+          txt: params.txt || params.description || params.short || '',
+          grp: params.grp || params.group || 'Custom',
+          sev: params.sev || params.severity || 'HIGH',
+          owner: params.owner || 'SysAdmin',
+          layers: params.layers || [],
+        };
+        store.addCustomInc(incRecord);
+        store.toggleInc(incId);
+      }
       break;
     }
 
