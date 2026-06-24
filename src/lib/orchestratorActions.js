@@ -110,6 +110,13 @@ export function executeAction(action, store) {
       break;
     }
 
+    case 'SET_REQUIREMENTS': {
+      // Batch requirement update — params is an object of { field: value } pairs
+      const freshReqs2 = useStore.getState().requirements || {};
+      store.setRequirements({ ...freshReqs2, ...params });
+      break;
+    }
+
     case 'SET_DESIGN_FIELD':
       store.setDesignField(params.section, params.field, params.value);
       break;

@@ -35,6 +35,40 @@ const LOCK_ICON = (
 const SEV_COLOR = { CRITICAL: 'text-red-800 bg-red-50 border-red-300', HIGH: 'text-orange-800 bg-orange-50 border-orange-300', MEDIUM: 'text-amber-800 bg-amber-50 border-amber-300', LOW: 'text-green-800 bg-green-50 border-green-300', INFO: 'text-sky-800 bg-sky-50 border-sky-300' };
 const SEV_BADGE = { CRITICAL: 'bg-red-600 text-white', HIGH: 'bg-orange-500 text-white', MEDIUM: 'bg-amber-500 text-white', LOW: 'bg-green-600 text-white', INFO: 'bg-sky-500 text-white' };
 
+// Flow visibility — tab chips shown under each phase section header.
+// Each chip navigates to the tab, greyed + lock when the tab isn't yet unlocked.
+function PhaseTabChips({ tabs, s }) {
+  return (
+    <div className="flex flex-wrap gap-1 mt-1 mb-2">
+      {tabs.map(({ id, label, check }) => {
+        const available = check(s);
+        return (
+          <button
+            key={id}
+            onClick={() => available && s.setActiveTab(id)}
+            disabled={!available}
+            title={available ? `Open ${label}` : 'Locked — complete this phase first'}
+            className={[
+              'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all',
+              available
+                ? 'bg-white/12 text-teal-300 hover:bg-white/20 border border-teal-700/40 cursor-pointer'
+                : 'bg-white/4 text-white/28 border border-white/10 cursor-not-allowed',
+            ].join(' ')}
+          >
+            {!available && (
+              <svg className="w-2.5 h-2.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+              </svg>
+            )}
+            {available && <span style={{ fontSize: 9 }}>→</span>}
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Floating suggestion dropdown rendered via Portal — works outside overflow:hidden ancestors
 function SuggestDropdown({ suggestions, onSelect, anchorEl, activeIdx = -1 }) {
   const [pos, setPos] = useState(null);
@@ -1043,6 +1077,12 @@ export default function PhasePanel() {
         {/* Phase 1 */}
         <div>
           <div className="section-hdr">1 · Phase 1 — Platform Topology</div>
+          <PhaseTabChips s={s} tabs={[
+            { id: 'exec',    label: 'Exec Summary', check: () => true },
+            { id: 'diagram', label: 'Infra Diagram', check: s => s.isBuilt },
+            { id: 'cmdb',    label: 'CMDB',          check: s => s.isBuilt },
+            { id: 'roles',   label: 'Roles',         check: s => s.isBuilt },
+          ]} />
 
           {/* Requirements */}
           <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white mb-1.5 flex items-center gap-1.5">
@@ -1236,6 +1276,9 @@ export default function PhasePanel() {
         {/* AI Scan */}
         <div>
           <div className="section-hdr">2 · AI Smart Scan</div>
+          <PhaseTabChips s={s} tabs={[
+            { id: 'design', label: 'System Design', check: s => s.scanComplete },
+          ]} />
           {!s.isBuilt ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Build environment first</div>
           ) : !s.scanComplete ? (
@@ -1279,6 +1322,12 @@ export default function PhasePanel() {
         {/* Phase 2 */}
         <div>
           <div className="section-hdr text-red-400 border-red-500 bg-red-500/5">3 · Phase 2 — Incidents + UUM</div>
+          <PhaseTabChips s={s} tabs={[
+            { id: 'gantt',  label: 'Gantt',  check: s => s.designApplied },
+            { id: 'raid',   label: 'RAID',   check: s => s.phase2Active },
+            { id: 'rtm',    label: 'RTM',    check: s => s.phase2Active },
+            { id: 'matrix', label: 'Matrix', check: s => s.phase2Active },
+          ]} />
           {!s.isBuilt ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Build environment first</div>
           ) : (
@@ -1648,6 +1697,10 @@ export default function PhasePanel() {
         {/* CAB Gate */}
         <div>
           <div className="section-hdr">4 · CAB Gate</div>
+          <PhaseTabChips s={s} tabs={[
+            { id: 'gantt', label: 'Review Gantt', check: s => s.phase2Active },
+            { id: 'rtm',   label: 'Review RTM',   check: s => s.phase2Active },
+          ]} />
           {!s.phase2Active ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Inject Phase 2 first</div>
           ) : (
@@ -1720,6 +1773,10 @@ export default function PhasePanel() {
         {/* RTM Sign-Off */}
         <div>
           <div className="section-hdr">5 · RTM Sign-Off</div>
+          <PhaseTabChips s={s} tabs={[
+            { id: 'rtm',     label: 'RTM Sign-Off', check: s => s.phase2Active },
+            { id: 'closure', label: 'Closure',       check: s => s.rtmSigned },
+          ]} />
           {!s.phase2Active ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Inject Phase 2 first</div>
           ) : (
@@ -1764,6 +1821,10 @@ export default function PhasePanel() {
         {/* Cutover */}
         <div>
           <div className="section-hdr">6 · Production Cutover</div>
+          <PhaseTabChips s={s} tabs={[
+            { id: 'closure', label: 'Closure Checklist', check: s => s.rtmSigned },
+            { id: 'exec',    label: 'Exec Summary (Live)', check: s => s.promoted },
+          ]} />
           {!s.rtmSigned ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1 mb-2">{LOCK_ICON} Complete RTM sign-off first</div>
           ) : (

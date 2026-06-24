@@ -310,11 +310,183 @@ function parseSetRequirement(m) {
   return null;
 }
 
+// ── Multi-field project description parser ────────────────────────────────────
+// Extracts hw/os/db/app/envType/goLiveDate/projectName from a single free-form sentence.
+// Returns { hw, os, db, app, envType, goLiveDate, projectName } — only fields found.
+function parseProjectDescription(text) {
+  const t = text;
+  const tl = t.toLowerCase();
+  const found = {};
+
+  // Hardware
+  const hwPat = [
+    [/dell\s+power(edge)?\s+[\w\d]+/i, m => m[0]],
+    [/dell\s+[\w\d]+/i, m => m[0]],
+    [/hpe?\s+(proliant\s+)?[\w\d]+/i, m => m[0]],
+    [/ibm\s+power\s*[\w\d]*/i, m => m[0]],
+    [/cisco\s+ucs[\s\w]*/i, m => m[0]],
+    [/lenovo\s+[\w\d]+/i, m => m[0]],
+    [/\bpower\s*[89]\b/i, m => 'IBM ' + m[0]],
+    [/\bx86\b/i, () => 'x86 Server'],
+  ];
+  for (const [pat, extract] of hwPat) {
+    const m = t.match(pat);
+    if (m) { found.hw = extract(m); break; }
+  }
+
+  // OS
+  const osPat = [
+    [/rhel\s*\d+[\.\d]*/i, m => m[0].replace(/rhel/i, 'RHEL ')],
+    [/red\s*hat[\s\w]*\d+[\.\d]*/i, m => m[0]],
+    [/ubuntu\s*\d+[\.\d]*/i, m => m[0].charAt(0).toUpperCase() + m[0].slice(1)],
+    [/windows\s+server\s*\d{4}/i, m => m[0]],
+    [/windows\s+server/i, () => 'Windows Server 2022'],
+    [/aix\s*\d+[\.\d]*/i, m => m[0].toUpperCase()],
+    [/\baix\b/i, () => 'AIX 7.2'],
+    [/centos\s*\d+[\.\d]*/i, m => m[0]],
+    [/sles?\s*\d+[\.\d]*/i, m => m[0].toUpperCase()],
+    [/oracle\s+linux\s*\d+[\.\d]*/i, m => m[0]],
+  ];
+  for (const [pat, extract] of osPat) {
+    const m = t.match(pat);
+    if (m) { found.os = extract(m); break; }
+  }
+
+  // Database
+  const dbPat = [
+    [/oracle\s*(db|database)?\s*\d+[cgi]?[\d.]*/i, m => m[0].replace(/oracle\s*(db|database)?\s*/i, 'Oracle ')],
+    [/oracle\s*\d+[cgi]/i, m => m[0]],
+    [/\boracle\b/i, () => 'Oracle 19c'],
+    [/postgresql\s*\d+[\.\d]*/i, m => m[0]],
+    [/postgres\s*\d+[\.\d]*/i, m => 'PostgreSQL ' + (m[0].match(/\d+[\.\d]*/)?.[0] || '16')],
+    [/\bpg\s+\d+\b/i, m => 'PostgreSQL ' + (m[0].match(/\d+/)?.[0] || '16')],
+    [/mysql\s*\d+[\.\d]*/i, m => m[0].charAt(0).toUpperCase() + m[0].slice(1)],
+    [/sql\s*server\s*\d{4}/i, m => 'SQL Server ' + (m[0].match(/\d{4}/)?.[0] || '2022')],
+    [/sql\s*server/i, () => 'SQL Server 2022'],
+    [/\bdb2\b/i, () => 'IBM DB2'],
+    [/mongodb\s*\d+[\.\d]*/i, m => 'MongoDB ' + (m[0].match(/\d+[\.\d]*/)?.[0] || '7.0')],
+    [/maria\s*db\s*\d+[\.\d]*/i, m => 'MariaDB ' + (m[0].match(/\d+[\.\d]*/)?.[0] || '10.11')],
+    [/\bsybase\b|\bsap\s+ase\b/i, () => 'SAP ASE (Sybase)'],
+  ];
+  for (const [pat, extract] of dbPat) {
+    const m = t.match(pat);
+    if (m) { found.db = extract(m); break; }
+  }
+
+  // App / middleware
+  const appPat = [
+    [/websphere\s*[\d.]+/i, m => 'IBM WebSphere ' + (m[0].match(/[\d.]+/)?.[0] || '9.0')],
+    [/\bwas\s+[\d.]+/i, m => 'IBM WebSphere ' + (m[0].match(/[\d.]+/)?.[0] || '9.0')],
+    [/jboss\s*(eap\s*)?[\d.]+/i, m => 'JBoss EAP ' + (m[0].match(/[\d.]+/)?.[0] || '7.4')],
+    [/tomcat\s*[\d.]+/i, m => 'Apache Tomcat ' + (m[0].match(/[\d.]+/)?.[0] || '10')],
+    [/\bnginx\b/i, () => 'nginx'],
+    [/\bapache\b/i, () => 'Apache HTTP Server'],
+    [/weblogic\s*[\d.]+/i, m => 'Oracle WebLogic ' + (m[0].match(/[\d.]+/)?.[0] || '14c')],
+    [/\biis\s*[\d]*/i, m => 'IIS' + (m[0].match(/[\d]+/)?.[0] ? ' ' + m[0].match(/[\d]+/)[0] : ' 10')],
+    [/liberty/i, () => 'IBM Liberty'],
+    [/spring\s*boot/i, () => 'Spring Boot'],
+  ];
+  for (const [pat, extract] of appPat) {
+    const m = t.match(pat);
+    if (m) { found.app = extract(m); break; }
+  }
+
+  // Environment type
+  if (/\bproduction\b|\bprod\b/i.test(tl)) found.envType = 'Production';
+  else if (/\buat\b|\buser acceptance\b/i.test(tl)) found.envType = 'UAT';
+  else if (/\bdr\b|\bdisaster recovery\b/i.test(tl)) found.envType = 'DR';
+  else if (/\bdev(elopment)?\b/i.test(tl)) found.envType = 'Dev';
+  else if (/\bsit\b|\bsystem integration\b/i.test(tl)) found.envType = 'SIT';
+  else if (/\bstaging\b/i.test(tl)) found.envType = 'UAT';
+
+  // Go-live date — look for "go live", "cutover", "target", "by", "deadline", month names
+  const goliveMatch = tl.match(/(?:go.?live|cutover|target|deadline|by)\s+([a-z]+\s*\d{0,4}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i)
+    || tl.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{4})/i);
+  if (goliveMatch) {
+    const raw = goliveMatch[1] || `${goliveMatch[1]} ${goliveMatch[2]}`;
+    const parsed = parseRelativeDate(raw);
+    if (parsed) found.goLiveDate = parsed;
+  }
+
+  // Project name — look for "project:", "build:", "call it", "named"
+  const nameMatch = t.match(/(?:project|build|call it|project name)\s*(?:is|:|=|named)?\s*["']?([A-Za-z0-9][\w\s\-]{2,40}?)["']?(?:\s*[,.]|$)/i);
+  if (nameMatch) found.projectName = nameMatch[1].trim();
+
+  return found;
+}
+
+// Is this message a "describe my project" style sentence rather than a single field command?
+// Triggered by: 2+ stack fields detected in one message, or explicit planning language.
+function isProjectDescription(text, found) {
+  const fieldCount = ['hw', 'os', 'db', 'app'].filter(k => found[k]).length;
+  const tl = text.toLowerCase();
+  const planningKeywords = /\b(plan|planning|setting up|migrate|migration|new build|project|kick.?off|provision)\b/i.test(tl);
+  return fieldCount >= 2 || (fieldCount >= 1 && planningKeywords && Object.keys(found).length >= 2);
+}
+
 // acknowledgedCompatIds: optional Set of rule IDs already confirmed this session —
 // previously-acknowledged compat risks are skipped rather than re-prompted.
 export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   const m = message.toLowerCase().trim();
   const raw = message.trim();
+
+  // ── Multi-field "describe my project" intake ─────────────────────────────────
+  // Detects when the user provides 2+ stack fields (or 1 field + planning language) in
+  // a single sentence, e.g. "Dell PowerEdge, Oracle 19c, RHEL 8, production, go live Aug"
+  // Fills all detected fields at once and summarises what was understood.
+  {
+    const desc = parseProjectDescription(raw);
+    if (isProjectDescription(raw, desc)) {
+      const ctxFields = ['hw', 'os', 'db', 'app'].filter(k => desc[k]);
+      const reqFields = ['envType', 'goLiveDate', 'projectName'].filter(k => desc[k]);
+
+      if (ctxFields.length + reqFields.length >= 2) {
+        const actions = [];
+        const lines = [];
+
+        ctxFields.forEach(k => {
+          actions.push({
+            type: 'SET_CTX',
+            description: `Set ${k.toUpperCase()} to ${desc[k]}`,
+            params: { key: k, value: desc[k] },
+            requiresConfirmation: false,
+          });
+          const label = { hw: 'Hardware', os: 'OS', db: 'Database', app: 'Application' }[k];
+          lines.push(`${label}: **${desc[k]}**`);
+        });
+
+        if (reqFields.length > 0) {
+          const reqPatch = {};
+          reqFields.forEach(k => {
+            reqPatch[k] = desc[k];
+            const label = { envType: 'Environment', goLiveDate: 'Go-Live', projectName: 'Project Name' }[k];
+            lines.push(`${label}: **${desc[k]}**`);
+          });
+          actions.push({
+            type: 'SET_REQUIREMENTS',
+            description: 'Apply project requirements',
+            params: reqPatch,
+            requiresConfirmation: false,
+          });
+        }
+
+        const missing = ['hw', 'os', 'db', 'app'].filter(k => !desc[k] && !s.ctx?.[k]);
+        const missingMsg = missing.length
+          ? `\n\nStill needed: **${missing.map(k => ({ hw: 'Hardware', os: 'OS', db: 'Database', app: 'Application' }[k])).join(', ')}** — tell me or select from the sidebar.`
+          : '\n\nAll four stack fields are set. Ready to click **Build Environment** in the sidebar.';
+
+        const chips = missing.length
+          ? []
+          : [{ label: 'Run AI Smart Scan', action: 'OPEN_SCAN' }];
+
+        return {
+          reply: `Got it — here's what I picked up:\n\n${lines.join('\n')}${missingMsg}`,
+          actions,
+          chips,
+        };
+      }
+    }
+  }
 
   // ── Systemic compatibility scan ─────────────────────────────────────────────
   // Only fires when the message text itself contains stack/platform keywords

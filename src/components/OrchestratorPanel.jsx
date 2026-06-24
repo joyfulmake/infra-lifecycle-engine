@@ -8,7 +8,7 @@ import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function Bubble({ msg }) {
+function Bubble({ msg, onChipClick }) {
   const isUser   = msg.role === 'user';
   const isResult = msg.role === 'result';
   const isLog    = msg.role === 'log';
@@ -52,13 +52,28 @@ function Bubble({ msg }) {
           style={{ fontSize: 9, fontWeight: 800, background: 'linear-gradient(135deg, #0f172a 0%, #0d4f4f 100%)' }}
         >AI</div>
       )}
-      <div className={[
-        'rounded-xl px-3.5 py-2.5 text-sm leading-relaxed max-w-[85%]',
-        isUser
-          ? 'bg-gradient-to-br from-teal-600 to-teal-700 text-white rounded-tr-sm shadow-sm'
-          : 'orch-bubble-ai bg-slate-50 text-slate-800 rounded-tl-sm border-l-2 border-teal-500 shadow-sm',
-      ].join(' ')}>
-        {msg.text}
+      <div className="flex flex-col gap-1.5 max-w-[85%]">
+        <div className={[
+          'rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
+          isUser
+            ? 'bg-gradient-to-br from-teal-600 to-teal-700 text-white rounded-tr-sm shadow-sm'
+            : 'orch-bubble-ai bg-slate-50 text-slate-800 rounded-tl-sm border-l-2 border-teal-500 shadow-sm',
+        ].join(' ')}>
+          {msg.text}
+        </div>
+        {!isUser && msg.chips && msg.chips.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pl-0.5">
+            {msg.chips.map((chip, i) => (
+              <button
+                key={i}
+                onClick={() => onChipClick?.(chip)}
+                className="px-3 py-1 rounded-full text-xs font-semibold border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
+              >
+                {chip.label} →
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1388,13 +1403,13 @@ Rules:
       const fast = ruleBasedResponse(text, s, authUser, acknowledgedCompatIds.current);
       if (fast) {
         setThinking(false);
-        const { reply, actions = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
+        const { reply, actions = [], chips: fastChips = [], _pendingTask } = typeof fast === 'string' ? { reply: fast } : fast;
         if (_pendingTask) pendingTaskRef.current = _pendingTask;
         const immediate = actions.filter(a => !a.requiresConfirmation);
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
         if (immediate.length > 0) applyActions(immediate);
         // Skip empty bubbles — actions already do the work and will log a result pill
-        if (reply) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+        if (reply) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply, chips: fastChips }]);
         if (needsConfirm.length > 0) {
           setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
         }
@@ -1609,7 +1624,17 @@ Rules:
                   onCancel={handleCancel}
                 />
               ) : (
-                <Bubble key={msg.id} msg={msg} />
+                <Bubble
+                  key={msg.id}
+                  msg={msg}
+                  onChipClick={chip => {
+                    if (chip.action === 'OPEN_SCAN') {
+                      window.dispatchEvent(new CustomEvent('opsmanifest-run-scan'));
+                    } else if (chip.action === 'NAVIGATE_TAB' && chip.tab) {
+                      store.setActiveTab(chip.tab);
+                    }
+                  }}
+                />
               )
             )}
             {thinking && (
