@@ -1460,12 +1460,58 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   }
 
   // ── Add task to Gantt ──────────────────────────────────────────────────────
-  const addTaskMatch = raw.match(/\badd task[:\s]+(.+)/i) || raw.match(/\bnew task[:\s]+(.+)/i) || raw.match(/\bcreate task[:\s]+(.+)/i);
+  const addTaskMatch = raw.match(/\badd task[:\s]+(.+)/i)
+    || raw.match(/\bnew task[:\s]+(.+)/i)
+    || raw.match(/\bcreate task[:\s]+(.+)/i)
+    || raw.match(/\btask[:\s]+add[:\s]+(.+)/i);
   if (addTaskMatch) {
-    const title = addTaskMatch[1].trim();
+    const rawTitle = addTaskMatch[1].trim();
+    // Parse optional hours from title: "4h", "~8 hours", etc.
+    const hoursMatch = rawTitle.match(/[~≈]?(\d+)\s*h(?:ours?)?/i);
+    const est_hours = hoursMatch ? parseInt(hoursMatch[1]) : 4;
+    const cleanTitle = rawTitle.replace(/[~≈]?\d+\s*h(?:ours?)?/i, '').replace(/\s*[-—]\s*(under|in|for)\s+(db|database|unix|os|web|storage|backup|network|security|monitoring|qa)\b.*/i, '').trim().replace(/\s+/g, ' ');
+
+    // Group detection from task title keywords
+    const TASK_GROUPS = [
+      { pattern: /\b(db|database|oracle|postgres|mysql|sql\s?server|mssql|mongodb|sybase)\b/i, group: 'database', label: 'Database' },
+      { pattern: /\b(unix|linux|os|rhel|aix|solaris|windows\s+server|kernel|patching|os\s+update)\b/i, group: 'unix', label: 'Unix / OS' },
+      { pattern: /\b(web|nginx|apache|iis|tomcat|app\s?server|weblogic|jboss|was|websphere|node)\b/i, group: 'web', label: 'Web / App Server' },
+      { pattern: /\b(storage|san|nas|volume|lun|nfs|disk|filesystem|mount|vg|lvm)\b/i, group: 'storage', label: 'Storage' },
+      { pattern: /\b(backup|restore|recovery|snapshot|rman|bacula|veeam|archive|rpo|rto)\b/i, group: 'backup', label: 'Backup / Recovery' },
+      { pattern: /\b(network|firewall|vlan|dns|lb|load.?balance|switchover|routing|ip\s?range)\b/i, group: 'network', label: 'Network' },
+      { pattern: /\b(security|cert|tls|ssl|certificate|iam|privilege|siem|hardening|scan|vulnerability)\b/i, group: 'security', label: 'Security' },
+      { pattern: /\b(monitor|alert|grafana|nagios|zabbix|splunk|log|metric|observability|apm)\b/i, group: 'monitoring', label: 'Monitoring' },
+      { pattern: /\b(test|qa|uat|regression|smoke|validation|verify|sign.?off|acceptance)\b/i, group: 'qa', label: 'QA / Testing' },
+    ];
+    // Also check explicit "under X" suffix in raw input
+    const underMatch = rawTitle.match(/[-—]\s*(under|in|for|group[:\s]+)\s*(.+)/i);
+    const explicitGroup = underMatch ? TASK_GROUPS.find(g => g.pattern.test(underMatch[2])) : null;
+    const detected = explicitGroup || TASK_GROUPS.find(g => g.pattern.test(cleanTitle));
+
+    if (detected) {
+      const taskId = `mentor-${Date.now()}`;
+      return {
+        reply: '',
+        actions: [{
+          type: 'ADD_CUSTOM_TASK',
+          description: `Add "${cleanTitle}" to ${detected.label} (~${est_hours}h)`,
+          params: { id: taskId, title: cleanTitle, est_hours, group: detected.group, notes: 'Added via OpsMentor', addedAt: new Date().toISOString() },
+          requiresConfirmation: false,
+        }, {
+          type: 'NAVIGATE_TAB',
+          description: 'Go to Gantt',
+          params: { tab: 'gantt' },
+          requiresConfirmation: false,
+        }],
+      };
+    }
+
+    // Group not detected — ask with clear prompt
     return {
-      reply: `Gantt or RAID?`,
-      _pendingTask: title,
+      reply: `I'll add **"${cleanTitle}"** (~${est_hours}h) to the Gantt. Which group should it belong to?\n\n` +
+        `**DB** · **Unix/OS** · **Web** · **Storage** · **Backup** · **Network** · **Security** · **Monitoring** · **QA**\n\n` +
+        `You can also type: *"add task: ${cleanTitle} — under Security"*`,
+      _pendingTask: { title: cleanTitle, est_hours },
     };
   }
 

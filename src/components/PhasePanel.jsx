@@ -1072,10 +1072,10 @@ export default function PhasePanel() {
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-6">
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
 
         {/* Phase 1 */}
-        <div>
+        <div className={`sidebar-section ${s.isBuilt ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
           <div className="section-hdr">1 · Phase 1 — Platform Topology</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'exec',    label: 'Exec Summary', check: () => true },
@@ -1274,7 +1274,7 @@ export default function PhasePanel() {
         </div>
 
         {/* AI Scan */}
-        <div>
+        <div className={`sidebar-section ${!s.isBuilt ? 'sidebar-section--locked' : s.scanComplete ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
           <div className="section-hdr">2 · AI Smart Scan</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'design', label: 'System Design', check: s => s.scanComplete },
@@ -1320,8 +1320,8 @@ export default function PhasePanel() {
         )}
 
         {/* Phase 2 */}
-        <div>
-          <div className="section-hdr text-red-400 border-red-500 bg-red-500/5">3 · Phase 2 — Incidents + UUM</div>
+        <div className={`sidebar-section ${!s.scanComplete ? 'sidebar-section--locked' : s.phase2Active ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+          <div className="section-hdr">3 · Phase 2 — Incidents + UUM</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'gantt',  label: 'Gantt',  check: s => s.designApplied },
             { id: 'raid',   label: 'RAID',   check: s => s.phase2Active },
@@ -1695,7 +1695,7 @@ export default function PhasePanel() {
         </div>
 
         {/* CAB Gate */}
-        <div>
+        <div className={`sidebar-section ${!s.phase2Active ? 'sidebar-section--locked' : (s.cabApproved || s.cabDeclined) ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
           <div className="section-hdr">4 · CAB Gate</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'gantt', label: 'Review Gantt', check: s => s.phase2Active },
@@ -1771,7 +1771,7 @@ export default function PhasePanel() {
         </div>
 
         {/* RTM Sign-Off */}
-        <div>
+        <div className={`sidebar-section ${!s.phase2Active ? 'sidebar-section--locked' : s.rtmSigned ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
           <div className="section-hdr">5 · RTM Sign-Off</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'rtm',     label: 'RTM Sign-Off', check: s => s.phase2Active },
@@ -1819,7 +1819,7 @@ export default function PhasePanel() {
         </div>
 
         {/* Cutover */}
-        <div>
+        <div className={`sidebar-section ${!(s.cabApproved && s.rtmSigned) ? 'sidebar-section--locked' : s.promoted ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
           <div className="section-hdr">6 · Production Cutover</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'closure', label: 'Closure Checklist', check: s => s.rtmSigned },
@@ -2025,7 +2025,7 @@ export default function PhasePanel() {
         </div>
 
         {/* Export */}
-        <div className="pb-4">
+        <div className={`sidebar-section pb-4 ${!s.isBuilt ? 'sidebar-section--locked' : 'sidebar-section--unlocked'}`}>
           <div className="section-hdr">7 · Export</div>
           {!s.isBuilt ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1">{LOCK_ICON} Build environment first</div>

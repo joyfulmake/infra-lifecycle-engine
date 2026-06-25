@@ -10,8 +10,8 @@ import { useStore } from './store/useStore.js';
 
 export default function App() {
   const { showAuthModal, setShowAuthModal, authModalReason } = useAuth();
-  // Start collapsed on viewports too narrow for all three panels (sidebar 320 + center ≥ 400 + panel 360 = 1080 min).
-  const initialCollapsed = window.innerWidth < 1100;
+  // Start collapsed on viewports too narrow for all three panels (sidebar 360 + center ≥ 400 + panel 360 = 1120 min).
+  const initialCollapsed = window.innerWidth < 1160;
   const [mentorCollapsed, setMentorCollapsed] = useState(initialCollapsed);
   const ctx = useStore(s => s.ctx);
 
@@ -32,7 +32,7 @@ export default function App() {
     <>
       <div className="flex h-screen bg-slate-100 overflow-hidden">
         {/* Left panel: phase workflow */}
-        <div className="flex-shrink-0 h-full overflow-y-auto overflow-x-hidden sidebar-root" style={{ width: '320px' }}>
+        <div className="flex-shrink-0 h-full overflow-y-auto overflow-x-hidden sidebar-root" style={{ width: '360px' }}>
           <PhasePanel />
         </div>
 

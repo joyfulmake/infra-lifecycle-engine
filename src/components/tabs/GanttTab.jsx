@@ -648,10 +648,10 @@ function AddTaskRow({ groupKey, onAdd }) {
     <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 border-t border-teal-100 fade-in">
       <input ref={inputRef} type="text" value={title} onChange={e => setTitle(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setOpen(false); }}
-        placeholder="Task description…"
+        placeholder="Task description, e.g. Validate DB indexes post-migration…"
         className="flex-1 text-xs border border-teal-200 rounded px-2 py-1 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400" />
       <input type="text" value={role} onChange={e => setRole(e.target.value)}
-        placeholder="Role"
+        placeholder="Role (DBA, PM…)"
         className="w-24 text-xs border border-teal-200 rounded px-2 py-1 text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400" />
       <input type="number" value={hours} onChange={e => setHours(e.target.value)} min={1} max={999}
         className="w-12 text-xs border border-teal-200 rounded px-2 py-1 text-slate-800 bg-white text-center focus:outline-none focus:ring-1 focus:ring-teal-400" />

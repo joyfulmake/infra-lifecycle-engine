@@ -104,7 +104,9 @@
     @apply w-full text-xs border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal;
   }
   .section-hdr {
-    @apply text-xs font-bold uppercase tracking-wider text-teal px-3 py-1.5 border-l-2 border-teal bg-teal/10 rounded-sm mb-3;
+    @apply text-xs font-bold text-white/95 mb-3.5 pb-2.5 border-b border-white/10;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
   .item-row {
     @apply flex items-start gap-2 px-3 py-2 border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors;
@@ -189,7 +191,7 @@
 
 /* ── Theme variables ─────────────────────────────────────────────────────────── */
 :root {
-  --sidebar-bg: #1A2E4A;
+  --sidebar-bg: #0D1520;
 }
 [data-theme="light"] {
   --sidebar-bg: #FFFFFF;
@@ -197,12 +199,40 @@
 
 /* ── Sidebar base ────────────────────────────────────────────────────────────── */
 .sidebar-root {
-  background: var(--sidebar-bg);
+  background: linear-gradient(180deg, #0D1520 0%, #0A1018 100%);
   transition: background-color 0.2s ease;
 }
 .sidebar-root .bg-navy {
   background-color: var(--sidebar-bg) !important;
   transition: background-color 0.2s ease;
+}
+
+/* ── Sidebar phase section cards ─────────────────────────────────────────────── */
+.sidebar-section {
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  padding: 14px 14px 14px 16px;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+}
+.sidebar-section--live {
+  background: rgba(13,148,136,0.08);
+  border-color: rgba(13,148,136,0.30);
+  box-shadow: 0 2px 14px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(13,148,136,0.10);
+  border-left: 3px solid rgba(13,148,136,0.62);
+}
+.sidebar-section--done {
+  background: rgba(22,163,74,0.05);
+  border-color: rgba(22,163,74,0.20);
+  border-left: 3px solid rgba(22,163,74,0.48);
+}
+.sidebar-section--locked {
+  opacity: 0.52;
+}
+.sidebar-section--unlocked {
+  background: rgba(255,255,255,0.035);
+  border-color: rgba(255,255,255,0.09);
 }
 
 /* ── Light theme: text overrides (grouped by Tailwind opacity digit) ─────────── */
@@ -481,7 +511,7 @@
 [data-theme="dark"] .main-root .badge-slate { background-color: #334155 !important; color: #CBD5E1 !important; }
 [data-theme="dark"] .main-root .badge-green { background-color: #14532D !important; color: #86EFAC !important; }
 [data-theme="dark"] .main-root .badge-blue  { background-color: #1E3A5F !important; color: #93C5FD !important; }
-[data-theme="dark"] .main-root .section-hdr { background-color: rgba(13,148,136,0.15) !important; }
+[data-theme="dark"] .main-root .section-hdr { background-color: transparent !important; border-bottom-color: rgba(255,255,255,0.10) !important; color: rgba(255,255,255,0.95) !important; }
 /* suggest dropdown in dark mode */
 [data-theme="dark"] .suggest-dropdown {
   background: #1E293B !important;
