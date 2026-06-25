@@ -539,11 +539,6 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   const m = message.toLowerCase().trim();
   const raw = message.trim();
 
-  // ── Off-topic guard — return immediately, no LLM call ────────────────────────
-  if (isOffTopic(m)) {
-    return { reply: "I'm here for your infra build — stack selection, design, risks, scheduling, and sign-off. Say \"status\" for a progress update or ask me anything about your build." };
-  }
-
   // ── Multi-field "describe my project" intake ─────────────────────────────────
   // Detects when the user provides 2+ stack fields (or 1 field + planning language) in
   // a single sentence, e.g. "Dell PowerEdge, Oracle 19c, RHEL 8, production, go live Aug"
