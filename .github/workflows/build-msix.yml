@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.5.0.0'
+        default: '2.6.0.0'
 
 jobs:
   build-msix:
@@ -140,36 +140,84 @@ jobs:
             exit 1
           }
 
-      - name: Remove web-only files and strip manifest link from MSIX package
+      - name: Remove web-only files and strip HTML resource links from MSIX
         shell: powershell
         run: |
-          # ── Remove files that are only meaningful on the web host ──────────────
-          # demo.html: contains new AudioContext() — even inside click handlers,
-          # some WebView2 builds (26200.8655) pre-compile or eagerly evaluate all
-          # scripts found in the package root, triggering a native renderer crash.
-          # _headers / 404.html: Cloudflare Pages config, irrelevant in MSIX.
-          $remove = @("demo.html", "_headers", "404.html")
-          foreach ($f in $remove) {
+          # ── Remove ALL web-only files from the MSIX root ─────────────────────
+          # Only index.html, icon PNGs, and assets/ are needed.
+          # Every extra HTML/JSON/SVG file is an unnecessary load vector;
+          # some cause WebView2 resource fetches at parse time that can crash
+          # the renderer on certain OS builds before any JS executes.
+          $webOnly = @(
+            "demo.html", "slides.html", "404.html", "privacy.html",
+            "aup.html", "dpa.html", "msa.html", "sla.html", "tos.html",
+            "_headers", "_redirects", "manifest.json",
+            "favicon.svg", "icons.svg"
+          )
+          foreach ($f in $webOnly) {
             Remove-Item "msix\$f" -ErrorAction SilentlyContinue
-            Write-Host "Removed msix\$f"
           }
+          Write-Host "Removed web-only files from MSIX root"
 
-          # ── Strip <link rel="manifest"> from index.html ───────────────────────
-          # PWA manifest is meaningless inside an MSIX package (the app is already
-          # installed). On WebView2 26200.8655 the manifest fetch triggers internal
-          # state-machine transitions in the renderer that can produce a native
-          # crash (Error: N/A) before any JS executes.
+          # ── Strip all resource-triggering <link> tags from index.html ────────
+          # manifest    — PWA manifest fetch crashes WebView2 on 26200.8655.
+          # icon        — favicon.svg fetch (now removed from package) triggers
+          #               URL resolution during HTML parse on 26200.8116.
+          # apple-touch-icon — same; unused in MSIX context (icon from AppxManifest).
           $htmlPath = "msix\index.html"
           $html = Get-Content $htmlPath -Raw -Encoding UTF8
           $before = $html
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="manifest"[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''manifest''[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="icon"[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''icon''[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="apple-touch-icon"[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''apple-touch-icon''[^>]*/>', '')
           if ($html -eq $before) {
-            Write-Warning "manifest link not found in index.html - check template"
+            Write-Warning "No link tags stripped from index.html - check template"
           } else {
-            Write-Host "Stripped manifest link from index.html"
+            Write-Host "Stripped manifest, icon, and apple-touch-icon links from index.html"
           }
           Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
+
+      - name: Strip Inter font files and @font-face rules from MSIX
+        shell: powershell
+        run: |
+          # @fontsource/inter bundles 56+ woff/woff2 files and @font-face rules
+          # into the CSS bundle. In ms-appx-web: context, Segoe UI is already forced
+          # by the inline script in index.html — Inter is never used.
+          #
+          # ROOT CAUSE of 26200.8116 (Microsoft Surface Laptop) crash:
+          # WebView2 on this build attempts to resolve @font-face src: URL() values
+          # during CSS parse — BEFORE any JS runs — even for fonts not used by any
+          # element. Loading woff2 from ms-appx-web: on this specific WebView2 build
+          # triggers a native renderer crash (Error: N/A, no JS exception).
+          #
+          # Fix: delete all font files from the MSIX package AND strip every
+          # @font-face block from the CSS bundle. The app is visually identical
+          # using Segoe UI (Windows system font).
+
+          # 1. Delete all Inter woff / woff2 files from msix/assets/
+          $woff  = @(Get-ChildItem "msix\assets\*.woff"  -ErrorAction SilentlyContinue)
+          $woff += @(Get-ChildItem "msix\assets\*.woff2" -ErrorAction SilentlyContinue)
+          foreach ($f in $woff) { Remove-Item $f.FullName -Force }
+          Write-Host "Removed $($woff.Count) Inter font files from msix/assets/"
+
+          # 2. Strip @font-face{...} blocks from every CSS bundle in msix/assets/
+          #    Font-face rules have no nested braces, so [^}]+ stops at the first }.
+          $cssFiles = @(Get-ChildItem "msix\assets\*.css" -ErrorAction SilentlyContinue)
+          foreach ($css in $cssFiles) {
+            $content = Get-Content $css.FullName -Raw -Encoding UTF8
+            $before  = $content
+            $content = [regex]::Replace($content, '@font-face\s*\{[^}]+\}', '')
+            if ($content -ne $before) {
+              Set-Content $css.FullName $content -Encoding UTF8 -NoNewline
+              $n = ([regex]::Matches($before, '@font-face\s*\{')).Count
+              Write-Host "Stripped $n @font-face blocks from $($css.Name)"
+            } else {
+              Write-Warning "No @font-face blocks found in $($css.Name) — check CSS bundle"
+            }
+          }
 
       - name: Write AppxManifest.xml
         shell: powershell
