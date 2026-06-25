@@ -215,7 +215,7 @@ jobs:
               $n = ([regex]::Matches($before, '@font-face\s*\{')).Count
               Write-Host "Stripped $n @font-face blocks from $($css.Name)"
             } else {
-              Write-Warning "No @font-face blocks found in $($css.Name) — check CSS bundle"
+              Write-Warning "No @font-face blocks found in $($css.Name) - check CSS bundle"
             }
           }
 
