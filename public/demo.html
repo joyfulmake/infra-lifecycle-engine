@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- demo v2026-06-24c -->
+<!-- demo v2026-06-25b -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -184,6 +184,30 @@ body::after{
 .start-speaker{display:flex;align-items:center;gap:12px;font-size:15px;color:#475569}
 .start-speaker .avatar{width:38px;height:38px;font-size:13px}
 .ver-badge{position:fixed;bottom:14px;right:18px;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:.05em;z-index:30}
+
+/* ── Architecture diagram (scene 8) ── */
+.arch{display:flex;flex-direction:column;align-items:center;gap:0;width:100%;max-width:680px;margin-top:4px}
+.arch-box{border-radius:12px;padding:13px 18px;display:flex;align-items:center;gap:12px;border:1px solid;width:100%}
+.arch-box.browser{background:rgba(13,148,136,.13);border-color:rgba(13,148,136,.42)}
+.arch-box.worker{background:rgba(139,92,246,.13);border-color:rgba(139,92,246,.42);max-width:88%;align-self:center}
+.arch-box.firebase{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.3);border-style:dashed;max-width:88%;align-self:center}
+.arch-icon{font-size:20px;flex-shrink:0}
+.arch-title{font-size:13px;font-weight:700;color:#f1f5f9;line-height:1.3}
+.arch-sub{font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.4}
+.arch-pill{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:100px;margin-left:auto;flex-shrink:0;white-space:nowrap}
+.arch-pill.teal{background:rgba(13,148,136,.2);color:#2dd4bf;border:1px solid rgba(13,148,136,.28)}
+.arch-pill.purple{background:rgba(139,92,246,.2);color:#a78bfa;border:1px solid rgba(139,92,246,.28)}
+.arch-conn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0}
+.arch-conn-bar{width:1px;height:18px;background:rgba(255,255,255,.18)}
+.arch-conn-lbl{font-size:10px;color:#475569;background:rgba(8,16,30,.95);padding:1px 9px;border-radius:4px;border:1px solid rgba(255,255,255,.07);white-space:nowrap}
+.arch-svc-row{display:flex;gap:8px;width:100%;justify-content:center}
+.arch-svc{border-radius:10px;padding:10px 13px;flex:1;border:1px solid}
+.arch-svc.groq{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3)}
+.arch-svc.eol{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.26)}
+.arch-svc.tts{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.28)}
+.arch-svc-nm{font-size:12px;font-weight:700;color:#f1f5f9;margin-bottom:3px}
+.arch-svc-tx{font-size:10px;color:#94a3b8;line-height:1.45}
+.arch-sync-note{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#334155;margin:7px 0 5px;text-align:center}
 </style>
 </head>
 <body>
@@ -289,8 +313,72 @@ body::after{
       </div>
     </div>
 
-    <!-- 8: Pro and Enterprise Roadmap -->
+    <!-- 8: Architecture & Data Security -->
     <div class="scene" data-scene="8">
+      <div class="kicker">Architecture &amp; Data Security</div>
+      <h1 class="scene-heading">AI calls go through a secure proxy. Your builds never leave your device — unless you choose.</h1>
+      <div class="arch">
+
+        <div class="arch-box browser">
+          <div class="arch-icon">🖥</div>
+          <div style="flex:1">
+            <div class="arch-title">Your Browser &nbsp;·&nbsp; OpsManifest PWA</div>
+            <div class="arch-sub">All rendering, logic, and storage run here &nbsp;·&nbsp; IndexedDB keeps builds fully local on the free tier</div>
+          </div>
+          <div class="arch-pill teal">Zero cloud — free</div>
+        </div>
+
+        <div class="arch-conn">
+          <div class="arch-conn-bar"></div>
+          <div class="arch-conn-lbl">HTTPS only &nbsp;·&nbsp; zero API keys in your browser</div>
+          <div class="arch-conn-bar"></div>
+        </div>
+
+        <div class="arch-box worker">
+          <div class="arch-icon">⚡</div>
+          <div style="flex:1">
+            <div class="arch-title">Cloudflare Worker &nbsp;·&nbsp; Secure Proxy</div>
+            <div class="arch-sub">API keys stored here, never in the browser &nbsp;·&nbsp; zero-trust boundary between your app and every AI service</div>
+          </div>
+          <div class="arch-pill purple">Key vault</div>
+        </div>
+
+        <div class="arch-conn">
+          <div class="arch-conn-bar"></div>
+          <div class="arch-conn-lbl">Structured build context only &nbsp;·&nbsp; no raw documents, no PII</div>
+          <div class="arch-conn-bar"></div>
+        </div>
+
+        <div class="arch-svc-row">
+          <div class="arch-svc groq">
+            <div class="arch-svc-nm">🤖 Groq LLM</div>
+            <div class="arch-svc-tx">Stack + design fields only · Inference-only · No training on your data</div>
+          </div>
+          <div class="arch-svc eol">
+            <div class="arch-svc-nm">📋 EOL API</div>
+            <div class="arch-svc-tx">Read-only product lifecycle · Zero user data sent</div>
+          </div>
+          <div class="arch-svc tts">
+            <div class="arch-svc-nm">🔊 Azure TTS</div>
+            <div class="arch-svc-tx">Text-to-speech only · Not stored · Not logged</div>
+          </div>
+        </div>
+
+        <div class="arch-sync-note">— Optional Pro+ cloud sync —</div>
+
+        <div class="arch-box firebase">
+          <div class="arch-icon">🔒</div>
+          <div style="flex:1">
+            <div class="arch-title">Firebase Firestore &nbsp;·&nbsp; Google Cloud</div>
+            <div class="arch-sub">Encrypted in transit &nbsp;·&nbsp; you own your data &nbsp;·&nbsp; export any time &nbsp;·&nbsp; opt-in, never automatic</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 9: Pro and Enterprise Roadmap -->
+    <div class="scene" data-scene="9">
       <div class="kicker">What's Coming — Pro and Enterprise</div>
       <h1 class="scene-heading">Your team works from one source of truth — anywhere, on any device.</h1>
       <div class="features">
@@ -318,8 +406,8 @@ body::after{
       </div>
     </div>
 
-    <!-- 9: CTA -->
-    <div class="scene" data-scene="9">
+    <!-- 10: CTA -->
+    <div class="scene" data-scene="10">
       <div class="kicker">Get Started</div>
       <h1 class="scene-heading">Your next go-live will be the most documented, most coherent, and smoothest one yet</h1>
       <p class="scene-sub">Free on the web and Microsoft Store. Sign in for cloud sync and role-based access — no account needed to explore.</p>
@@ -350,11 +438,11 @@ body::after{
     <button class="ctrl-btn" id="btn-prev" title="Previous (&#x2190;)">&#x2039;</button>
     <button class="ctrl-btn play-pause" id="btn-play" title="Play / Pause (Space)">&#x25B6;</button>
     <button class="ctrl-btn" id="btn-next" title="Next (&#x2192;)">&#x203A;</button>
-    <span class="scene-counter" id="counter">1 / 10</span>
+    <span class="scene-counter" id="counter">1 / 11</span>
   </div>
 </div>
 
-<div class="ver-badge">v2026-06-25</div>
+<div class="ver-badge">v2026-06-25b</div>
 
 <!-- Start overlay -->
 <div class="start-overlay" id="start-overlay">
@@ -417,13 +505,17 @@ const SCRIPT = [
   { scene:7, speaker:'jordan', text:"Teams using OpsManifest cut CAB preparation time by over sixty percent.", pauseAfter:400 },
   { scene:7, speaker:'alex',   text:"And because system design, RTM, risk log, RACI, and the Gantt all live in one place — every stakeholder works from the same living document.", pauseAfter:700 },
 
-  // Scene 8 — Roadmap
-  { scene:8, speaker:'jordan', text:"Coming in Pro: biometric identity verification — your identity signature computed on-device, never uploaded. Sign approvals and log decisions verified locally without a password.", pauseAfter:500 },
-  { scene:8, speaker:'alex',   text:"For enterprise teams: sign in with your company identity and your RACI role resolves automatically from your directory. Every build shared across your team in real time. And an admin-defined policy for every byte of project data — what is local, what syncs, what is never stored.", pauseAfter:900 },
+  // Scene 8 — Architecture & Data Security
+  { scene:8, speaker:'alex',   text:"A question we get from every security team: what exactly goes to the AI, and where does our infrastructure data live?", pauseAfter:400 },
+  { scene:8, speaker:'jordan', text:"Nothing sensitive reaches any model. Every AI call routes through our Cloudflare Worker proxy — no API keys are ever in your browser. The model only sees your stack choice and design fields. No raw documents, no personal data. And on the free tier, every build stays entirely in your browser's local storage. Zero cloud, by design.", pauseAfter:700 },
 
-  // Scene 9 — CTA
-  { scene:9, speaker:'alex',   text:"OpsManifest is free on the web and in the Microsoft Store. Sign in to unlock cloud sync and role-based access — no account needed to start your first build.", pauseAfter:400 },
-  { scene:9, speaker:'jordan', text:"Visit opsmanifest dot pages dot dev. Your next go-live will be the most documented, the most coherent, and the smoothest one yet.", pauseAfter:900 },
+  // Scene 9 — Roadmap
+  { scene:9, speaker:'jordan', text:"Coming in Pro and Enterprise: single sign-on maps your company identity directly to your RACI role — the DBA opens the app and owns the database section, the Storage Lead owns storage, all resolved from your directory automatically.", pauseAfter:500 },
+  { scene:9, speaker:'alex',   text:"Team Build Library gives every stakeholder a real-time shared view of the same living document. And the Data Governance Panel gives admins explicit control over every byte — what stays local, what syncs, what is never stored — with a full audit trail.", pauseAfter:900 },
+
+  // Scene 10 — CTA
+  { scene:10, speaker:'alex',   text:"OpsManifest is free on the web and in the Microsoft Store. Sign in to unlock cloud sync and role-based access — no account needed to start your first build.", pauseAfter:400 },
+  { scene:10, speaker:'jordan', text:"Visit opsmanifest dot pages dot dev. Your next go-live will be the most documented, the most coherent, and the smoothest one yet.", pauseAfter:900 },
 ];
 
 // ── State ─────────────────────────────────────────────────────────────────────
