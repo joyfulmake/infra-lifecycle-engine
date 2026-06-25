@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.6.0.0'
+        default: '2.7.0.0'
 
 jobs:
   build-msix:
@@ -203,20 +203,41 @@ jobs:
           foreach ($f in $woff) { Remove-Item $f.FullName -Force }
           Write-Host "Removed $($woff.Count) Inter font files from msix/assets/"
 
-          # 2. Strip @font-face{...} blocks from every CSS bundle in msix/assets/
-          #    Font-face rules have no nested braces, so [^}]+ stops at the first }.
+          # 2. Strip @font-face AND @keyframes blocks from every CSS bundle in msix/assets/
+          #    @font-face has no nested braces so [^}]+ stops at the first }.
+          #    @keyframes has nested braces (each selector is its own {} block) so we
+          #    use (?:[^{}]*\{[^{}]*\})+ to match one or more selector pairs.
           $cssFiles = @(Get-ChildItem "msix\assets\*.css" -ErrorAction SilentlyContinue)
           foreach ($css in $cssFiles) {
             $content = Get-Content $css.FullName -Raw -Encoding UTF8
             $before  = $content
             $content = [regex]::Replace($content, '@font-face\s*\{[^}]+\}', '')
+            $content = [regex]::Replace($content, '@keyframes\s+[\w-]+\s*\{(?:[^{}]*\{[^{}]*\})+\}', '')
             if ($content -ne $before) {
               Set-Content $css.FullName $content -Encoding UTF8 -NoNewline
-              $n = ([regex]::Matches($before, '@font-face\s*\{')).Count
-              Write-Host "Stripped $n @font-face blocks from $($css.Name)"
+              $nFont = ([regex]::Matches($before, '@font-face\s*\{')).Count
+              $nKf   = ([regex]::Matches($before, '@keyframes\s+')).Count
+              Write-Host "Stripped $nFont @font-face + $nKf @keyframes blocks from $($css.Name)"
             } else {
-              Write-Warning "No @font-face blocks found in $($css.Name) - check CSS bundle"
+              Write-Warning "No @font-face or @keyframes blocks found in $($css.Name) - check CSS bundle"
             }
+          }
+
+          # 3. Replace animated splash <style> in index.html with a static version
+          #    @keyframes splash-pulse in the inline <style> block is another CSS
+          #    parse-time feature that may crash certain WebView2 builds (26200.8655).
+          $htmlPath = "msix\index.html"
+          $html = Get-Content $htmlPath -Raw -Encoding UTF8
+          $htmlBefore = $html
+          $html = [regex]::Replace($html,
+            '<style>\s*\.splash-dot\{[^<]+\}\s*</style>',
+            '<style>.splash-dot{width:8px;height:8px;border-radius:50%;background:#0d9488;opacity:.6;display:inline-block;}</style>'
+          )
+          if ($html -ne $htmlBefore) {
+            Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
+            Write-Host "Replaced animated splash style with static version in index.html"
+          } else {
+            Write-Warning "Animated splash style not found in index.html - check template"
           }
 
       - name: Write AppxManifest.xml
