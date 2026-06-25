@@ -897,6 +897,32 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
     };
   }
 
+  // ── Direct tab navigation ──────────────────────────────────────────────────
+  // "open gantt", "go to RTM", "show me the design tab", "take me to closure", etc.
+  const navVerb = /\b(open|go to|show|take me to|navigate to|switch to|view|see)\s+(?:the\s+)?/i;
+  if (navVerb.test(m)) {
+    const target = m.replace(navVerb, '').trim();
+    const TAB_MAP = [
+      { pattern: /\b(gantt|schedule|task\s?plan|timeline|tasks?\s+tab)\b/i,   tab: 'gantt',   label: 'Gantt Schedule' },
+      { pattern: /\b(rtm|requirements?\s+traceab|traceability)\b/i,            tab: 'rtm',     label: 'RTM Sign-Off' },
+      { pattern: /\b(system\s?design|design\s?tab|design\s?section)\b/i,       tab: 'design',  label: 'System Design' },
+      { pattern: /\b(exec(utive)?\s?(summary|overview)?|exec\s?tab|kpi)\b/i,   tab: 'exec',    label: 'Exec Summary' },
+      { pattern: /\b(raid|risk\s?log|raid\s?log|risks?\s+and\s+issues)\b/i,    tab: 'raid',    label: 'RAID Log' },
+      { pattern: /\b(matrix|dependency\s?matrix|dep\s?matrix)\b/i,             tab: 'matrix',  label: 'Dependency Matrix' },
+      { pattern: /\b(closure|close.?out|post.?go.?live)\b/i,                   tab: 'closure', label: 'Closure Checklist' },
+      { pattern: /\b(infra\s?diagram|diagram|topology|architecture\s?map)\b/i, tab: 'diagram', label: 'Infra Diagram' },
+      { pattern: /\b(roles?|raci|raci\s?table)\b/i,                            tab: 'roles',   label: 'Roles / RACI' },
+      { pattern: /\b(cmdb|cmdb\s?tab|eol|end.of.life|lifecycle)\b/i,           tab: 'cmdb',    label: 'CMDB / EOL' },
+    ];
+    const found = TAB_MAP.find(t => t.pattern.test(target));
+    if (found) {
+      return {
+        reply: '',
+        actions: [{ type: 'NAVIGATE_TAB', description: `Open ${found.label}`, params: { tab: found.tab }, requiresConfirmation: false }],
+      };
+    }
+  }
+
   // ── Workflow gate actions (checked BEFORE generic status/phase/cab matchers) ─
   if (/\b(run scan|start scan|scan now|do the scan|run the scan|ai scan)\b/.test(m)) {
     if (!s.isBuilt) return { reply: 'Please build the stack first. Select hardware, OS, DB, and App in the left panel then click Build.' };
