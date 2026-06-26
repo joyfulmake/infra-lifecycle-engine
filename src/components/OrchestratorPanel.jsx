@@ -329,6 +329,7 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const awaitingFieldRef  = useRef(null); // 'hw'|'os'|'db'|'app'|'projectName'|'envType'|'goLiveDate'|null
   const pendingTaskRef    = useRef(null); // { title } waiting for gantt/raid choice
   const userHasChattedRef = useRef(false); // set synchronously when user sends first message; guards setTimeout-based field prompts
+  const pendingSendRef    = useRef(false); // true while an LLM call is in-flight; prevents double-fire
   const sRef                  = useRef(s);
   const authUserRef           = useRef(authUser);
   const messagesRef           = useRef([]);
@@ -1374,7 +1375,8 @@ Rules:
 
   async function handleSend(overrideText) {
     const text = (overrideText || input).trim();
-    if (!text || thinking) return;
+    if (!text || thinking || pendingSendRef.current) return;
+    pendingSendRef.current = true;
 
     // Mark synchronously — any setTimeout that checks this ref will see it immediately,
     // even before React re-renders and before messagesRef.current is updated.
@@ -1569,8 +1571,9 @@ Rules:
       const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
 
       setThinking(false);
+      pendingSendRef.current = false;
 
-      const { reply, actions = [], suggestions = [] } = result;
+      const { reply, actions = [], suggestions = [] } = result || {};
       const replyText = reply;
 
       const needsConfirm = actions.some(a => a.requiresConfirmation);
@@ -1578,7 +1581,7 @@ Rules:
 
       if (immediate.length > 0) applyActions(immediate);
 
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText, suggestions }]);
+      if (replyText) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText, suggestions }]);
 
       if (needsConfirm) {
         const confirmActions = actions.filter(a => a.requiresConfirmation);
@@ -1592,10 +1595,14 @@ Rules:
 
     } catch (e) {
       setThinking(false);
+      pendingSendRef.current = false;
+      // Avoid showing the error if the same error was just shown (double-fire guard)
+      const lastMsg = messagesRef.current.slice(-1)[0];
+      if (lastMsg?.role === 'orchestrator' && lastMsg.text?.startsWith('Connection to the AI')) return;
       setMessages(m => [...m, {
         id: nextId(),
         role: 'orchestrator',
-        text: 'Connection to the AI service failed. Check your network and try again — or use direct commands like "add risk: [description]", "add incident: [title]", "add task: [name]", "check incompatibilities".',
+        text: 'Connection to the AI service failed — check your network and try again.',
       }]);
     }
   }
