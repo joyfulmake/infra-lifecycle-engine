@@ -261,7 +261,13 @@ After approval, follow Part 5 of the guide (post-certification steps).
 
 - Disclaimer shown at bottom of left sidebar (10px, muted) explaining the tool's scope
 - "About this tool ↗" link points to `/slides.html`
-- **Presentation deck**: https://opsmanifest.pages.dev/slides.html — 10-slide standalone HTML, keyboard/click navigation, no dependencies
+- **Presentation deck**: https://opsmanifest.pages.dev/slides.html — standalone HTML, keyboard/click navigation, no dependencies
+- **Demo / guided tour**: https://opsmanifest.pages.dev/demo.html — 12-scene voiced walkthrough (`public/demo.html`); two characters (Alex + Jordan); SCRIPT array drives dialogue; scenes positionally indexed 0-11; `data-scene` attributes are display-only labels, DOM position determines the active scene in `setScene()`:
+  - Scenes 0-7: product walkthrough (intro, stats, overview, AI advisor, incident flow, identity/RACI, vulnerability register, benefits)
+  - Scene 8: Enterprise landscape comparison — OpsManifest vs Jira, ServiceNow, Microsoft Project, Confluence, Monday.com (gentle/complementary framing, latest AI features per tool)
+  - Scene 9: Architecture & Data Security — three focused boxes: (1) what users enter and what is never collected, (2) local processing + AI sees stack summary only, (3) storage (IndexedDB local default, optional Pro+ Firestore sync)
+  - Scene 10: Pro/Enterprise roadmap (SSO, Team Build Library, Data Governance Panel)
+  - Scene 11: CTA
 
 ## AI integration
 
