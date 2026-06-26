@@ -531,30 +531,20 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
                                 st.rtmSigned || st.promoted);
 
     if (!workflowStarted) {
-      // Signed in, pre-build — greet, then pick up from wherever they left off
+      // Signed in, pre-build — greet naturally, no field interview interception
       const email = authUserRef.current?.email || '';
       const raw = email.split('@')[0].split('.')[0];
       const name = raw.charAt(0).toUpperCase() + raw.slice(1);
       userNameRef.current = name;
       setUserName(name);
       setMessages([{ id: nextId(), role: 'orchestrator', text:
-        `Welcome back, ${name}. I'm OpsMentor — here to keep your team aligned from platform selection to production cutover.`
+        `Welcome back, ${name}. I'm OpsMentor — ask me anything about your build, your stack, infra best practices, or how this app works. When you're ready to start a build, select your hardware platform from the options below.`
       }]);
-      // Find the first missing Phase 1 field and prompt for it
+      // Show stack chips passively — but do NOT set awaitingFieldRef or inject field questions.
+      // The agent is conversational: any message goes straight to the LLM, never swallowed as a field value.
       const firstMissing = nextFieldPrompt(st, null);
-      awaitingFieldRef.current = firstMissing || null;
-      setTimeout(() => {
-        // Abort if user has already started chatting — don't inject workflow prompts over conversation
-        if ((messagesRef.current || []).some(m => m.role === 'user')) return;
-        if (firstMissing) {
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[firstMissing] }]);
-          if (FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
-        } else {
-          setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text:
-            `All Phase 1 fields are set. Click Build in the sidebar to lock the stack and start the AI scan.`
-          }]);
-        }
-      }, 1000);
+      awaitingFieldRef.current = null;
+      if (firstMissing && FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
       return;
     }
 
