@@ -330,7 +330,7 @@ function sanitizeForLlm(text, maxLen = 120) {
     .slice(0, maxLen);
 }
 
-export function buildStateContext(s, authUser) {
+export function buildStateContext(s, authUser, pastBuildsSummary = null) {
   const isPM     = !!(authUser?.email && authUser.email === s.requirements?.pmEmail);
   const userRoles = getUserRolesForBuild(authUser, s.roleAssignments || {});
 
@@ -376,11 +376,12 @@ export function buildStateContext(s, authUser) {
     isPM,
     userRoles,
     userEmail: authUser?.email || 'guest',
-    // Vendor compatibility issues for the selected stack — surfaced to LLM as explicit context
+    // Vendor compatibility issues for the selected stack -- surfaced to LLM as explicit context
     compatIssues: checkCompatibility(s.ctx || {}).map(r => ({
       title: r.title,
       severity: r.severity,
-      refs: (r.refs || []).map(rf => rf.label + ' — ' + rf.url),
+      refs: (r.refs || []).map(rf => rf.label + ' -- ' + rf.url),
     })),
+    pastBuildsSummary,
   };
 }

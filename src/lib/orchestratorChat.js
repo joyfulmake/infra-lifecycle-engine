@@ -483,18 +483,6 @@ export function scanInputLive(text, ctx) {
   return { eol, compat, detected: Object.fromEntries(ctxFields.map(k => [k, desc[k]])) };
 }
 
-// ── Off-topic guard — returns true when the message has no infrastructure relevance ──
-// Used in ruleBasedResponse to short-circuit before calling the LLM.
-const INFRA_KEYWORDS = /\b(server|host|db|database|oracle|postgres|mysql|rhel|linux|aix|windows|dell|hpe|ibm|cisco|deploy|migrat|upgrade|patch|build|scan|incident|uum|raid|rtm|cab|gantt|phase|design|closure|stack|hw|os|app|sla|rto|rpo|ssl|tls|cert|firewall|network|backup|storage|cloud|sync|export|excel|role|raci|risk|task|issue|decision|eol|cve|vuln|security|compat|license|cost|budget)\b/i;
-
-function isOffTopic(text) {
-  if (text.length < 3 || text.length > 200) return false; // very short or long = let through
-  if (INFRA_KEYWORDS.test(text)) return false;
-  if (COMMAND_TOKENS) { /* COMMAND_TOKENS is in OrchestratorPanel; we check infra keywords here */ }
-  return /^(hi|hello|hey|hola|sup|what'?s up|how are|tell me a|who are you|joke|weather|sport|news|thank|thanks|ok|okay|sure|yes|no|cool|great|nice|wow|lol|haha|bye|goodbye)/i.test(text.trim())
-    && !/build|scan|inject|status|phase|design|rtm|cab|gantt/i.test(text);
-}
-
 // ── Left-shift advisory — surfaces upcoming phase requirements proactively ────
 // Returns a one-paragraph string describing what the NEXT phase will demand,
 // so the user can prepare NOW rather than discover blockers later.

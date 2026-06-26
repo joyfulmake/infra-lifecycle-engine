@@ -32,14 +32,51 @@ function isCommandMessage(tl) {
 }
 import { useStore } from '../store/useStore.js';
 import { useAuth } from '../lib/AuthContext.jsx';
+import { useBuildsDb } from '../lib/useBuildsDb.js';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
 import { buildStateContext, checkPermission, executeAction } from '../lib/orchestratorActions.js';
 import { sendChatMessage, ruleBasedResponse, parseRelativeDate, parseCompoundDateRange, scanInputLive } from '../lib/orchestratorChat.js';
 import { computeAllRisks, riskScore, riskLabel } from '../lib/riskEngine.js';
 
+function buildPastBuildsSummary(builds, currentBuildId, currentCtx) {
+  if (!builds || builds.length === 0) return null;
+  const past = builds.filter(b =>
+    b.id !== currentBuildId &&
+    (b.ctx?.hw || b.ctx?.os || b.ctx?.db || b.ctx?.app)
+  );
+  if (past.length === 0) return null;
+
+  const score = b => {
+    let s = 0;
+    if (currentCtx?.hw && b.ctx?.hw && currentCtx.hw === b.ctx.hw) s += 3;
+    if (currentCtx?.os && b.ctx?.os && currentCtx.os === b.ctx.os) s += 2;
+    if (currentCtx?.db && b.ctx?.db && currentCtx.db === b.ctx.db) s += 3;
+    if (currentCtx?.app && b.ctx?.app && currentCtx.app === b.ctx.app) s += 2;
+    return s;
+  };
+
+  return past
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 3)
+    .map(b => {
+      const phase = b.promoted ? 'LIVE' : b.rtmSigned ? 'RTM_SIGNED' : b.cabApproved ? 'CAB_APPROVED'
+        : b.phase2Active ? 'PHASE2_ACTIVE' : b.designApplied ? 'DESIGN_APPLIED' : b.isBuilt ? 'BUILT' : 'BLANK';
+      const stack = [b.ctx?.hw, b.ctx?.os, b.ctx?.db, b.ctx?.app].filter(Boolean).join('/');
+      const raid = (b.raidLog || []).slice(0, 3).map(r => `${r.type}: ${r.description}`).join('; ');
+      const inc = (b.selInc || []).length;
+      const uum = (b.selUUM || []).length;
+      const date = b.updatedAt ? new Date(b.updatedAt).toLocaleDateString() : null;
+      return [
+        `"${b.name || 'Unnamed'}" [${stack}] Phase:${phase}${date ? ' Updated:' + date : ''}`,
+        `  Incidents:${inc} UUM:${uum}${raid ? '\n  RAID: ' + raid : ''}`,
+      ].join('\n');
+    })
+    .join('\n');
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function Bubble({ msg, onChipClick }) {
+function Bubble({ msg, onChipClick, onSuggestionClick }) {
   const isUser   = msg.role === 'user';
   const isResult = msg.role === 'result';
   const isLog    = msg.role === 'log';
@@ -101,6 +138,19 @@ function Bubble({ msg, onChipClick }) {
                 className="px-3 py-1 rounded-full text-xs font-semibold border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
               >
                 {chip.label} →
+              </button>
+            ))}
+          </div>
+        )}
+        {!isUser && msg.suggestions && msg.suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pl-0.5 mt-0.5">
+            {msg.suggestions.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => onSuggestionClick?.(q)}
+                className="px-2.5 py-1 rounded-lg text-xs border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800 transition-colors cursor-pointer text-left"
+              >
+                {q}
               </button>
             ))}
           </div>
@@ -172,6 +222,7 @@ function WorkflowStrip({ items }) {
 export default function OrchestratorPanel({ docked = false, onCollapsedChange, initialCollapsed = false }) {
   const store = useStore();
   const { authUser } = useAuth();
+  const { builds } = useBuildsDb(authUser);
 
   const s = {
     isBuilt:             store.isBuilt,
@@ -230,6 +281,12 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const coherenceWarnCount = (store.coherenceAlerts || []).filter(a => a.severity === 'warn').length;
   const raidCount          = (store.raidLog || []).length;
   const rtmTotalCount      = Object.keys(store.rtmRows || {}).length;
+
+  const pastBuildsSummary = useMemo(
+    () => buildPastBuildsSummary(builds, store.currentBuildId, store.ctx),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [builds?.length, store.currentBuildId]
+  );
 
   const [open,        setOpen]        = useState(false);  // OpsMentor activated
   const [panelVisible, setPanelVisible] = useState(false);  // panel UI shown
@@ -519,7 +576,8 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
 
     // Generate intelligent opening assessment via LLM
     setThinking(true);
-    const ctx = buildStateContext(st, authUserRef.current);
+    const pastSummary = buildPastBuildsSummary(builds, store.currentBuildId, st.ctx);
+    const ctx = buildStateContext(st, authUserRef.current, pastSummary);
     const stack = [st.ctx?.hw, st.ctx?.os, st.ctx?.db, st.ctx?.app].filter(Boolean).join(' / ');
     const alertSummary = (st.coherenceAlerts || []).filter(a => a.severity === 'warn').map(a => a.message).join('; ') || 'none';
     const designFilled = st.sysDesignData ? Object.entries(st.sysDesignData).flatMap(([sec, fields]) =>
@@ -542,27 +600,28 @@ Current build snapshot:
 - Design sections filled: ${designFilled} fields
 - Active warnings: ${alertSummary}
 - Tasks stale: ${!!st.tasksStaleReason} | RTM stale: ${st.rtmStale}
+${pastSummary ? `\nPast builds with similar setup:\n${pastSummary}` : ''}
 
 Respond with:
-1. The single most important risk or insight for this build RIGHT NOW — specific to the actual stack, dates, and active warnings. Name real components and real EOL timelines where you know them. If there are active warnings, lead with the most critical one.
+1. The single most important risk or insight for this build RIGHT NOW -- specific to the actual stack, dates, and active warnings. Name real components and real EOL timelines where you know them. If there are active warnings, lead with the most critical one. If past builds show a relevant lesson, weave it in naturally.
 2. Whether the build is clear to advance, or if there is a specific blocker. One sentence.
-3. If design sections are empty or sparse and the stack is known, include 2–3 SET_DESIGN_FIELD actions with specific realistic values derived from the stack.
+3. If design sections are empty or sparse and the stack is known, include 2-3 SET_DESIGN_FIELD actions with specific realistic values derived from the stack.
 4. If you see a risk worth logging, include an ADD_RAID_ENTRY action.
 5. If there is a critical missing task for this stack/incident combination, include an ADD_CUSTOM_TASK action.
+6. Include 2-3 suggestions (questions the user might naturally ask next given the build state).
 
 Rules:
-- Do not greet or introduce yourself — the greeting is already shown.
+- Do not greet or introduce yourself -- the greeting is already shown.
 - Do not tell the user to "run the scan" if it is already complete.
 - If the build looks clean with no warnings, say so in one sentence and confirm the natural next action.
 - Lead with the most important insight or warning, not a process summary.
-- Keep the reply to 2–4 sentences max. Let the actions carry the detail.`;
+- Keep the reply to 2-4 sentences max. Let the actions carry the detail.`;
 
     sendChatMessage(assessmentPrompt, ctx, [])
       .then(result => {
         setThinking(false);
-        const { reply, actions = [] } = result;
-        // Append the LLM assessment after the greeting (do not replace it)
-        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
+        const { reply, actions = [], suggestions = [] } = result;
+        setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply, suggestions }]);
         const immediate = actions.filter(a => !a.requiresConfirmation);
         const needsConfirm = actions.filter(a => a.requiresConfirmation);
         if (immediate.length > 0) applyActionsWithRefs(immediate);
@@ -1306,8 +1365,8 @@ Rules:
 
   // ── Send message ─────────────────────────────────────────────────────────
 
-  async function handleSend() {
-    const text = input.trim();
+  async function handleSend(overrideText) {
+    const text = (overrideText || input).trim();
     if (!text || thinking) return;
 
     // Duplicate-send guard: ignore if identical to the last user message sent
@@ -1326,7 +1385,7 @@ Rules:
     }
     msgTimestampsRef.current.push(now);
 
-    setInput('');
+    if (!overrideText) setInput('');
     setLiveHints(null);
 
     // First reply = user's name
@@ -1489,12 +1548,12 @@ Rules:
       }
 
       // Groq-powered NLP
-      const ctx    = buildStateContext(s, authUser);
+      const ctx    = buildStateContext(s, authUser, pastBuildsSummary);
       const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
 
       setThinking(false);
 
-      const { reply, actions = [], nextPrompt } = result;
+      const { reply, actions = [], nextPrompt, suggestions = [] } = result;
       const replyText = nextPrompt ? `${reply} ${nextPrompt}` : reply;
 
       const needsConfirm = actions.some(a => a.requiresConfirmation);
@@ -1502,7 +1561,7 @@ Rules:
 
       if (immediate.length > 0) applyActions(immediate);
 
-      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText }]);
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText, suggestions }]);
 
       if (needsConfirm) {
         const confirmActions = actions.filter(a => a.requiresConfirmation);
@@ -1706,6 +1765,7 @@ Rules:
                       store.setActiveTab(chip.tab);
                     }
                   }}
+                  onSuggestionClick={q => handleSend(q)}
                 />
               )
             )}
