@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.7.0.0'
+        default: '2.8.0.0'
 
 jobs:
   build-msix:
@@ -133,7 +133,10 @@ jobs:
           # Pass 2: remove bare `crossorigin` boolean attribute (no value, any leading whitespace)
           $html = [regex]::Replace($html, '\s+crossorigin\b', '')
           $after = ([regex]::Matches($html, '\bcrossorigin\b')).Count
-          Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
+          # CRITICAL: use UTF8Encoding($false) — PowerShell 5.1's Set-Content -Encoding UTF8
+          # writes a BOM (EF BB BF). A BOM before <!doctype html> puts WebView2 in quirks
+          # mode; a BOM in a CSS file can crash WebView2 on 26200.8116. Always write without BOM.
+          [System.IO.File]::WriteAllText($htmlPath, $html, [System.Text.UTF8Encoding]::new($false))
           Write-Host "Stripped $before crossorigin occurrences (remaining: $after)"
           if ($after -gt 0) {
             Write-Error "FATAL: crossorigin attributes remain in index.html after stripping. Vite output format may have changed."
@@ -178,7 +181,21 @@ jobs:
           } else {
             Write-Host "Stripped manifest, icon, and apple-touch-icon links from index.html"
           }
-          Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
+
+          # ── Remove splash <img> from MSIX index.html ─────────────────────────
+          # The <img src="./icon-192.png"> in the splash div triggers a PNG fetch
+          # during HTML body parsing — before JS runs. Eliminating the tag removes
+          # this parse-time load entirely. The MSIX SplashScreen from AppxManifest
+          # provides the branded launch image; the in-page splash doesn't need an icon.
+          $htmlBefore2 = $html
+          $html = [regex]::Replace($html, '\r?\n?\s*<img[^>]+src="[./]*icon-192\.png"[^>]*/>', '')
+          if ($html -ne $htmlBefore2) {
+            Write-Host "Removed splash <img src=icon-192.png> from index.html"
+          } else {
+            Write-Warning "Splash <img src=icon-192.png> not found in index.html - check template"
+          }
+
+          [System.IO.File]::WriteAllText($htmlPath, $html, [System.Text.UTF8Encoding]::new($false))
 
       - name: Strip Inter font files and @font-face rules from MSIX
         shell: powershell
@@ -214,12 +231,13 @@ jobs:
             $content = [regex]::Replace($content, '@font-face\s*\{[^}]+\}', '')
             $content = [regex]::Replace($content, '@keyframes\s+[\w-]+\s*\{(?:[^{}]*\{[^{}]*\})+\}', '')
             if ($content -ne $before) {
-              Set-Content $css.FullName $content -Encoding UTF8 -NoNewline
+              # No BOM — see comment in crossorigin-strip step for why UTF8Encoding($false) is required
+              [System.IO.File]::WriteAllText($css.FullName, $content, [System.Text.UTF8Encoding]::new($false))
               $nFont = ([regex]::Matches($before, '@font-face\s*\{')).Count
               $nKf   = ([regex]::Matches($before, '@keyframes\s+')).Count
               Write-Host "Stripped $nFont @font-face + $nKf @keyframes blocks from $($css.Name)"
             } else {
-              Write-Warning "No @font-face or @keyframes blocks found in $($css.Name) - check CSS bundle"
+              Write-Host "No @font-face or @keyframes blocks in $($css.Name) (MSIX font-stub build - expected)"
             }
           }
 
@@ -234,11 +252,40 @@ jobs:
             '<style>.splash-dot{width:8px;height:8px;border-radius:50%;background:#0d9488;opacity:.6;display:inline-block;}</style>'
           )
           if ($html -ne $htmlBefore) {
-            Set-Content $htmlPath $html -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText($htmlPath, $html, [System.Text.UTF8Encoding]::new($false))
             Write-Host "Replaced animated splash style with static version in index.html"
           } else {
             Write-Warning "Animated splash style not found in index.html - check template"
           }
+
+      - name: Validate MSIX CSS bundle — zero url() references
+        shell: powershell
+        run: |
+          # Any url() in the CSS bundle means a resource file is referenced at CSS parse time.
+          # WebView2 on certain 26200 builds resolves url() values at parse — before JS runs —
+          # crashing the renderer natively (Error: N/A). Zero is the only acceptable count.
+          $cssFiles = @(Get-ChildItem "msix\assets\*.css" -ErrorAction SilentlyContinue)
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $urlMatches = [regex]::Matches($content, 'url\(')
+            Write-Host "$($css.Name): $($urlMatches.Count) url() references"
+            if ($urlMatches.Count -gt 0) {
+              Write-Error "FATAL: CSS bundle $($css.Name) still contains $($urlMatches.Count) url() reference(s). These will crash WebView2 on 26200.8116 at parse time. Check that @font-face stripping and font stubbing both worked."
+              exit 1
+            }
+          }
+          Write-Host "CSS validation PASSED — zero url() references in all CSS bundles"
+
+          # Also verify no BOM in output files
+          $filesToCheck = @($htmlPath) + $cssFiles.FullName
+          foreach ($f in $filesToCheck) {
+            $bytes = [System.IO.File]::ReadAllBytes($f)
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              Write-Error "FATAL: BOM detected in $f — will crash WebView2. Use UTF8Encoding(false) for all writes."
+              exit 1
+            }
+          }
+          Write-Host "BOM validation PASSED — no UTF-8 BOM in any output file"
 
       - name: Write AppxManifest.xml
         shell: powershell
