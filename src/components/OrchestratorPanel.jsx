@@ -12,11 +12,17 @@ const COMMAND_TOKENS = new Set([
   'load balancer','tls','ssl','certificate','patch','monitoring','alert','sla','rto',
   'rpo','add to','update in','set in','change in','what is','what are','show me',
   'how do','explain','describe','list','overview','summary',
+  'compare','comparison','difference','different','versus','vs','competing','market',
+  'how','why','when','where','who','tell me','is it','are there','can you','does it',
 ]);
 // Single-word trigger prefixes — message starts with these AND is > 10 chars
-const COMMAND_PREFIXES = new Set(['add','set','update','log','note','create','show','explain']);
+const COMMAND_PREFIXES = new Set(['add','set','update','log','note','create','show','explain','compare','how','why','when','where','who','what','is','are','can','does','did','would','should','tell']);
 
 function isCommandMessage(tl) {
+  // Any question is always for the LLM — never treat as a field value
+  if (tl.includes('?')) return true;
+  // Messages starting with interrogative or comparison words
+  if (/^(how|why|when|where|who|compare|tell me|explain|is |are |can |does |did |would |should |what about|what if)/.test(tl)) return true;
   // Fast path: split into unigrams and bigrams, check against Set
   const words = tl.split(/\s+/);
   for (const w of words) {
@@ -1553,8 +1559,8 @@ Rules:
 
       setThinking(false);
 
-      const { reply, actions = [], nextPrompt, suggestions = [] } = result;
-      const replyText = nextPrompt ? `${reply} ${nextPrompt}` : reply;
+      const { reply, actions = [], suggestions = [] } = result;
+      const replyText = reply;
 
       const needsConfirm = actions.some(a => a.requiresConfirmation);
       const immediate    = actions.filter(a => !a.requiresConfirmation);
