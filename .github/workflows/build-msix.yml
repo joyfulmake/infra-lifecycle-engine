@@ -274,18 +274,18 @@ jobs:
               exit 1
             }
           }
-          Write-Host "CSS validation PASSED — zero url() references in all CSS bundles"
+          Write-Host "CSS validation PASSED -- zero url() references in all CSS bundles"
 
           # Also verify no BOM in output files
           $filesToCheck = @($htmlPath) + $cssFiles.FullName
           foreach ($f in $filesToCheck) {
             $bytes = [System.IO.File]::ReadAllBytes($f)
             if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-              Write-Error "FATAL: BOM detected in $f — will crash WebView2. Use UTF8Encoding(false) for all writes."
+              Write-Error "FATAL: BOM detected in $f -- will crash WebView2. Use UTF8Encoding(false) for all writes."
               exit 1
             }
           }
-          Write-Host "BOM validation PASSED — no UTF-8 BOM in any output file"
+          Write-Host "BOM validation PASSED -- no UTF-8 BOM in any output file"
 
       - name: Write AppxManifest.xml
         shell: powershell
