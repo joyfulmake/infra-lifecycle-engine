@@ -544,6 +544,8 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       const firstMissing = nextFieldPrompt(st, null);
       awaitingFieldRef.current = firstMissing || null;
       setTimeout(() => {
+        // Abort if user has already started chatting — don't inject workflow prompts over conversation
+        if ((messagesRef.current || []).some(m => m.role === 'user')) return;
         if (firstMissing) {
           setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: FIELD_QUESTIONS[firstMissing] }]);
           if (FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
@@ -1463,6 +1465,12 @@ Rules:
       // Let workflow commands AND free-form content commands escape the field interview.
       // Uses pre-built COMMAND_TOKENS Set — O(words) not O(regex_count × text_length).
       const isCommand = isCommandMessage(tl);
+
+      if (isCommand) {
+        // User asked a real question — pause the field interview so it doesn't resume
+        // mid-conversation or fire from the welcome timeout after an LLM response.
+        awaitingFieldRef.current = null;
+      }
 
       if (!isCommand) {
         // Date fields — check for compound range first ("from today to 3 months")
