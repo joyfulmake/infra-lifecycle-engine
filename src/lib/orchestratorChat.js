@@ -282,31 +282,48 @@ function nextPhase1Prompt(s) {
 }
 
 // Parse "set X to Y" or "X is Y" patterns
+// Prose guards: if the extracted value looks like a sentence rather than a product name,
+// reject it. Real field values are short (≤35 chars) and don't contain prose connectors.
+const PROSE_CONNECTORS = /\b(compared|versus|than|because|between|against|features|advantages|enterprise|latest|modern|today|using|this|the|for|some|best)\b/i;
+
+function isLikelyProseNotValue(v) {
+  if (!v) return true;
+  if (v.length > 35) return true;
+  if (PROSE_CONNECTORS.test(v)) return true;
+  return false;
+}
+
 function parseSetField(m) {
+  // Skip entirely for questions or conversational sentences
+  if (/[?]/.test(m)) return null;
+  if (/^(what|how|why|when|where|which|who|tell|share|compare|explain|show|list|give|can you|could you|would|is there|are there)/i.test(m.trim())) return null;
+
   // HW
   if (/\b(hw|hardware|server|platform)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
     const v = m.match(/\b(hw|hardware|server|platform)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
-    if (v) return { field: 'hw', value: v, label: 'Hardware' };
+    if (v && !isLikelyProseNotValue(v)) return { field: 'hw', value: v, label: 'Hardware' };
   }
   // OS
   if (/\b(os|operating system|operating-system)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
     const v = m.match(/\b(os|operating system|operating-system)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
-    if (v) return { field: 'os', value: v, label: 'OS' };
+    if (v && !isLikelyProseNotValue(v)) return { field: 'os', value: v, label: 'OS' };
   }
   // DB
   if (/\b(db|database|database system)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
     const v = m.match(/\b(db|database|database system)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
-    if (v) return { field: 'db', value: v, label: 'Database' };
+    if (v && !isLikelyProseNotValue(v)) return { field: 'db', value: v, label: 'Database' };
   }
-  // App
-  if (/\b(app|application|middleware|web server)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
-    const v = m.match(/\b(app|application|middleware|web server)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
-    if (v) return { field: 'app', value: v, label: 'Application' };
+  // App — use tighter pattern: only fire when field keyword is near start of message
+  if (/^.{0,20}\b(app|application|middleware|web server)\b.{0,10}(is|:|=)\s+(.+)/i.test(m)) {
+    const v = m.match(/\b(app|application|middleware|web server)\b.{0,10}(?:is|:|=)\s+(.+)/i)?.[2]?.trim();
+    if (v && !isLikelyProseNotValue(v)) return { field: 'app', value: v, label: 'Application' };
   }
   return null;
 }
 
 function parseSetRequirement(m) {
+  if (/[?]/.test(m)) return null;
+  if (/^(what|how|why|when|where|which|who|tell|share|compare|explain|show|list|give|can you|could you|would|is there|are there)/i.test(m.trim())) return null;
   // Project name
   if (/\b(project name|build name)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
     const v = m.match(/\b(project name|build name)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
