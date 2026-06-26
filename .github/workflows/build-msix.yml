@@ -277,7 +277,8 @@ jobs:
           Write-Host "CSS validation PASSED -- zero url() references in all CSS bundles"
 
           # Also verify no BOM in output files
-          $filesToCheck = @($htmlPath) + $cssFiles.FullName
+          $htmlPath = "msix\index.html"
+          $filesToCheck = @($htmlPath) + @($cssFiles | ForEach-Object { $_.FullName })
           foreach ($f in $filesToCheck) {
             $bytes = [System.IO.File]::ReadAllBytes($f)
             if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
