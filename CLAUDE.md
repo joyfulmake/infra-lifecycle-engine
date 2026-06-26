@@ -190,7 +190,7 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 
 Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
 
-**Current status:** v2.8.0.0 ready to build — Root cause of persistent 26200.8116 crash identified: PowerShell 5.1 (`shell: powershell` on GHA `windows-latest`) writes UTF-8 WITH BOM via `Set-Content -Encoding UTF8`. A BOM (EF BB BF) before `<!doctype html>` pushes WebView2 into quirks mode; a BOM in a CSS file can crash the CSS parser on certain WebView2 builds. Fix: (1) ALL `Set-Content -Encoding UTF8` calls in the workflow replaced with `[System.IO.File]::WriteAllText(..., UTF8Encoding($false))` — no BOM in any MSIX output file; (2) splash `<img src="icon-192.png">` stripped from MSIX index.html in the workflow — eliminates the parse-time PNG fetch; (3) new CI validation step fails the workflow if ANY url() refs remain in CSS OR if any BOM is found — permanent gate against regression.
+**Current status:** v2.8.0.0 building (pushed 2026-06-26) — Two PS5.1 bugs fixed in the MSIX workflow on top of the BOM fix: (1) em dash `—` characters in `Write-Host` strings cause PS5.1 parse errors (byte 0x94 = right-double-quote closes the string); replaced with `--`; (2) `$htmlPath` used in the BOM validation step was declared in a previous step — PS5.1 doesn't carry variables between steps; re-declared in the validation step. Core BOM fix: ALL `Set-Content -Encoding UTF8` replaced with `[System.IO.File]::WriteAllText(..., UTF8Encoding($false))`. CI validation step hard-fails on any url() refs or BOM in output files.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
@@ -286,7 +286,17 @@ Worker routes relevant to OpsMentor:
 - `POST /cartesia-tts` — TTS; tries Azure Neural first, then Cartesia, then ElevenLabs
 - `GET /health` — returns `{tts:{azure,cartesia,elevenlabs,voice}}`
 
-**Rule 15 in worker system prompt**: when `message` starts with `INITIAL_ASSESSMENT`, do not narrate, do not ask for data already visible, include proactive actions, keep reply to 2–4 sentences.
+**Rule 15 in worker system prompt**: when `message` starts with `INITIAL_ASSESSMENT`, do not narrate, do not ask for data already visible, include proactive actions, keep reply to 2-4 sentences. Include `suggestions` array.
+
+**Rules 18-21 in worker system prompt (interactive mentor)**:
+- Rule 18 INTENT CHECK: When user asks about a hw/sw/vendor/tool topic not in their current build, always ask "Is this for your current build, or general research?" — embedded naturally at the end of the reply.
+- Rule 19 FOLLOW-UP: Every informational response MUST end with one concrete follow-up question specific to the topic. Not generic — opens the next natural direction.
+- Rule 20 REFERENCES: For vendor versions, EOL timelines, CVE IDs, compliance frameworks, certifications: include at least one real reference URL ("Source: Label -- URL"). Only URLs you are confident exist: vendor docs, NIST, CVE, endoflife.date, MSRC, Red Hat Security.
+- Rule 21 PAST BUILD LESSONS: When context includes PAST BUILDS, weave lessons in naturally when stacks/incidents are similar. Never list past builds unless asked directly.
+
+**Suggestion chips**: LLM response includes `suggestions: string[]` (2-3 short follow-up questions, max 8 words). Rendered as clickable chips below each orchestrator message bubble. Click sends the question immediately as a user message (via `handleSend(overrideText)` — bypasses the input state). Only included for informational/knowledge responses, not for workflow action responses.
+
+**Past build lessons**: `buildPastBuildsSummary(builds, currentBuildId, ctx)` in `OrchestratorPanel.jsx` — scores past saved builds by stack similarity (hw/os/db/app match), takes top 3, extracts RAID entries. Passed to `buildStateContext(s, authUser, pastSummary)` as third param and included in the worker system prompt under "PAST BUILDS" section. Enables LLM to naturally reference "In your previous Oracle 19c build, X happened — watch for that here."
 
 **Action confirmation rules**: `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, `SET_DESIGN_FIELD`, `NAVIGATE_TAB` require no confirmation. `APPLY_DESIGN`, `INJECT_PHASE2`, `SUBMIT_CAB`, `SIGN_RTM`, `PROMOTE`, `UNLOCK_FOR_REVISION`, `RESUBMIT_CAB`, `ADD_INCIDENT`, `ADD_UUM_ITEM` always require confirmation.
 
