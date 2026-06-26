@@ -1592,12 +1592,10 @@ Rules:
 
     } catch (e) {
       setThinking(false);
-      const fallback = ruleBasedResponse('help', s, authUser, acknowledgedCompatIds.current);
-      const fallbackText = typeof fallback === 'string' ? fallback : fallback?.reply;
       setMessages(m => [...m, {
         id: nextId(),
         role: 'orchestrator',
-        text: fallbackText || 'I can answer questions about your build status, roles, RTM, stack, and guide you through each phase. Try: "what\'s the current status?" or "what\'s next?"',
+        text: 'Connection to the AI service failed. Check your network and try again — or use direct commands like "add risk: [description]", "add incident: [title]", "add task: [name]", "check incompatibilities".',
       }]);
     }
   }
