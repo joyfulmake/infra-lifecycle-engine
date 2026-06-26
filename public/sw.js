@@ -6,7 +6,7 @@
 if (self.location.protocol === 'ms-appx-web:') { /* no-op */ }
 else {
 
-const CACHE = 'opsmanifest-v4';
+const CACHE = 'opsmanifest-v5';
 
 const PRECACHE = [
   '/',

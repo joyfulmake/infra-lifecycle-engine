@@ -328,12 +328,15 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const awaitingNameRef   = useRef(false); // name-asking removed — no gate on commands
   const awaitingFieldRef  = useRef(null); // 'hw'|'os'|'db'|'app'|'projectName'|'envType'|'goLiveDate'|null
   const pendingTaskRef    = useRef(null); // { title } waiting for gantt/raid choice
+  const userHasChattedRef = useRef(false); // set synchronously when user sends first message; guards setTimeout-based field prompts
   const sRef                  = useRef(s);
   const authUserRef           = useRef(authUser);
   const messagesRef           = useRef([]);
   useEffect(() => { sRef.current = s; });
   useEffect(() => { authUserRef.current = authUser; }, [authUser]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  // Reset the chat flag when conversation is cleared (new session start)
+  useEffect(() => { if (messages.length === 0) userHasChattedRef.current = false; }, [messages.length]);
 
 
   function getHistory(msgs) {
@@ -516,12 +519,16 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const isGuest = !authUserRef.current;
     const st = sRef.current;
 
-    // Guests always get the natural greeting — no LLM, no hasData check.
+    // Guests get a fully conversational welcome — no name gate, no field interview.
+    // Any message goes straight to the LLM exactly like signed-in users.
     if (isGuest) {
       setMessages([{ id: nextId(), role: 'orchestrator', text:
-        `Welcome to OpsManifest.\n\nI'm OpsMentor — I'll guide your team through the full provisioning lifecycle, from platform selection to production cutover.\n\nYou're in guest mode right now. Sign in any time (link at the bottom) to save and sync your builds — or let's go ahead as-is either way.\n\nWhat should I call you?`
+        `Welcome to OpsManifest. I'm OpsMentor — the delivery intelligence behind this tool.\n\nAsk me anything: your stack, infra best practices, how this compares to other tools, or just start by selecting your hardware platform below. Sign in any time to save your builds.`
       }]);
-      awaitingNameRef.current = true;
+      awaitingNameRef.current = false;
+      awaitingFieldRef.current = null;
+      const firstMissing = nextFieldPrompt(st, null);
+      if (firstMissing && FIELD_CHIPS[firstMissing]) setChipsField(firstMissing);
       return;
     }
 
@@ -1350,10 +1357,12 @@ Rules:
         : `Build is already in progress — ${step}. Ask me anything.`;
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply }]);
     } else {
-      // Acknowledge name as its own beat, then field question after a pause
-      const ack = name ? `Good to know, ${name}.` : `Alright, let's get started.`;
+      // Acknowledge name as its own beat, then field question after a pause.
+      // Guard: if user has already sent another message, skip the field prompt entirely.
+      const ack = name ? `Welcome, ${name}.` : `Alright, let's get started.`;
       setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: ack }]);
       setTimeout(() => {
+        if (userHasChattedRef.current) return;
         const fieldQ = firstField ? FIELD_QUESTIONS[firstField] : 'All Phase 1 fields are set — say "run scan" to continue.';
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: fieldQ }]);
         if (firstField && FIELD_CHIPS[firstField]) setChipsField(firstField);
@@ -1366,6 +1375,10 @@ Rules:
   async function handleSend(overrideText) {
     const text = (overrideText || input).trim();
     if (!text || thinking) return;
+
+    // Mark synchronously — any setTimeout that checks this ref will see it immediately,
+    // even before React re-renders and before messagesRef.current is updated.
+    userHasChattedRef.current = true;
 
     // Duplicate-send guard: ignore if identical to the last user message sent
     const lastUser = messagesRef.current.filter(m => m.role === 'user').slice(-1)[0];
