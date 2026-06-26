@@ -186,16 +186,19 @@ body::after{
 .ver-badge{position:fixed;bottom:14px;right:18px;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:.05em;z-index:30}
 
 /* ── Comparison grid (scene 8) ── */
-.comp-intro{font-size:13px;color:#64748b;text-align:center;margin-bottom:14px;max-width:680px}
-.comp-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;width:100%;max-width:940px}
-.comp-card{border-radius:12px;padding:14px 12px 12px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);display:flex;flex-direction:column;gap:5px;transition:border-color .2s}
-.comp-card:hover{border-color:rgba(45,212,191,.32);background:rgba(13,148,136,.06)}
-.comp-emoji{font-size:22px;line-height:1}
-.comp-tool{font-size:12px;font-weight:800;color:#f1f5f9;margin-top:2px}
-.comp-role{font-size:9.5px;color:#475569;font-weight:600;letter-spacing:.07em;text-transform:uppercase;margin-bottom:2px}
-.comp-latest{font-size:10.5px;color:#94a3b8;line-height:1.5;flex:1}
+.comp-intro{font-size:13.5px;color:#64748b;text-align:center;margin-bottom:16px;max-width:720px;line-height:1.6}
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:860px}
+.comp-card{border-radius:13px;padding:16px 14px 13px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);display:flex;flex-direction:column;gap:5px;transition:border-color .25s,background .25s}
+.comp-card:hover{border-color:rgba(45,212,191,.28);background:rgba(13,148,136,.05)}
+.comp-card.ai-card{border-color:rgba(139,92,246,.22);background:rgba(139,92,246,.05)}
+.comp-card.ai-card:hover{border-color:rgba(139,92,246,.45);background:rgba(139,92,246,.09)}
+.comp-emoji{font-size:20px;line-height:1}
+.comp-tool{font-size:12.5px;font-weight:800;color:#f1f5f9;margin-top:3px}
+.comp-role{font-size:9px;color:#475569;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+.comp-latest{font-size:10.5px;color:#94a3b8;line-height:1.55;flex:1}
 .comp-latest strong{color:#cbd5e1;font-weight:600}
-.comp-bridge{font-size:10px;color:#2dd4bf;border-top:1px solid rgba(45,212,191,.16);padding-top:8px;margin-top:6px;line-height:1.45;font-weight:600}
+.comp-bridge{font-size:10px;color:#2dd4bf;border-top:1px solid rgba(45,212,191,.14);padding-top:9px;margin-top:7px;line-height:1.5;font-weight:600}
+.comp-card.ai-card .comp-bridge{color:#c4b5fd;border-top-color:rgba(139,92,246,.2)}
 
 /* ── Data security (scene 9) ── */
 .datasec{display:flex;flex-direction:column;gap:10px;width:100%;max-width:660px}
@@ -318,49 +321,57 @@ body::after{
 
     <!-- 8: Comparative Landscape -->
     <div class="scene" data-scene="8">
-      <div class="kicker">In Good Company</div>
-      <h1 class="scene-heading" style="font-size:clamp(22px,3.2vw,38px);margin-bottom:8px">Built to enhance the tools your team already uses</h1>
-      <p class="comp-intro">Every platform below excels at what it does. OpsManifest fills the specialised pre-work layer that makes each one more accurate.</p>
+      <div class="kicker">The Enterprise Ecosystem</div>
+      <h1 class="scene-heading" style="font-size:clamp(22px,3vw,36px);margin-bottom:8px">The layer that makes every platform more accurate</h1>
+      <p class="comp-intro">Each platform below is best-in-class at what it does. OpsManifest is the structured pre-work layer none of them were designed to fill — and the one that makes all of them work.</p>
       <div class="comp-grid">
 
         <div class="comp-card">
-          <div class="comp-emoji">🟦</div>
+          <div class="comp-emoji">&#x1F4CC;</div>
           <div class="comp-tool">Jira</div>
-          <div class="comp-role">Project &amp; Issue Tracking</div>
-          <div class="comp-latest">Agile delivery, sprint management, DevOps pipelines. <strong>Latest:</strong> Jira AI — backlog prioritisation, sprint suggestions, and auto-generated release notes.</div>
-          <div class="comp-bridge">OpsManifest builds the traceable pre-work — system design, RTM, RAID — that makes every Jira ticket accurate from day one.</div>
+          <div class="comp-role">Issue &amp; Project Tracking</div>
+          <div class="comp-latest">Sprint delivery, DevOps pipelines, backlog management. <strong>Jira AI</strong> (2024): smart backlog prioritisation, auto-generated acceptance criteria, sprint planning suggestions.</div>
+          <div class="comp-bridge">OpsManifest builds the RTM, system design, and incident register — so every Jira ticket raised is accurate and traceable from day one.</div>
         </div>
 
         <div class="comp-card">
-          <div class="comp-emoji">🟩</div>
+          <div class="comp-emoji">&#x2699;&#xFE0F;</div>
           <div class="comp-tool">ServiceNow</div>
           <div class="comp-role">ITSM &amp; Change Management</div>
-          <div class="comp-latest">Enterprise change approvals, CMDB, and incident management. <strong>Latest:</strong> Now Assist AI — natural language change drafting and predictive risk scoring.</div>
-          <div class="comp-bridge">The CAB package OpsManifest produces maps directly into ServiceNow's change form — complete, consistent, and audit-ready.</div>
+          <div class="comp-latest">Enterprise change approvals, CMDB, incident workflow. <strong>Now Assist</strong> (2024): natural language change drafting, predictive risk scoring, automated change classification.</div>
+          <div class="comp-bridge">OpsManifest builds the CAB evidence — design, RAID, RTM, task plan — so the ServiceNow change form is complete, consistent, and audit-ready before submission.</div>
         </div>
 
         <div class="comp-card">
-          <div class="comp-emoji">🟪</div>
+          <div class="comp-emoji">&#x1F4C5;</div>
           <div class="comp-tool">Microsoft Project</div>
-          <div class="comp-role">Resource &amp; Schedule Planning</div>
-          <div class="comp-latest">Portfolio management, resource allocation, Microsoft 365 integration. <strong>Latest:</strong> Copilot for Project — natural language schedule creation and risk summaries.</div>
-          <div class="comp-bridge">OpsManifest's Gantt and RTM provide the infra-specific depth; Project surfaces the timeline view to the wider stakeholder group.</div>
+          <div class="comp-role">Schedule &amp; Portfolio Planning</div>
+          <div class="comp-latest">Resource planning, portfolio visibility, Microsoft 365 integration. <strong>Copilot for Project</strong> (2024): natural language schedule creation, risk summaries, resource conflict detection.</div>
+          <div class="comp-bridge">OpsManifest generates the infra-specific Gantt with critical-path logic and FSM states — Project surfaces it to the wider portfolio and executive layer.</div>
         </div>
 
         <div class="comp-card">
-          <div class="comp-emoji">🟧</div>
+          <div class="comp-emoji">&#x1F4D6;</div>
           <div class="comp-tool">Confluence</div>
           <div class="comp-role">Knowledge &amp; Documentation</div>
-          <div class="comp-latest">Team wikis, cross-team knowledge sharing, and live data links. <strong>Latest:</strong> Atlassian Intelligence — AI-generated page templates and content suggestions.</div>
-          <div class="comp-bridge">OpsManifest exports every build artefact as a structured Excel workbook — ready to embed or link directly from your Confluence project space.</div>
+          <div class="comp-latest">Team wikis, cross-team knowledge sharing, live data embeds. <strong>Atlassian Intelligence</strong> (2024): AI page summaries, smart templates, and cross-space content suggestions.</div>
+          <div class="comp-bridge">OpsManifest exports every build artefact — system design, RTM, RAID log, Gantt — as a structured Excel workbook ready to link or embed from Confluence.</div>
         </div>
 
         <div class="comp-card">
-          <div class="comp-emoji">🟥</div>
+          <div class="comp-emoji">&#x1F4CA;</div>
           <div class="comp-tool">Monday.com</div>
           <div class="comp-role">Visual Work Management</div>
-          <div class="comp-latest">Cross-department dashboards, 200+ integrations, and workdocs for any team. <strong>Latest:</strong> Monday AI — automated task generation and update summaries.</div>
-          <div class="comp-bridge">OpsManifest handles the infra workflow depth; Monday.com surfaces status and progress to the wider organisation.</div>
+          <div class="comp-latest">Cross-department dashboards, 200+ integrations, flexible workdocs. <strong>Monday AI</strong> (2024): automated task generation, update summaries, and board-to-board dependency mapping.</div>
+          <div class="comp-bridge">OpsManifest delivers the infra methodology depth; Monday.com surfaces status and progress to the wider business stakeholder group.</div>
+        </div>
+
+        <div class="comp-card ai-card">
+          <div class="comp-emoji">&#x1F9E0;</div>
+          <div class="comp-tool">AI Assistants &amp; Copilot</div>
+          <div class="comp-role">General-Purpose Intelligence</div>
+          <div class="comp-latest">Every major platform now ships an embedded AI — Jira AI, Now Assist, Copilot, Monday AI. They answer questions in context. None of them know your build state, your RAID log, your CAB status, or your live EOL windows.</div>
+          <div class="comp-bridge">OpsMentor is the AI that reads your actual project — 14 cross-tab coherence checks, live EOL API, 600+ incident codes — and acts directly inside your build. Not a chat layer. Embedded delivery intelligence.</div>
         </div>
 
       </div>
@@ -544,8 +555,8 @@ const SCRIPT = [
   { scene:7, speaker:'alex',   text:"And because system design, RTM, risk log, RACI, and the Gantt all live in one place — every stakeholder works from the same living document.", pauseAfter:700 },
 
   // Scene 8 — Comparative Landscape
-  { scene:8, speaker:'jordan', text:"OpsManifest is built to sit alongside the tools your team already uses — not to replace them.", pauseAfter:400 },
-  { scene:8, speaker:'alex',   text:"Jira tracks the tickets. ServiceNow owns the change record. Confluence stores the docs. OpsManifest builds the substance — the system design, RTM, and risk log — that makes all of them accurate before a single ticket is raised.", pauseAfter:700 },
+  { scene:8, speaker:'jordan', text:"Every major platform has shipped an AI copilot. Jira AI. Now Assist. Copilot for Project. Monday AI. They're impressive — but they answer general questions. None of them know your build.", pauseAfter:400 },
+  { scene:8, speaker:'alex',   text:"OpsManifest is the structured pre-work layer none of those platforms were designed to fill — and OpsMentor is the AI that reads your actual project state, not just your question. When you ask about compatibility, it checks your stack. When it flags a risk, it logs it to your RAID. That's a different category entirely.", pauseAfter:700 },
 
   // Scene 9 — Architecture & Data Security
   { scene:9, speaker:'alex',   text:"A question we hear from every security team: what exactly enters the app, how is it processed, and where does it go?", pauseAfter:400 },

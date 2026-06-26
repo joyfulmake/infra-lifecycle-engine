@@ -1584,33 +1584,42 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
   }
 
   // ── Encouragement / open-ended ─────────────────────────────────────────────
-  if (/\b(thank|thanks|great|good|perfect|awesome)\b/.test(m)) {
-    // Context-aware acknowledgment — no generic "next step" language
-    if (s.promoted) return { reply: 'System is live and closure is underway. Good work getting here.' };
-    if (s.rtmSigned) return { reply: 'RTM is signed — change window is the last gate.' };
-    if (s.cabApproved) return { reply: 'Good progress. RTM is the final technical gate before cutover.' };
-    if (s.phase2Active) return { reply: 'Making solid progress. Gantt and CAB package are next in line.' };
-    if (s.designApplied) return { reply: 'Design is locked. Phase 2 is ready to inject from the sidebar whenever you are.' };
-    if (s.scanComplete) return { reply: 'Scan is done — System Design is where the findings become traceable requirements.' };
-    if (s.isBuilt) return { reply: 'Stack locked. Scan is the next move.' };
-    return { reply: 'Glad to help — what would you like to work on?' };
+  // Only intercept pure acknowledgements (no trailing question or substantive content)
+  {
+    const isPureEncouragement = /^(thank\s*you|thanks|great|good\s*job|perfect|awesome|excellent|nice)[,!.\s]*$/i.test(raw.trim());
+    if (isPureEncouragement) {
+      if (s.promoted) return { reply: 'System is live and closure is underway. Good work getting here.' };
+      if (s.rtmSigned) return { reply: 'RTM is signed — change window is the last gate.' };
+      if (s.cabApproved) return { reply: 'Good progress. RTM is the final technical gate before cutover.' };
+      if (s.phase2Active) return { reply: 'Making solid progress. Gantt and CAB package are next in line.' };
+      if (s.designApplied) return { reply: 'Design is locked. Phase 2 is ready to inject from the sidebar whenever you are.' };
+      if (s.scanComplete) return { reply: 'Scan is done — System Design is where the findings become traceable requirements.' };
+      if (s.isBuilt) return { reply: 'Stack locked. Scan is the next move.' };
+      return null; // Let LLM give a natural response
+    }
   }
 
-  if (/\b(hi|hello|hey|good morning|good afternoon)\b/.test(m)) {
-    // Greet contextually rather than listing a generic "next step"
-    if (s.promoted) return { reply: 'Hey — system is live. Anything specific you want to check?' };
-    if (s.rtmSigned) return { reply: 'Hey — RTM is signed. Change window is the last gate before go-live.' };
-    if (s.cabApproved) return { reply: 'Hey — CAB approved, RTM is open for sign-off.' };
-    if (s.phase2Active) return { reply: 'Hey — Phase 2 is live. Gantt has your full task plan when you\'re ready.' };
-    if (s.designApplied) return { reply: 'Hey — design is locked. Ready to inject Phase 2?' };
-    if (s.scanComplete) return { reply: 'Hey — scan is done. System Design is next.' };
-    if (s.isBuilt) return { reply: 'Hey — stack is locked. Run the scan to surface any EOL or CVE gaps.' };
-    const next = nextPhase1Prompt(s);
-    return { reply: next ? `Hey — ${next}` : 'Hey — what\'s on your mind?' };
+  // ── Greeting — only intercept pure greetings (no question, no trailing content) ──
+  // Any message with "?" or longer than 4 words that starts with a greeting goes to the LLM
+  // so the actual question gets a real answer, not a workflow prompt.
+  {
+    const isPureGreeting = /^(hi|hello|hey|good\s*(morning|afternoon|evening)|howdy)[,!.\s]*$/i.test(raw.trim());
+    if (isPureGreeting) {
+      if (s.promoted) return { reply: 'Hey — system is live. Anything specific you want to check?' };
+      if (s.rtmSigned) return { reply: 'Hey — RTM is signed. Change window is the last gate before go-live.' };
+      if (s.cabApproved) return { reply: 'Hey — CAB approved, RTM is open for sign-off.' };
+      if (s.phase2Active) return { reply: 'Hey — Phase 2 is live. Gantt has your full task plan when you\'re ready.' };
+      if (s.designApplied) return { reply: 'Hey — design is locked. Ready to inject Phase 2?' };
+      if (s.scanComplete) return { reply: 'Hey — scan is done. System Design is next.' };
+      if (s.isBuilt) return { reply: 'Hey — stack is locked. Run the scan to surface any EOL or CVE gaps.' };
+      return null; // Blank build: let LLM give a warm, context-aware welcome
+    }
+    // If message starts with a greeting BUT has more content — fall through to LLM
   }
 
   // ── Share / can I / custom questions ──────────────────────────────────────
-  if (/\b(can i|share|send|paste|copy|enter|input|type|add|provide)\b/.test(m) && /\b(here|this|requirement|detail|value|info)\b/.test(m)) {
+  // Only intercept the explicit "can I paste/enter something here" pattern, not general questions
+  if (/\b(can i|may i)\b.{0,30}\b(paste|share|send|copy|enter|type|add|provide)\b/i.test(m) && /\b(here|this|requirement|detail|value|info)\b/.test(m)) {
     const next = nextPhase1Prompt(s);
     return { reply: `Absolutely — just type it directly. For example:\n• "hardware is Dell PowerEdge R750"\n• "OS is RHEL 8.6"\n• "project name is Server Migration Q3"\n\n${next || 'All Phase 1 fields look complete — ask me anything else.'}` };
   }
