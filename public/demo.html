@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpsManifest — Conversational Demo</title>
+<title>OpsManifest  -  Conversational Demo</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:#08101e;color:#e2e8f0;
@@ -45,26 +45,29 @@ body::after{
 .scene.exit{opacity:0;transform:translateY(-16px)}
 
 /* ── Kicker ── */
-.kicker{font-size:17px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-  color:#2dd4bf;margin-bottom:18px;text-shadow:0 0 24px rgba(45,212,191,.3)}
+.kicker{font-size:22px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:#2dd4bf;margin-bottom:18px;text-shadow:0 0 28px rgba(45,212,191,.45),0 0 8px rgba(45,212,191,.2)}
 
 /* ── Heading ── */
-.scene-heading{font-size:clamp(28px,4.5vw,52px);font-weight:800;text-align:center;
+.scene-heading{font-size:clamp(36px,5.5vw,68px);font-weight:800;text-align:center;
   line-height:1.15;max-width:900px;
   background:linear-gradient(135deg,#f8fafc 20%,#93c5fd 60%,#a78bfa 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:18px}
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:18px;
+  filter:drop-shadow(0 0 14px rgba(147,197,253,.18))}
 
 /* ── Sub ── */
-.scene-sub{font-size:clamp(18px,2vw,22px);color:#b0c4da;text-align:center;
-  max-width:660px;line-height:1.72;margin-bottom:40px}
+.scene-sub{font-size:clamp(23px,2.6vw,29px);color:#b0c4da;text-align:center;
+  max-width:660px;line-height:1.72;margin-bottom:40px;
+  text-shadow:0 0 28px rgba(176,196,218,.18)}
 
 /* ── Stat chips ── */
 .stats{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-bottom:36px}
 .stat{background:rgba(13,148,136,.12);border:1px solid rgba(13,148,136,.35);
   border-radius:14px;padding:16px 28px;text-align:center;min-width:130px;
   box-shadow:0 2px 16px rgba(13,148,136,.1)}
-.stat-val{font-size:clamp(30px,4.5vw,48px);font-weight:800;color:#2dd4bf;line-height:1}
-.stat-lbl{font-size:14px;color:#94a3b8;margin-top:6px;font-weight:600;
+.stat-val{font-size:clamp(39px,5.5vw,62px);font-weight:800;color:#2dd4bf;line-height:1;
+  text-shadow:0 0 22px rgba(45,212,191,.38)}
+.stat-lbl{font-size:18px;color:#94a3b8;margin-top:6px;font-weight:600;
   letter-spacing:.05em;text-transform:uppercase}
 
 /* ── Feature cards ── */
@@ -80,17 +83,18 @@ body::after{
   content:'';position:absolute;top:0;left:0;right:0;height:2px;
   background:linear-gradient(90deg,rgba(13,148,136,.5),rgba(59,130,246,.3),transparent);
 }
-.feature-icon{font-size:24px;flex-shrink:0;margin-top:2px}
-.feature-text h4{font-size:17px;font-weight:700;color:#f1f5f9;margin-bottom:6px;line-height:1.35}
-.feature-text p{font-size:15px;color:#94a3b8;line-height:1.65}
-.tag-pill{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.05em;
+.feature-icon{font-size:31px;flex-shrink:0;margin-top:2px}
+.feature-text h4{font-size:22px;font-weight:700;color:#f1f5f9;margin-bottom:6px;line-height:1.35;
+  text-shadow:0 0 16px rgba(241,245,249,.15)}
+.feature-text p{font-size:20px;color:#94a3b8;line-height:1.65}
+.tag-pill{display:inline-block;font-size:15px;font-weight:700;letter-spacing:.05em;
   text-transform:uppercase;padding:3px 10px;border-radius:100px;vertical-align:middle;margin-left:5px}
 .tag-pro{background:rgba(245,158,11,.14);color:#f59e0b;border:1px solid rgba(245,158,11,.28)}
 .tag-ent{background:rgba(59,130,246,.14);color:#60a5fa;border:1px solid rgba(59,130,246,.28)}
 
 /* ── CTA ── */
 .cta-link{display:inline-flex;align-items:center;gap:10px;margin-top:10px;
-  padding:16px 40px;border-radius:100px;font-size:19px;font-weight:700;
+  padding:16px 40px;border-radius:100px;font-size:25px;font-weight:700;
   background:linear-gradient(135deg,#0d9488,#3b82f6);color:#fff;text-decoration:none;
   box-shadow:0 6px 32px rgba(13,148,136,.45);transition:all .25s}
 .cta-link:hover{transform:scale(1.04);box-shadow:0 10px 44px rgba(13,148,136,.65)}
@@ -114,11 +118,12 @@ body::after{
 
 .bubble{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);
   border-radius:20px;padding:16px 26px;max-width:680px;
-  font-size:clamp(17px,2vw,21px);line-height:1.72;color:#e2e8f0}
+  font-size:clamp(22px,2.6vw,27px);line-height:1.72;color:#e2e8f0;
+  text-shadow:0 0 20px rgba(226,232,240,.1)}
 .bubble.alex-bubble{border-radius:20px 20px 20px 4px}
 .bubble.jordan-bubble{border-radius:20px 20px 4px 20px;
   background:rgba(59,130,246,.09);border-color:rgba(96,165,250,.22)}
-.speaker-name{font-size:13px;font-weight:700;letter-spacing:.09em;
+.speaker-name{font-size:17px;font-weight:700;letter-spacing:.09em;
   text-transform:uppercase;margin-bottom:6px}
 .alex-name{color:#2dd4bf}
 .jordan-name{color:#60a5fa}
@@ -156,7 +161,7 @@ body::after{
   box-shadow:0 2px 14px rgba(13,148,136,.45);
 }
 .ctrl-btn.play-pause:hover{box-shadow:0 5px 24px rgba(13,148,136,.65)}
-.scene-counter{font-size:14px;color:#94a3b8;font-weight:700;min-width:44px;text-align:center}
+.scene-counter{font-size:17px;color:#94a3b8;font-weight:700;min-width:44px;text-align:center}
 
 /* ── Start overlay ── */
 .start-overlay{
@@ -165,52 +170,53 @@ body::after{
   z-index:100;gap:24px;transition:opacity .6s ease;
 }
 .start-overlay.hidden{opacity:0;pointer-events:none}
-.start-logo{font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-  color:#2dd4bf;margin-bottom:4px;text-shadow:0 0 24px rgba(45,212,191,.35)}
-.start-title{font-size:clamp(34px,5.5vw,60px);font-weight:800;text-align:center;
+.start-logo{font-size:20px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:#2dd4bf;margin-bottom:4px;text-shadow:0 0 28px rgba(45,212,191,.48)}
+.start-title{font-size:clamp(44px,7vw,78px);font-weight:800;text-align:center;
   line-height:1.12;
   background:linear-gradient(135deg,#f8fafc 30%,#93c5fd 65%,#a78bfa 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.start-sub{font-size:20px;color:#94a3b8;text-align:center;max-width:520px;
-  line-height:1.68;margin-top:-6px}
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 16px rgba(147,197,253,.2))}
+.start-sub{font-size:26px;color:#94a3b8;text-align:center;max-width:560px;
+  line-height:1.68;margin-top:-6px;text-shadow:0 0 24px rgba(148,163,184,.15)}
 .start-btn{
   margin-top:10px;padding:18px 52px;border-radius:100px;border:none;cursor:pointer;
-  font-size:19px;font-weight:700;letter-spacing:.02em;color:#fff;
+  font-size:25px;font-weight:700;letter-spacing:.02em;color:#fff;
   background:linear-gradient(135deg,#0d9488,#3b82f6);
   box-shadow:0 6px 40px rgba(13,148,136,.55);transition:all .25s;
 }
 .start-btn:hover{transform:scale(1.05);box-shadow:0 10px 50px rgba(13,148,136,.75)}
 .start-speakers{display:flex;gap:28px;margin-top:2px}
-.start-speaker{display:flex;align-items:center;gap:12px;font-size:15px;color:#475569}
-.start-speaker .avatar{width:38px;height:38px;font-size:13px}
-.ver-badge{position:fixed;bottom:14px;right:18px;font-size:11px;color:rgba(255,255,255,.2);letter-spacing:.05em;z-index:30}
+.start-speaker{display:flex;align-items:center;gap:12px;font-size:19px;color:#475569}
+.start-speaker .avatar{width:38px;height:38px;font-size:14px}
+.ver-badge{position:fixed;bottom:14px;right:18px;font-size:13px;color:rgba(255,255,255,.2);letter-spacing:.05em;z-index:30}
 
 /* ── Comparison grid (scene 8) ── */
-.comp-intro{font-size:16px;color:#94a3b8;text-align:center;margin-bottom:18px;max-width:780px;line-height:1.6}
-.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:960px}
-.comp-card{border-radius:14px;padding:18px 16px 16px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);display:flex;flex-direction:column;gap:6px;transition:border-color .25s,background .25s}
+.comp-intro{font-size:20px;color:#94a3b8;text-align:center;margin-bottom:18px;max-width:800px;line-height:1.6}
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:980px}
+.comp-card{border-radius:14px;padding:20px 18px 18px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);display:flex;flex-direction:column;gap:7px;transition:border-color .25s,background .25s}
 .comp-card:hover{border-color:rgba(45,212,191,.32);background:rgba(13,148,136,.06)}
 .comp-card.ai-card{border-color:rgba(139,92,246,.28);background:rgba(139,92,246,.06)}
 .comp-card.ai-card:hover{border-color:rgba(139,92,246,.5);background:rgba(139,92,246,.1)}
-.comp-emoji{font-size:24px;line-height:1}
-.comp-tool{font-size:20px;font-weight:800;color:#f1f5f9;margin-top:2px;letter-spacing:-.01em}
-.comp-role{font-size:11px;color:#475569;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px}
-.comp-latest{font-size:13.5px;color:#94a3b8;line-height:1.55;flex:1}
+.comp-emoji{font-size:28px;line-height:1}
+.comp-tool{font-size:26px;font-weight:800;color:#f1f5f9;margin-top:2px;letter-spacing:-.01em;text-shadow:0 0 16px rgba(241,245,249,.18)}
+.comp-role{font-size:13px;color:#64748b;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px}
+.comp-latest{font-size:17px;color:#94a3b8;line-height:1.55;flex:1}
 .comp-latest strong{color:#cbd5e1;font-weight:700}
-.comp-bridge{font-size:13px;color:#2dd4bf;border-top:1px solid rgba(45,212,191,.18);padding-top:10px;margin-top:8px;line-height:1.5;font-weight:600}
-.comp-card.ai-card .comp-bridge{color:#c4b5fd;border-top-color:rgba(139,92,246,.25)}
+.comp-bridge{font-size:16px;color:#2dd4bf;border-top:1px solid rgba(45,212,191,.18);padding-top:10px;margin-top:8px;line-height:1.5;font-weight:600;text-shadow:0 0 16px rgba(45,212,191,.2)}
+.comp-card.ai-card .comp-bridge{color:#c4b5fd;border-top-color:rgba(139,92,246,.25);text-shadow:0 0 16px rgba(196,181,253,.2)}
 
 /* ── Data security (scene 9) ── */
-.datasec{display:flex;flex-direction:column;gap:14px;width:100%;max-width:720px}
-.datasec-box{border-radius:14px;padding:20px 24px;border:1px solid;display:flex;align-items:flex-start;gap:18px}
+.datasec{display:flex;flex-direction:column;gap:16px;width:100%;max-width:740px}
+.datasec-box{border-radius:14px;padding:22px 26px;border:1px solid;display:flex;align-items:flex-start;gap:20px}
 .datasec-box.inp{background:rgba(13,148,136,.1);border-color:rgba(13,148,136,.38)}
 .datasec-box.proc{background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.38)}
 .datasec-box.stor{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.32)}
-.datasec-icon{font-size:26px;flex-shrink:0;margin-top:2px}
-.datasec-hd{font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:5px}
-.datasec-tx{font-size:14.5px;color:#94a3b8;line-height:1.58}
+.datasec-icon{font-size:32px;flex-shrink:0;margin-top:2px}
+.datasec-hd{font-size:22px;font-weight:700;color:#f1f5f9;margin-bottom:5px;text-shadow:0 0 14px rgba(241,245,249,.15)}
+.datasec-tx{font-size:18px;color:#94a3b8;line-height:1.58}
 .datasec-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.dtag{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:100px}
+.dtag{font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 12px;border-radius:100px}
 .dtag-g{background:rgba(34,197,94,.14);color:#4ade80;border:1px solid rgba(34,197,94,.25)}
 .dtag-p{background:rgba(139,92,246,.14);color:#c4b5fd;border:1px solid rgba(139,92,246,.25)}
 .dtag-b{background:rgba(59,130,246,.14);color:#93c5fd;border:1px solid rgba(59,130,246,.25)}
@@ -227,7 +233,7 @@ body::after{
     <div class="scene active" data-scene="0">
       <div class="kicker">OpsManifest Demo</div>
       <h1 class="scene-heading">Every infra rollout starts with the same meeting</h1>
-      <p class="scene-sub">Nobody has the right information. Nobody agrees on the plan. The go-live date slips — again.</p>
+      <p class="scene-sub">Nobody has the right information. Nobody agrees on the plan. The go-live date slips  -  again.</p>
     </div>
 
     <!-- 1: Problem -->
@@ -239,7 +245,7 @@ body::after{
         <div class="stat"><div class="stat-val">41%</div><div class="stat-lbl">CAB resubmissions</div></div>
         <div class="stat"><div class="stat-val">5x</div><div class="stat-lbl">Rework from late EOL flags</div></div>
       </div>
-      <p class="scene-sub">The data exists — in twelve spreadsheets, three email threads, and one person's laptop.</p>
+      <p class="scene-sub">The data exists  -  in twelve spreadsheets, three email threads, and one person's laptop.</p>
     </div>
 
     <!-- 2: Solution -->
@@ -247,10 +253,10 @@ body::after{
       <div class="kicker">The Solution</div>
       <h1 class="scene-heading">Pick your stack. Walk your team through everything that follows.</h1>
       <div class="features">
-        <div class="feature"><div class="feature-icon">&#x1F3D7;</div><div class="feature-text"><h4>Start from one decision</h4><p>Choose your hardware, OS, database, and application. Every document — design, risk log, schedule, sign-off — builds from that single starting point.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F3D7;</div><div class="feature-text"><h4>Start from one decision</h4><p>Choose your hardware, OS, database, and application. Every document  -  design, risk log, schedule, sign-off  -  builds from that single starting point.</p></div></div>
         <div class="feature"><div class="feature-icon">&#x1F50D;</div><div class="feature-text"><h4>Know what's broken before you design</h4><p>Run one scan. CVE exposures, end-of-life gaps, and cipher issues surface before a single design field is filled.</p></div></div>
         <div class="feature"><div class="feature-icon">&#x1F5C2;</div><div class="feature-text"><h4>Design locked by the team that owns it</h4><p>Each section of the system design is owned by a role. Changes require re-approval. Nothing drifts unnoticed.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F501;</div><div class="feature-text"><h4>One change, everything updates</h4><p>Change the go-live date, add an incident, update a design field — the Gantt, RTM, and Matrix all follow. No re-keying.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F501;</div><div class="feature-text"><h4>One change, everything updates</h4><p>Change the go-live date, add an incident, update a design field  -  the Gantt, RTM, and Matrix all follow. No re-keying.</p></div></div>
       </div>
     </div>
 
@@ -258,7 +264,7 @@ body::after{
     <div class="scene" data-scene="3">
       <div class="kicker">OpsMentor Intelligence</div>
       <h1 class="scene-heading">An AI advisor watching every tab, every change, in real time</h1>
-      <p class="scene-sub">Catches the EOL window you missed, the cipher gap that would have failed your security review, the compatibility conflict hiding in your stack selection — before your CAB meeting, not in it.</p>
+      <p class="scene-sub">Catches the EOL window you missed, the cipher gap that would have failed your security review, the compatibility conflict hiding in your stack selection  -  before your CAB meeting, not in it.</p>
       <div class="stats">
         <div class="stat"><div class="stat-val">40+</div><div class="stat-lbl">Vendor compat rules</div></div>
         <div class="stat"><div class="stat-val">60+</div><div class="stat-lbl">EOL products tracked live</div></div>
@@ -269,12 +275,12 @@ body::after{
     <!-- 4: Compatibility Intelligence -->
     <div class="scene" data-scene="4">
       <div class="kicker">Compatibility Intelligence</div>
-      <h1 class="scene-heading">Incompatible stacks flagged instantly — with a fix, not just a warning</h1>
+      <h1 class="scene-heading">Incompatible stacks flagged instantly  -  with a fix, not just a warning</h1>
       <div class="features">
-        <div class="feature"><div class="feature-icon">&#x26A1;</div><div class="feature-text"><h4>Detected as you type</h4><p>Stack combinations that won't work together are caught the moment you select them — before any design is generated.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F504;</div><div class="feature-text"><h4>Compatible alternatives offered</h4><p>OpsMentor doesn't just warn — it proposes a compatible replacement and switches the build with one click.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F6E1;&#xFE0F;</div><div class="feature-text"><h4>Override with auto-RAID risk</h4><p>Choose to proceed anyway — a RAID risk is raised automatically with your rationale logged.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F4CB;</div><div class="feature-text"><h4>Raise as incident in one phrase</h4><p>Say "raise as incident" — OpsMentor creates the custom incident, feeds it into RTM, Matrix, and the task plan.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x26A1;</div><div class="feature-text"><h4>Detected as you type</h4><p>Stack combinations that won't work together are caught the moment you select them  -  before any design is generated.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F504;</div><div class="feature-text"><h4>Compatible alternatives offered</h4><p>OpsMentor doesn't just warn  -  it proposes a compatible replacement and switches the build with one click.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F6E1;&#xFE0F;</div><div class="feature-text"><h4>Override with auto-RAID risk</h4><p>Choose to proceed anyway  -  a RAID risk is raised automatically with your rationale logged.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F4CB;</div><div class="feature-text"><h4>Raise as incident in one phrase</h4><p>Say "raise as incident"  -  OpsMentor creates the custom incident, feeds it into RTM, Matrix, and the task plan.</p></div></div>
       </div>
     </div>
 
@@ -283,9 +289,9 @@ body::after{
       <div class="kicker">Identity and Role Access</div>
       <h1 class="scene-heading">Sign in once. Your role resolves automatically across every tab.</h1>
       <div class="features">
-        <div class="feature"><div class="feature-icon">&#x1F511;</div><div class="feature-text"><h4>Secure sign-in, role-first</h4><p>Identity is verified through your account. Your RACI role resolves the moment you sign in — no manual assignment, no second lookup.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F465;</div><div class="feature-text"><h4>Section-level edit access</h4><p>Each System Design section is owned by a role. The DBA edits the database section; the Storage Lead edits storage — enforced automatically.</p></div></div>
-        <div class="feature"><div class="feature-icon">&#x1F510;</div><div class="feature-text"><h4>PM-only gates enforced</h4><p>CAB submission, RTM sign-off, change freeze periods — locked to the project PM's account only. No workarounds.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F511;</div><div class="feature-text"><h4>Secure sign-in, role-first</h4><p>Identity is verified through your account. Your RACI role resolves the moment you sign in  -  no manual assignment, no second lookup.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F465;</div><div class="feature-text"><h4>Section-level edit access</h4><p>Each System Design section is owned by a role. The DBA edits the database section; the Storage Lead edits storage  -  enforced automatically.</p></div></div>
+        <div class="feature"><div class="feature-icon">&#x1F510;</div><div class="feature-text"><h4>PM-only gates enforced</h4><p>CAB submission, RTM sign-off, change freeze periods  -  locked to the project PM's account only. No workarounds.</p></div></div>
         <div class="feature"><div class="feature-icon">&#x1F4CB;</div><div class="feature-text"><h4>Guest builds can explore</h4><p>The full workflow is visible without an account. Role-based actions and cloud sync require sign-in.</p></div></div>
       </div>
     </div>
@@ -323,7 +329,7 @@ body::after{
     <div class="scene" data-scene="8">
       <div class="kicker">The Enterprise Ecosystem</div>
       <h1 class="scene-heading" style="font-size:clamp(22px,3vw,36px);margin-bottom:8px">The layer that makes every platform more accurate</h1>
-      <p class="comp-intro">Each platform below is best-in-class at what it does. OpsManifest is the structured pre-work layer none of them were designed to fill — and the one that makes all of them work.</p>
+      <p class="comp-intro">Each platform below is best-in-class at what it does. OpsManifest is the structured pre-work layer none of them were designed to fill  -  and the one that makes all of them work.</p>
       <div class="comp-grid">
 
         <div class="comp-card">
@@ -331,7 +337,7 @@ body::after{
           <div class="comp-tool">Jira</div>
           <div class="comp-role">Issue &amp; Project Tracking</div>
           <div class="comp-latest">Sprints, DevOps pipelines, backlog. <strong>Jira AI:</strong> smart prioritisation, auto-acceptance criteria.</div>
-          <div class="comp-bridge">OpsManifest builds the RTM and incident register — every Jira ticket raised is traceable from day one.</div>
+          <div class="comp-bridge">OpsManifest builds the RTM and incident register  -  every Jira ticket raised is traceable from day one.</div>
         </div>
 
         <div class="comp-card">
@@ -339,7 +345,7 @@ body::after{
           <div class="comp-tool">ServiceNow</div>
           <div class="comp-role">ITSM &amp; Change Management</div>
           <div class="comp-latest">CAB approvals, CMDB, incident workflow. <strong>Now Assist:</strong> natural language change drafting, predictive risk scoring.</div>
-          <div class="comp-bridge">OpsManifest builds the CAB evidence — design, RAID, RTM, task plan — audit-ready before submission.</div>
+          <div class="comp-bridge">OpsManifest builds the CAB evidence  -  design, RAID, RTM, task plan  -  audit-ready before submission.</div>
         </div>
 
         <div class="comp-card">
@@ -347,7 +353,7 @@ body::after{
           <div class="comp-tool">Microsoft Project</div>
           <div class="comp-role">Schedule &amp; Portfolio Planning</div>
           <div class="comp-latest">Resource planning, portfolio visibility. <strong>Copilot for Project:</strong> natural language scheduling, risk summaries.</div>
-          <div class="comp-bridge">OpsManifest generates the infra-specific Gantt with critical-path logic — Project surfaces it to the portfolio layer.</div>
+          <div class="comp-bridge">OpsManifest generates the infra-specific Gantt with critical-path logic  -  Project surfaces it to the portfolio layer.</div>
         </div>
 
         <div class="comp-card">
@@ -355,7 +361,7 @@ body::after{
           <div class="comp-tool">Confluence</div>
           <div class="comp-role">Knowledge &amp; Documentation</div>
           <div class="comp-latest">Team wikis, live data embeds. <strong>Atlassian Intelligence:</strong> AI page summaries, smart templates.</div>
-          <div class="comp-bridge">OpsManifest exports every artefact — system design, RTM, RAID, Gantt — as a structured Excel workbook, ready to embed.</div>
+          <div class="comp-bridge">OpsManifest exports every artefact  -  system design, RTM, RAID, Gantt  -  as a structured Excel workbook, ready to embed.</div>
         </div>
 
         <div class="comp-card">
@@ -370,8 +376,8 @@ body::after{
           <div class="comp-emoji">&#x1F9E0;</div>
           <div class="comp-tool">AI Assistants &amp; Copilot</div>
           <div class="comp-role">General-Purpose Intelligence</div>
-          <div class="comp-latest">Jira AI, Now Assist, Copilot, Monday AI — all answer questions in context. None know your build state, RAID log, or live EOL windows.</div>
-          <div class="comp-bridge">OpsMentor reads your actual project — 14 coherence checks, 600+ incident codes, live EOL API — and acts inside your build. Not a chat layer. Embedded delivery intelligence.</div>
+          <div class="comp-latest">Jira AI, Now Assist, Copilot, Monday AI  -  all answer questions in context. None know your build state, RAID log, or live EOL windows.</div>
+          <div class="comp-bridge">OpsMentor reads your actual project  -  14 coherence checks, 600+ incident codes, live EOL API  -  and acts inside your build. Not a chat layer. Embedded delivery intelligence.</div>
         </div>
 
       </div>
@@ -387,7 +393,7 @@ body::after{
           <div class="datasec-icon">&#x270F;&#xFE0F;</div>
           <div style="flex:1">
             <div class="datasec-hd">What you enter</div>
-            <div class="datasec-tx">Structured project fields: hardware, OS, database, app tier, go-live date, design decisions, and RAID entries. No passwords, no server hostnames, no credentials, no PII — ever.</div>
+            <div class="datasec-tx">Structured project fields: hardware, OS, database, app tier, go-live date, design decisions, and RAID entries. No passwords, no server hostnames, no credentials, no PII  -  ever.</div>
             <div class="datasec-tags">
               <span class="dtag dtag-g">No PII collected</span>
               <span class="dtag dtag-g">No credentials ever</span>
@@ -399,7 +405,7 @@ body::after{
           <div class="datasec-icon">&#x26A1;</div>
           <div style="flex:1">
             <div class="datasec-hd">How it is processed</div>
-            <div class="datasec-tx">All RTM checks, coherence rules, and task calculations run locally in your browser. When OpsMentor answers a question, only your stack summary passes through a Cloudflare Worker proxy — no documents, no raw text, no server names.</div>
+            <div class="datasec-tx">All RTM checks, coherence rules, and task calculations run locally in your browser. When OpsMentor answers a question, only your stack summary passes through a Cloudflare Worker proxy  -  no documents, no raw text, no server names.</div>
             <div class="datasec-tags">
               <span class="dtag dtag-p">All logic runs locally</span>
               <span class="dtag dtag-p">AI sees stack summary only</span>
@@ -411,7 +417,7 @@ body::after{
           <div class="datasec-icon">&#x1F4BE;</div>
           <div style="flex:1">
             <div class="datasec-hd">Where it is stored</div>
-            <div class="datasec-tx">Free: builds live in your browser's IndexedDB — on your device only. Pro+: optional encrypted sync to Firebase Firestore. You own your data, can export it any time, and can delete it on demand. Cloud sync is always an explicit opt-in.</div>
+            <div class="datasec-tx">Free: builds live in your browser's IndexedDB  -  on your device only. Pro+: optional encrypted sync to Firebase Firestore. You own your data, can export it any time, and can delete it on demand. Cloud sync is always an explicit opt-in.</div>
             <div class="datasec-tags">
               <span class="dtag dtag-b">Local-first by default</span>
               <span class="dtag dtag-b">Encrypted in transit (Pro+)</span>
@@ -425,21 +431,21 @@ body::after{
 
     <!-- 10: Pro and Enterprise Roadmap -->
     <div class="scene" data-scene="10">
-      <div class="kicker">What's Coming — Pro and Enterprise</div>
-      <h1 class="scene-heading">Your team works from one source of truth — anywhere, on any device.</h1>
+      <div class="kicker">What's Coming  -  Pro and Enterprise</div>
+      <h1 class="scene-heading">Your team works from one source of truth  -  anywhere, on any device.</h1>
       <div class="features">
         <div class="feature">
           <div class="feature-icon">&#x1F511;</div>
           <div class="feature-text">
             <h4>Single Sign-On <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Sign in with your company identity. RACI roles resolve directly from your directory groups — no manual assignment, no second account.</p>
+            <p>Sign in with your company identity. RACI roles resolve directly from your directory groups  -  no manual assignment, no second account.</p>
           </div>
         </div>
         <div class="feature">
           <div class="feature-icon">&#x1F3E2;</div>
           <div class="feature-text">
             <h4>Team Build Library <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Every build shared across your team in real time. Your CAB chair, your DBA, your security lead — all working from the same living document.</p>
+            <p>Every build shared across your team in real time. Your CAB chair, your DBA, your security lead  -  all working from the same living document.</p>
           </div>
         </div>
         <div class="feature">
@@ -456,7 +462,7 @@ body::after{
     <div class="scene" data-scene="11">
       <div class="kicker">Get Started</div>
       <h1 class="scene-heading">Your next go-live will be the most documented, most coherent, and smoothest one yet</h1>
-      <p class="scene-sub">Free on the web and Microsoft Store. Sign in for cloud sync and role-based access — no account needed to explore.</p>
+      <p class="scene-sub">Free on the web and Microsoft Store. Sign in for cloud sync and role-based access  -  no account needed to explore.</p>
       <a class="cta-link" href="https://opsmanifest.pages.dev" target="_blank">
         Try OpsManifest &#x2192;
       </a>
@@ -464,7 +470,7 @@ body::after{
 
   </div><!-- /scenes -->
 
-  <!-- Dialogue rail — bottom strip, no controls overlap -->
+  <!-- Dialogue rail  -  bottom strip, no controls overlap -->
   <div class="dialogue" id="dialogue">
     <div class="speaker-row" id="speaker-row">
       <div class="avatar alex" id="avatar-alex">A</div>
@@ -479,7 +485,7 @@ body::after{
     </div>
   </div>
 
-  <!-- Controls — top-right, never obscures subtitles -->
+  <!-- Controls  -  top-right, never obscures subtitles -->
   <div class="controls">
     <button class="ctrl-btn" id="btn-prev" title="Previous (&#x2190;)">&#x2039;</button>
     <button class="ctrl-btn play-pause" id="btn-play" title="Play / Pause (Space)">&#x25B6;</button>
@@ -494,10 +500,10 @@ body::after{
 <div class="start-overlay" id="start-overlay">
   <div class="start-logo">OpsManifest</div>
   <h1 class="start-title">The structured way to go live</h1>
-  <p class="start-sub">A 3-minute walkthrough with Alex and Jordan — from pre-work chaos to audit-ready go-live.</p>
+  <p class="start-sub">A 3-minute walkthrough with Alex and Jordan  -  from pre-work chaos to audit-ready go-live.</p>
   <div class="start-speakers">
-    <div class="start-speaker"><div class="avatar alex">A</div><span>Alex — Infrastructure Lead</span></div>
-    <div class="start-speaker"><div class="avatar jordan">J</div><span>Jordan — Solutions Architect</span></div>
+    <div class="start-speaker"><div class="avatar alex">A</div><span>Alex  -  Infrastructure Lead</span></div>
+    <div class="start-speaker"><div class="avatar jordan">J</div><span>Jordan  -  Solutions Architect</span></div>
   </div>
   <button class="start-btn" id="btn-start">Start the demo &#x25B6;</button>
 </div>
@@ -511,7 +517,7 @@ const VOICES = {
   alex:   'b7d50908-b17c-442d-ad8d-810c63997ed9',
   jordan: '694f9389-aac1-45b6-b726-9d9369183238',
 };
-// Azure Neural voices — distinct per speaker so voices don't bleed across characters
+// Azure Neural voices  -  distinct per speaker so voices don't bleed across characters
 const AZURE_VOICES = {
   alex:   'en-US-GuyNeural',    // male, Infrastructure Lead
   jordan: 'en-US-JennyNeural',  // female, Solutions Architect
@@ -519,52 +525,52 @@ const AZURE_VOICES = {
 
 // ── Script (10 scenes, 20 lines) ──────────────────────────────────────────────
 const SCRIPT = [
-  // Scene 0 — Hook
-  { scene:0, speaker:'jordan', text:"Every infrastructure rollout starts the same way — a meeting where nobody has the right information.", pauseAfter:400 },
+  // Scene 0  -  Hook
+  { scene:0, speaker:'jordan', text:"Every infrastructure rollout starts the same way  -  a meeting where nobody has the right information.", pauseAfter:400 },
   { scene:0, speaker:'alex',   text:"I'm Alex. Fifteen years in enterprise infrastructure. I have been in that meeting hundreds of times.", pauseAfter:600 },
 
-  // Scene 1 — Problem
-  { scene:1, speaker:'alex',   text:"Sixty-three percent of infrastructure projects miss their go-live date. Not because of bad engineers — because of bad pre-work.", pauseAfter:400 },
-  { scene:1, speaker:'jordan', text:"The data, the design, the risk log — they exist. Just spread across twelve spreadsheets, three email threads, and one person's laptop.", pauseAfter:700 },
+  // Scene 1  -  Problem
+  { scene:1, speaker:'alex',   text:"Sixty-three percent of infrastructure projects miss their go-live date. Not because of bad engineers  -  because of bad pre-work.", pauseAfter:400 },
+  { scene:1, speaker:'jordan', text:"The data, the design, the risk log  -  they exist. Just spread across twelve spreadsheets, three email threads, and one person's laptop.", pauseAfter:700 },
 
-  // Scene 2 — Solution
-  { scene:2, speaker:'jordan', text:"OpsManifest gives your team the one thing missing from every go-live — a single place where every decision, every artefact, every risk is connected and in sync. Not a ticket system. Not a CMDB. The structured pre-work layer that everything else depends on.", pauseAfter:400 },
-  { scene:2, speaker:'alex',   text:"Pick your stack. The system produces your system design, incident register, Gantt, RTM, RACI, and risk log automatically — and keeps them all up to date as the project changes. Change one thing; everything follows.", pauseAfter:700 },
+  // Scene 2  -  Solution
+  { scene:2, speaker:'jordan', text:"OpsManifest gives your team the one thing missing from every go-live  -  a single place where every decision, every artefact, every risk is connected and in sync. Not a ticket system. Not a CMDB. The structured pre-work layer that everything else depends on.", pauseAfter:400 },
+  { scene:2, speaker:'alex',   text:"Pick your stack. The system produces your system design, incident register, Gantt, RTM, RACI, and risk log automatically  -  and keeps them all up to date as the project changes. Change one thing; everything follows.", pauseAfter:700 },
 
-  // Scene 3 — OpsMentor
-  { scene:3, speaker:'alex',   text:"What makes OpsManifest different is OpsMentor — an AI advisor embedded in every tab, watching your entire build in real time.", pauseAfter:400 },
-  { scene:3, speaker:'jordan', text:"It runs cross-tab coherence checks, tracks live end-of-life dates for over sixty products, and verifies your stack against forty vendor compatibility rules — the moment you select a component.", pauseAfter:700 },
+  // Scene 3  -  OpsMentor
+  { scene:3, speaker:'alex',   text:"What makes OpsManifest different is OpsMentor  -  an AI advisor embedded in every tab, watching your entire build in real time.", pauseAfter:400 },
+  { scene:3, speaker:'jordan', text:"It runs cross-tab coherence checks, tracks live end-of-life dates for over sixty products, and verifies your stack against forty vendor compatibility rules  -  the moment you select a component.", pauseAfter:700 },
 
-  // Scene 4 — Compatibility Intelligence
-  { scene:4, speaker:'jordan', text:"The moment you select a stack combination that won't work together, OpsManifest flags it — and immediately offers a compatible alternative you can switch to with a single click.", pauseAfter:500 },
-  { scene:4, speaker:'alex',   text:"If you choose to proceed anyway, a RAID risk is automatically raised and logged with your rationale. And if you say 'raise as incident', it creates the incident, feeds it into RTM, Matrix, and the task plan — no form needed.", pauseAfter:700 },
+  // Scene 4  -  Compatibility Intelligence
+  { scene:4, speaker:'jordan', text:"The moment you select a stack combination that won't work together, OpsManifest flags it  -  and immediately offers a compatible alternative you can switch to with a single click.", pauseAfter:500 },
+  { scene:4, speaker:'alex',   text:"If you choose to proceed anyway, a RAID risk is automatically raised and logged with your rationale. And if you say 'raise as incident', it creates the incident, feeds it into RTM, Matrix, and the task plan  -  no form needed.", pauseAfter:700 },
 
-  // Scene 5 — Identity and Role Access
-  { scene:5, speaker:'alex',   text:"Identity is verified through your account the moment you sign in. Your RACI role resolves automatically — the DBA gets the database section, the Storage Lead gets storage. No assignment form, no manual wiring.", pauseAfter:500 },
-  { scene:5, speaker:'jordan', text:"PM-only gates are enforced immediately. CAB submission, RTM sign-off, change freeze periods — only the project PM's account can action those steps. And anyone can explore the full workflow as a guest; role-based actions and cloud sync require an account.", pauseAfter:700 },
+  // Scene 5  -  Identity and Role Access
+  { scene:5, speaker:'alex',   text:"Identity is verified through your account the moment you sign in. Your RACI role resolves automatically  -  the DBA gets the database section, the Storage Lead gets storage. No assignment form, no manual wiring.", pauseAfter:500 },
+  { scene:5, speaker:'jordan', text:"PM-only gates are enforced immediately. CAB submission, RTM sign-off, change freeze periods  -  only the project PM's account can action those steps. And anyone can explore the full workflow as a guest; role-based actions and cloud sync require an account.", pauseAfter:700 },
 
-  // Scene 6 — Vulnerability Register
-  { scene:6, speaker:'jordan', text:"Every build carries a live Vulnerability Register — CVEs from the smart scan, EOL exposure, compatibility flags — each tracked with a lifecycle status.", pauseAfter:500 },
-  { scene:6, speaker:'alex',   text:"Tackled this sprint, parked for next quarter, accepted risk with PM sign-off — every decision is logged and timestamped. Your CAB chair has the full picture before the meeting starts.", pauseAfter:700 },
+  // Scene 6  -  Vulnerability Register
+  { scene:6, speaker:'jordan', text:"Every build carries a live Vulnerability Register  -  CVEs from the smart scan, EOL exposure, compatibility flags  -  each tracked with a lifecycle status.", pauseAfter:500 },
+  { scene:6, speaker:'alex',   text:"Tackled this sprint, parked for next quarter, accepted risk with PM sign-off  -  every decision is logged and timestamped. Your CAB chair has the full picture before the meeting starts.", pauseAfter:700 },
 
-  // Scene 7 — Results
+  // Scene 7  -  Results
   { scene:7, speaker:'jordan', text:"Teams using OpsManifest cut CAB preparation time by over sixty percent.", pauseAfter:400 },
-  { scene:7, speaker:'alex',   text:"And because system design, RTM, risk log, RACI, and the Gantt all live in one place — every stakeholder works from the same living document.", pauseAfter:700 },
+  { scene:7, speaker:'alex',   text:"And because system design, RTM, risk log, RACI, and the Gantt all live in one place  -  every stakeholder works from the same living document.", pauseAfter:700 },
 
-  // Scene 8 — Comparative Landscape
-  { scene:8, speaker:'jordan', text:"Every major platform has shipped an AI copilot. Jira AI. Now Assist. Copilot for Project. Monday AI. They're impressive — but they answer general questions. None of them know your build.", pauseAfter:400 },
-  { scene:8, speaker:'alex',   text:"OpsManifest is the structured pre-work layer none of those platforms were designed to fill — and OpsMentor is the AI that reads your actual project state, not just your question. When you ask about compatibility, it checks your stack. When it flags a risk, it logs it to your RAID. That's a different category entirely.", pauseAfter:700 },
+  // Scene 8  -  Comparative Landscape
+  { scene:8, speaker:'jordan', text:"Every major platform has shipped an AI copilot. Jira AI. Now Assist. Copilot for Project. Monday AI. They're impressive  -  but they answer general questions. None of them know your build.", pauseAfter:400 },
+  { scene:8, speaker:'alex',   text:"OpsManifest is the structured pre-work layer none of those platforms were designed to fill  -  and OpsMentor is the AI that reads your actual project state, not just your question. When you ask about compatibility, it checks your stack. When it flags a risk, it logs it to your RAID. That's a different category entirely.", pauseAfter:700 },
 
-  // Scene 9 — Architecture & Data Security
+  // Scene 9  -  Architecture & Data Security
   { scene:9, speaker:'alex',   text:"A question we hear from every security team: what exactly enters the app, how is it processed, and where does it go?", pauseAfter:400 },
-  { scene:9, speaker:'jordan', text:"OpsManifest only ever handles structured project fields — no passwords, no server hostnames, no personal data. All logic runs locally in your browser. When OpsMentor analyses your build, only your stack choice and design field values pass through our secure Cloudflare proxy. Nothing raw. Nothing sensitive. And on the free tier, every build stays entirely on your device — never uploaded anywhere.", pauseAfter:700 },
+  { scene:9, speaker:'jordan', text:"OpsManifest only ever handles structured project fields  -  no passwords, no server hostnames, no personal data. All logic runs locally in your browser. When OpsMentor analyses your build, only your stack choice and design field values pass through our secure Cloudflare proxy. Nothing raw. Nothing sensitive. And on the free tier, every build stays entirely on your device  -  never uploaded anywhere.", pauseAfter:700 },
 
-  // Scene 10 — Roadmap
-  { scene:10, speaker:'jordan', text:"Coming in Pro and Enterprise: single sign-on maps your company identity directly to your RACI role — the DBA opens the app and owns the database section, the Storage Lead owns storage, all resolved from your directory automatically.", pauseAfter:500 },
-  { scene:10, speaker:'alex',   text:"Team Build Library gives every stakeholder a real-time shared view of the same living document. And the Data Governance Panel gives admins explicit control over every byte — what stays local, what syncs, what is never stored — with a full audit trail.", pauseAfter:900 },
+  // Scene 10  -  Roadmap
+  { scene:10, speaker:'jordan', text:"Coming in Pro and Enterprise: single sign-on maps your company identity directly to your RACI role  -  the DBA opens the app and owns the database section, the Storage Lead owns storage, all resolved from your directory automatically.", pauseAfter:500 },
+  { scene:10, speaker:'alex',   text:"Team Build Library gives every stakeholder a real-time shared view of the same living document. And the Data Governance Panel gives admins explicit control over every byte  -  what stays local, what syncs, what is never stored  -  with a full audit trail.", pauseAfter:900 },
 
-  // Scene 11 — CTA
-  { scene:11, speaker:'alex',   text:"OpsManifest is free on the web and in the Microsoft Store. Sign in to unlock cloud sync and role-based access — no account needed to start your first build.", pauseAfter:400 },
+  // Scene 11  -  CTA
+  { scene:11, speaker:'alex',   text:"OpsManifest is free on the web and in the Microsoft Store. Sign in to unlock cloud sync and role-based access  -  no account needed to start your first build.", pauseAfter:400 },
   { scene:11, speaker:'jordan', text:"Visit opsmanifest dot pages dot dev. Your next go-live will be the most documented, the most coherent, and the smoothest one yet.", pauseAfter:900 },
 ];
 
@@ -592,7 +598,7 @@ const startOverlay = document.getElementById('start-overlay');
 // ── Audio context ─────────────────────────────────────────────────────────────
 // Guarded: AudioContext is disabled in ms-appx-web: (MSIX packaged) context.
 // On WebView2 26200.8655, accessing AudioContext crashes the renderer natively.
-// This file is also excluded from the MSIX package by build-msix.yml — this
+// This file is also excluded from the MSIX package by build-msix.yml  -  this
 // guard is a belt-and-suspenders for any edge case where it might be reached.
 function ensureAudioCtx() {
   if (IS_APPX) return;
