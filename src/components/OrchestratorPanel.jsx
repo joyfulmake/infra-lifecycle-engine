@@ -82,7 +82,7 @@ function buildPastBuildsSummary(builds, currentBuildId, currentCtx) {
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function Bubble({ msg, onChipClick, onSuggestionClick }) {
+function Bubble({ msg, onChipClick, onSuggestionClick, onRetry }) {
   const isUser   = msg.role === 'user';
   const isResult = msg.role === 'result';
   const isLog    = msg.role === 'log';
@@ -114,6 +114,19 @@ function Bubble({ msg, onChipClick, onSuggestionClick }) {
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 bg-slate-50 text-xs text-slate-500 italic">
         <span className="text-slate-400">→</span>
         {msg.text}
+      </div>
+    );
+  }
+
+  if (msg.role === 'retry') {
+    return (
+      <div className="flex justify-start pl-8">
+        <button
+          onClick={() => onRetry?.()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-teal-600 hover:border-teal-300 transition-colors"
+        >
+          <span style={{ fontSize: 13 }}>↻</span> Retry
+        </button>
       </div>
     );
   }
@@ -1566,44 +1579,54 @@ Rules:
         return;
       }
 
-      // Groq-powered NLP
-      const ctx    = buildStateContext(s, authUser, pastBuildsSummary);
-      const result = await sendChatMessage(text, ctx, getHistory(messagesRef.current));
+      // Groq-powered NLP — auto-retry once after 2s on transient failure
+      const ctx = buildStateContext(s, authUser, pastBuildsSummary);
+      const history = getHistory(messagesRef.current);
+      let result = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          result = await sendChatMessage(text, ctx, history);
+          if (result?.reply) { lastErr = null; break; }
+        } catch (e) {
+          lastErr = e;
+          if (attempt === 0) await new Promise(r => setTimeout(r, 2000)); // silent 2s retry
+        }
+      }
 
       setThinking(false);
       pendingSendRef.current = false;
 
-      const { reply, actions = [], suggestions = [] } = result || {};
-      const replyText = reply;
+      if (lastErr || !result?.reply) {
+        // Both attempts failed — show a minimal ↻ Retry button, no error prose
+        const retryId = nextId();
+        setMessages(m => [...m, {
+          id: retryId,
+          role: 'retry',
+          onRetry: () => {
+            setMessages(prev => prev.filter(x => x.id !== retryId));
+            handleSend(text);
+          },
+        }]);
+        return;
+      }
 
+      const { reply, actions = [], suggestions = [] } = result;
       const needsConfirm = actions.some(a => a.requiresConfirmation);
       const immediate    = actions.filter(a => !a.requiresConfirmation);
 
       if (immediate.length > 0) applyActions(immediate);
-
-      if (replyText) setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: replyText, suggestions }]);
+      setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply, suggestions }]);
 
       if (needsConfirm) {
         const confirmActions = actions.filter(a => a.requiresConfirmation);
         pendingConfirmRef.current = confirmActions;
-        setMessages(m => [...m, {
-          id: nextId(),
-          role: 'confirm',
-          actions: confirmActions,
-        }]);
+        setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: confirmActions }]);
       }
 
     } catch (e) {
       setThinking(false);
       pendingSendRef.current = false;
-      // Avoid showing the error if the same error was just shown (double-fire guard)
-      const lastMsg = messagesRef.current.slice(-1)[0];
-      if (lastMsg?.role === 'orchestrator' && lastMsg.text?.startsWith('Connection to the AI')) return;
-      setMessages(m => [...m, {
-        id: nextId(),
-        role: 'orchestrator',
-        text: 'Connection to the AI service failed — check your network and try again.',
-      }]);
     }
   }
 
@@ -1788,6 +1811,7 @@ Rules:
                     }
                   }}
                   onSuggestionClick={q => handleSend(q)}
+                  onRetry={msg.onRetry}
                 />
               )
             )}

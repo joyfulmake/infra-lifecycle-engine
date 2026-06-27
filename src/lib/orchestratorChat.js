@@ -293,10 +293,17 @@ function isLikelyProseNotValue(v) {
   return false;
 }
 
+// Any message that opens with an interrogative/informational intent — no "?" needed.
+// Covers 5 Ws + How + all synonyms for "explain/compare/describe/illustrate".
+const QUESTION_OPENERS = /^(what|who|when|where|why|how|which|tell|share|compare|explain|show|list|give|can you|could you|would|is there|are there|elucidate|illustrate|elaborate|describe|discuss|clarify|differentiate|outline|summarize|walk|help|break down|define|teach|demonstrate|talk about|shed light|what's|what are|what is|who is|how does|how do|why does|why is|when does|where does|i want to know|i'd like to know|help me understand)/i;
+
+function isQuestionMessage(m) {
+  if (/[?]/.test(m)) return true;
+  return QUESTION_OPENERS.test(m.trim());
+}
+
 function parseSetField(m) {
-  // Skip entirely for questions or conversational sentences
-  if (/[?]/.test(m)) return null;
-  if (/^(what|how|why|when|where|which|who|tell|share|compare|explain|show|list|give|can you|could you|would|is there|are there)/i.test(m.trim())) return null;
+  if (isQuestionMessage(m)) return null;
 
   // HW
   if (/\b(hw|hardware|server|platform)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
@@ -322,8 +329,7 @@ function parseSetField(m) {
 }
 
 function parseSetRequirement(m) {
-  if (/[?]/.test(m)) return null;
-  if (/^(what|how|why|when|where|which|who|tell|share|compare|explain|show|list|give|can you|could you|would|is there|are there)/i.test(m.trim())) return null;
+  if (isQuestionMessage(m)) return null;
   // Project name
   if (/\b(project name|build name)\b.{0,10}(is|:|=|to)\s+(.+)/i.test(m)) {
     const v = m.match(/\b(project name|build name)\b.{0,10}(?:is|:|=|to)\s+(.+)/i)?.[2]?.trim();
