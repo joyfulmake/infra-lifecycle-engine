@@ -292,17 +292,35 @@ Worker routes relevant to OpsMentor:
 - `POST /cartesia-tts` — TTS; tries Azure Neural first, then Cartesia, then ElevenLabs
 - `GET /health` — returns `{tts:{azure,cartesia,elevenlabs,voice}}`
 
-**Rule 15 in worker system prompt**: when `message` starts with `INITIAL_ASSESSMENT`, do not narrate, do not ask for data already visible, include proactive actions, keep reply to 2-4 sentences. Include `suggestions` array.
+**Worker system prompt principles (workers/ai-worker.js — `systemPrompt`):**
+- Principle 1: ANSWER THE ACTUAL QUESTION — strip greetings, lead with the answer, never echo greeting words.
+- Principle 2: No filler ("Sure!", "Great question!"). Never start with "I".
+- Principle 3: Reply length matches intent.
+- Principle 4: INFRA DOMAIN FIRST — every answer grounded in infra delivery; name versions, EOL timelines, CVEs, RFC numbers.
+- Principle 5: ENTHUSIASTIC EXPERTISE — earned perspective, senior architect energy, call out hidden risks.
+- Principle 6: PROACTIVE — surface risks/EOL/compat gaps unasked when relevant.
+- Principle 7: MISALIGNMENT — state conflict + "How would you like to proceed?" Don't block.
+- Principle 8: REFERENCES — include "Source: Label -- URL" on EVERY factual claim. Trusted domains: docs.oracle.com, learn.microsoft.com, access.redhat.com, cve.mitre.org, csrc.nist.gov, endoflife.date, msrc.microsoft.com, nvd.nist.gov, pcistandards.com, ubuntu.com/security. Never fabricate.
+- Principle 9: FOLLOW-UP — every knowledge response ends with one sharp specific question.
+- Principle 10: INTENT CHECK — if topic not in current stack, ask "current build or general research?" (skip if obvious).
+- Principle 11: INITIAL_ASSESSMENT — 2-4 sentences, non-obvious risks only, proactive actions, 2-3 suggestions.
+- Principle 12: NAVIGATION — NAVIGATE_TAB + one sentence on what they'll find.
 
-**Rules 18-21 in worker system prompt (interactive mentor)**:
-- Rule 18 INTENT CHECK: When user asks about a hw/sw/vendor/tool topic not in their current build, always ask "Is this for your current build, or general research?" — embedded naturally at the end of the reply.
-- Rule 19 FOLLOW-UP: Every informational response MUST end with one concrete follow-up question specific to the topic. Not generic — opens the next natural direction.
-- Rule 20 REFERENCES: For vendor versions, EOL timelines, CVE IDs, compliance frameworks, certifications: include at least one real reference URL ("Source: Label -- URL"). Only URLs you are confident exist: vendor docs, NIST, CVE, endoflife.date, MSRC, Red Hat Security.
-- Rule 21 PAST BUILD LESSONS: When context includes PAST BUILDS, weave lessons in naturally when stacks/incidents are similar. Never list past builds unless asked directly.
+**GROQ_API_KEY**: Set as a Cloudflare Worker secret via CF REST API (wrangler TTY issues in WSL). Use:
+```bash
+curl -X PUT "https://api.cloudflare.com/client/v4/accounts/254fa20341a7b0c16458102e1b48f004/workers/scripts/opsmanifest-ai/secrets" \
+  -H "Authorization: Bearer <token from ~/.wrangler/config/default.toml>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"GROQ_API_KEY","text":"gsk_...","type":"secret_text"}'
+```
 
 **Suggestion chips**: LLM response includes `suggestions: string[]` (2-3 short follow-up questions, max 8 words). Rendered as clickable chips below each orchestrator message bubble. Click sends the question immediately as a user message (via `handleSend(overrideText)` — bypasses the input state). Only included for informational/knowledge responses, not for workflow action responses. `nextPrompt` field is deprecated — worker Rule 8 omits it; OrchestratorPanel no longer concatenates it into replyText.
 
-**Field interview escape hatch** (`isCommandMessage` in `OrchestratorPanel.jsx`): The guided field interview intercepts user input when `awaitingFieldRef.current` is set. `isCommandMessage(tl)` determines whether the message should escape to the LLM instead. It checks: (1) message contains '?' — always escapes; (2) message starts with an interrogative word (how/why/when/where/who/compare/tell me/explain/is/are/can/does/did/would/should/what about/what if) — always escapes; (3) message token or bigram matches COMMAND_TOKENS set; (4) message starts with a prefix in COMMAND_PREFIXES and is >10 chars. Never add field values to COMMAND_TOKENS — they must remain as hardware/OS/DB/App values. Only add command verbs and topic words.
+**Field interview escape hatch** (`isCommandMessage` in `OrchestratorPanel.jsx`): The guided field interview intercepts user input when `awaitingFieldRef.current` is set. `isCommandMessage(tl)` determines whether the message should escape to the LLM instead. It checks: (1) message contains '?' — always escapes; (2) message starts with an interrogative word — always escapes; (3) message token or bigram matches COMMAND_TOKENS set; (4) message starts with a prefix in COMMAND_PREFIXES and is >10 chars. Never add field values to COMMAND_TOKENS — they must remain as hardware/OS/DB/App values. Only add command verbs and topic words.
+
+**Question detection** (`isQuestionMessage` in `orchestratorChat.js`): Used by both `parseSetField` and `parseSetRequirement` to skip local field-set parsing and send the message to the LLM. Fires when: (1) message contains '?'; (2) message starts with any word in `QUESTION_OPENERS` — covers all 5 Ws (who/what/when/where/why), How, and 25+ synonyms: elucidate, illustrate, elaborate, describe, discuss, clarify, differentiate, outline, summarize, walk, help, break down, define, teach, demonstrate, compare, tell, share, explain, show, list, give, can you, could you, would, is there, are there, i want to know, i'd like to know, help me understand. No '?' required. This prevents "elucidate the advantages of..." from triggering SET_CTX actions.
+
+**Auto-retry on failure** (`handleSend` in `OrchestratorPanel.jsx`): `sendChatMessage` is called in a 2-attempt loop. On first failure, waits 2 seconds silently (user sees thinking indicator). If both attempts fail, a `role: 'retry'` bubble renders a small `↻ Retry` button. Clicking it removes the button and re-calls `handleSend(text)`. No error prose shown to users. `pendingSendRef` prevents double-fire while in-flight.
 
 **Past build lessons**: `buildPastBuildsSummary(builds, currentBuildId, ctx)` in `OrchestratorPanel.jsx` — scores past saved builds by stack similarity (hw/os/db/app match), takes top 3, extracts RAID entries. Passed to `buildStateContext(s, authUser, pastSummary)` as third param and included in the worker system prompt under "PAST BUILDS" section. Enables LLM to naturally reference "In your previous Oracle 19c build, X happened — watch for that here."
 
