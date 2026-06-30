@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.8.0.0'
+        default: '2.9.0.0'
 
 jobs:
   build-msix:
@@ -241,10 +241,27 @@ jobs:
             }
           }
 
-          # 3. Replace animated splash <style> in index.html with a static version
-          #    @keyframes splash-pulse in the inline <style> block is another CSS
-          #    parse-time feature that may crash certain WebView2 builds (26200.8655).
+          # 3a. Strip ALL @keyframes blocks directly from index.html (belt-and-suspenders).
+          #     Source index.html no longer contains @keyframes, but this catches any
+          #     regression. Same regex used on CSS files — applied to the full HTML string.
+          #     @keyframes in an inline <style> block crashes WebView2 on 26100.3194 and
+          #     26200.8655 at CSS parse time with no JS error (Error: N/A in cert reports).
           $htmlPath = "msix\index.html"
+          $html = Get-Content $htmlPath -Raw -Encoding UTF8
+          $htmlBeforeKf = $html
+          $html = [regex]::Replace($html, '@keyframes\s+[\w-]+\s*\{(?:[^{}]*\{[^{}]*\})+\}', '')
+          $nKfStripped = ([regex]::Matches($htmlBeforeKf, '@keyframes\s+')).Count
+          if ($html -ne $htmlBeforeKf) {
+            [System.IO.File]::WriteAllText($htmlPath, $html, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Stripped $nKfStripped @keyframes block(s) from index.html"
+          } else {
+            Write-Host "No @keyframes in index.html (expected -- source-level fix in place)"
+          }
+
+          # 3b. Replace the splash <style> block with a known-clean static version.
+          #     Normalises whitespace and ensures no animation properties remain.
+          #     HARD FAIL if the block is not found -- means the HTML template changed
+          #     and the step needs updating before the MSIX can be safely packaged.
           $html = Get-Content $htmlPath -Raw -Encoding UTF8
           $htmlBefore = $html
           $html = [regex]::Replace($html,
@@ -253,9 +270,10 @@ jobs:
           )
           if ($html -ne $htmlBefore) {
             [System.IO.File]::WriteAllText($htmlPath, $html, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "Replaced animated splash style with static version in index.html"
+            Write-Host "Normalised splash <style> block in index.html"
           } else {
-            Write-Warning "Animated splash style not found in index.html - check template"
+            Write-Error "FATAL: splash <style> block not found in index.html -- HTML template changed. Update the replacement regex in this step before packaging."
+            exit 1
           }
 
       - name: Validate MSIX CSS bundle — zero url() references
@@ -275,6 +293,18 @@ jobs:
             }
           }
           Write-Host "CSS validation PASSED -- zero url() references in all CSS bundles"
+
+          # Validate no @keyframes remain in index.html
+          # @keyframes in inline HTML <style> crashes WebView2 on 26100.3194 and 26200.8655.
+          # This is a SEPARATE check from the CSS bundle -- the HTML has its own inline <style>.
+          $htmlForKfCheck = [System.IO.File]::ReadAllText($htmlPath, [System.Text.UTF8Encoding]::new($false))
+          $kfInHtml = ([regex]::Matches($htmlForKfCheck, '@keyframes')).Count
+          Write-Host "index.html: $kfInHtml @keyframes occurrences"
+          if ($kfInHtml -gt 0) {
+            Write-Error "FATAL: @keyframes found in msix/index.html -- will crash WebView2 at CSS parse time on 26100.3194 / 26200.8655. Check source index.html and the stripping steps above."
+            exit 1
+          }
+          Write-Host "@keyframes validation PASSED -- no @keyframes in index.html"
 
           # Also verify no BOM in output files
           $htmlPath = "msix\index.html"

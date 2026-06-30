@@ -45,14 +45,13 @@
       <div style="color:#f1f5f9;font-family:Inter,sans-serif;font-size:18px;font-weight:600;letter-spacing:0.01em;">OpsManifest</div>
       <div style="color:#94a3b8;font-family:Inter,sans-serif;font-size:13px;margin-top:-8px;">Infrastructure Lifecycle Engine</div>
       <div style="display:flex;gap:8px;margin-top:8px;">
-        <div class="splash-dot" style="animation-delay:0s"></div>
-        <div class="splash-dot" style="animation-delay:0.2s"></div>
-        <div class="splash-dot" style="animation-delay:0.4s"></div>
+        <div class="splash-dot"></div>
+        <div class="splash-dot"></div>
+        <div class="splash-dot"></div>
       </div>
     </div>
     <style>
-      .splash-dot{width:8px;height:8px;border-radius:50%;background:#0d9488;animation:splash-pulse 1.2s ease-in-out infinite;}
-      @keyframes splash-pulse{0%,80%,100%{transform:scale(0.6);opacity:0.4;}40%{transform:scale(1);opacity:1;}}
+      .splash-dot{width:8px;height:8px;border-radius:50%;background:#0d9488;opacity:.6;display:inline-block;}
     </style>
     <div id="root" role="main" tabindex="-1"></div>
     <script type="module" src="/src/main.jsx"></script>
