@@ -297,6 +297,8 @@ jobs:
           # Validate no @keyframes remain in index.html
           # @keyframes in inline HTML <style> crashes WebView2 on 26100.3194 and 26200.8655.
           # This is a SEPARATE check from the CSS bundle -- the HTML has its own inline <style>.
+          # $htmlPath must be re-declared here -- PS5.1 does not carry variables across steps.
+          $htmlPath = "msix\index.html"
           $htmlForKfCheck = [System.IO.File]::ReadAllText($htmlPath, [System.Text.UTF8Encoding]::new($false))
           $kfInHtml = ([regex]::Matches($htmlForKfCheck, '@keyframes')).Count
           Write-Host "index.html: $kfInHtml @keyframes occurrences"
@@ -307,7 +309,6 @@ jobs:
           Write-Host "@keyframes validation PASSED -- no @keyframes in index.html"
 
           # Also verify no BOM in output files
-          $htmlPath = "msix\index.html"
           $filesToCheck = @($htmlPath) + @($cssFiles | ForEach-Object { $_.FullName })
           foreach ($f in $filesToCheck) {
             $bytes = [System.IO.File]::ReadAllBytes($f)
