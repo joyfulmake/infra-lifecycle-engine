@@ -276,48 +276,148 @@ jobs:
             exit 1
           }
 
-      - name: Validate MSIX CSS bundle — zero url() references
+      - name: MSIX Pre-flight Audit — all WebView2 crash vectors
         shell: powershell
         run: |
-          # Any url() in the CSS bundle means a resource file is referenced at CSS parse time.
-          # WebView2 on certain 26200 builds resolves url() values at parse — before JS runs —
-          # crashing the renderer natively (Error: N/A). Zero is the only acceptable count.
+          # ── Comprehensive audit of the MSIX package before it is sealed. ──────────────
+          # Every check below corresponds to a known WebView2 native crash (Error: N/A)
+          # observed during Microsoft Store certification. All checks are HARD FAIL.
+          # PS5.1 note: all variables are declared fresh in this step (no cross-step state).
+          # ─────────────────────────────────────────────────────────────────────────────
+
+          $failed  = $false
+          $htmlPath = "msix\index.html"
           $cssFiles = @(Get-ChildItem "msix\assets\*.css" -ErrorAction SilentlyContinue)
+          $htmlContent = [System.IO.File]::ReadAllText($htmlPath, [System.Text.UTF8Encoding]::new($false))
+
+          Write-Host ""
+          Write-Host "== MSIX Pre-flight Audit ============================================"
+          Write-Host "   HTML : $htmlPath"
+          Write-Host "   CSS  : $($cssFiles.Count) file(s) in msix\assets\"
+          Write-Host "====================================================================="
+
+          # ── CHECK 1: url() in CSS ──────────────────────────────────────────────────
+          # @font-face src:url() causes WebView2 to resolve font files at CSS parse time
+          # BEFORE any JS runs. On 26200.8116 this crashes the renderer natively.
+          # Expected: 0 after @font-face stripping step.
+          Write-Host ""
+          Write-Host "CHECK 1 -- url() in CSS bundle (crash vector: 26200.8116 @font-face)"
           foreach ($css in $cssFiles) {
             $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
-            $urlMatches = [regex]::Matches($content, 'url\(')
-            Write-Host "$($css.Name): $($urlMatches.Count) url() references"
-            if ($urlMatches.Count -gt 0) {
-              Write-Error "FATAL: CSS bundle $($css.Name) still contains $($urlMatches.Count) url() reference(s). These will crash WebView2 on 26200.8116 at parse time. Check that @font-face stripping and font stubbing both worked."
-              exit 1
+            $n = ([regex]::Matches($content, 'url\(')).Count
+            Write-Host "  $($css.Name): $n url() reference(s)"
+            if ($n -gt 0) {
+              Write-Error "  FAIL: url() in $($css.Name) -- @font-face stripping incomplete."
+              $failed = $true
             }
           }
-          Write-Host "CSS validation PASSED -- zero url() references in all CSS bundles"
+          if (-not $failed) { Write-Host "  PASS: zero url() in all CSS files" }
 
-          # Validate no @keyframes remain in index.html
-          # @keyframes in inline HTML <style> crashes WebView2 on 26100.3194 and 26200.8655.
-          # This is a SEPARATE check from the CSS bundle -- the HTML has its own inline <style>.
-          # $htmlPath must be re-declared here -- PS5.1 does not carry variables across steps.
-          $htmlPath = "msix\index.html"
-          $htmlForKfCheck = [System.IO.File]::ReadAllText($htmlPath, [System.Text.UTF8Encoding]::new($false))
-          $kfInHtml = ([regex]::Matches($htmlForKfCheck, '@keyframes')).Count
-          Write-Host "index.html: $kfInHtml @keyframes occurrences"
-          if ($kfInHtml -gt 0) {
-            Write-Error "FATAL: @keyframes found in msix/index.html -- will crash WebView2 at CSS parse time on 26100.3194 / 26200.8655. Check source index.html and the stripping steps above."
-            exit 1
+          # ── CHECK 2: @font-face in CSS ────────────────────────────────────────────
+          # Belt-and-suspenders for CHECK 1. A failed @font-face strip that left blocks
+          # without url() (e.g. local() only) would pass CHECK 1 but still add parse
+          # overhead on restricted WebView2 builds.
+          Write-Host ""
+          Write-Host "CHECK 2 -- @font-face in CSS bundle (crash vector: 26200.8116)"
+          $check2Fail = $false
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $n = ([regex]::Matches($content, '@font-face')).Count
+            Write-Host "  $($css.Name): $n @font-face block(s)"
+            if ($n -gt 0) {
+              Write-Error "  FAIL: @font-face in $($css.Name) -- stripping step did not remove all blocks."
+              $failed = $true; $check2Fail = $true
+            }
           }
-          Write-Host "@keyframes validation PASSED -- no @keyframes in index.html"
+          if (-not $check2Fail) { Write-Host "  PASS: zero @font-face in all CSS files" }
 
-          # Also verify no BOM in output files
+          # ── CHECK 3: @keyframes in CSS ────────────────────────────────────────────
+          # @keyframes crashes WebView2 at CSS parse time on 26200.8655 and 26100.3194.
+          # Expected: 0 after the @keyframes stripping step in the font/keyframes step.
+          Write-Host ""
+          Write-Host "CHECK 3 -- @keyframes in CSS bundle (crash vector: 26200.8655, 26100.3194)"
+          $check3Fail = $false
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $n = ([regex]::Matches($content, '@keyframes')).Count
+            Write-Host "  $($css.Name): $n @keyframes block(s)"
+            if ($n -gt 0) {
+              Write-Error "  FAIL: @keyframes in $($css.Name) -- stripping step did not remove all blocks."
+              $failed = $true; $check3Fail = $true
+            }
+          }
+          if (-not $check3Fail) { Write-Host "  PASS: zero @keyframes in all CSS files" }
+
+          # ── CHECK 4: @keyframes in HTML ───────────────────────────────────────────
+          # An inline <style> @keyframes in index.html causes the same parse-time crash
+          # as CHECK 3. Fixed at source in index.html; also stripped in the workflow.
+          # This is what caused the 26100.3194 failure in v2.8.0.0 (was Write-Warning,
+          # not Write-Error -- silent fail, MSIX shipped with @keyframes in the HTML).
+          Write-Host ""
+          Write-Host "CHECK 4 -- @keyframes in index.html (crash vector: 26100.3194, 26200.8655)"
+          $n = ([regex]::Matches($htmlContent, '@keyframes')).Count
+          Write-Host "  index.html: $n @keyframes occurrence(s)"
+          if ($n -gt 0) {
+            Write-Error "  FAIL: @keyframes in index.html -- see source index.html and font/keyframes strip step."
+            $failed = $true
+          } else {
+            Write-Host "  PASS: zero @keyframes in index.html"
+          }
+
+          # ── CHECK 5: crossorigin attribute in HTML ────────────────────────────────
+          # Vite 8 (rolldown) emits crossorigin on <script> and <link> tags. On 26100.3194
+          # WebView2 applies CORS semantics to local ms-appx-web: resources and crashes.
+          # Expected: 0 after the crossorigin strip step.
+          Write-Host ""
+          Write-Host "CHECK 5 -- crossorigin in index.html (crash vector: 26100.3194)"
+          $n = ([regex]::Matches($htmlContent, '\bcrossorigin\b')).Count
+          Write-Host "  index.html: $n crossorigin attribute(s)"
+          if ($n -gt 0) {
+            Write-Error "  FAIL: crossorigin in index.html -- strip step incomplete or Vite output format changed."
+            $failed = $true
+          } else {
+            Write-Host "  PASS: zero crossorigin in index.html"
+          }
+
+          # ── CHECK 6: UTF-8 BOM in HTML and CSS ───────────────────────────────────
+          # PS5.1 Set-Content -Encoding UTF8 writes a BOM (EF BB BF). A BOM before
+          # <!doctype> triggers quirks mode; a BOM in a CSS file can crash the CSS
+          # parser on 26200.8116. All file writes must use UTF8Encoding($false).
+          Write-Host ""
+          Write-Host "CHECK 6 -- UTF-8 BOM in HTML/CSS (crash vector: 26200.8116)"
           $filesToCheck = @($htmlPath) + @($cssFiles | ForEach-Object { $_.FullName })
+          $check6Fail = $false
           foreach ($f in $filesToCheck) {
             $bytes = [System.IO.File]::ReadAllBytes($f)
             if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-              Write-Error "FATAL: BOM detected in $f -- will crash WebView2. Use UTF8Encoding(false) for all writes."
-              exit 1
+              Write-Error "  FAIL: BOM in $f -- use [System.IO.File]::WriteAllText(..., UTF8Encoding(`$false))."
+              $failed = $true; $check6Fail = $true
             }
           }
-          Write-Host "BOM validation PASSED -- no UTF-8 BOM in any output file"
+          if (-not $check6Fail) { Write-Host "  PASS: no UTF-8 BOM in $($filesToCheck.Count) file(s)" }
+
+          # ── CHECK 7: sw.js must NOT be in the MSIX package ───────────────────────
+          # A service worker from a prior MSIX version can survive in WebView2's data
+          # folder and intercept ms-appx-web: fetch events, crashing the renderer on
+          # Win 11 26200+ (v1.9 root cause). sw.js is removed in the copy step above.
+          Write-Host ""
+          Write-Host "CHECK 7 -- sw.js absent from MSIX package (crash vector: 26200.8655 SW)"
+          if (Test-Path "msix\sw.js") {
+            Write-Error "  FAIL: msix\sw.js exists -- it must be removed before packaging."
+            $failed = $true
+          } else {
+            Write-Host "  PASS: sw.js not present in MSIX package"
+          }
+
+          # ── SUMMARY ───────────────────────────────────────────────────────────────
+          Write-Host ""
+          Write-Host "====================================================================="
+          if ($failed) {
+            Write-Error "MSIX Pre-flight Audit FAILED -- see FAIL lines above. Do NOT submit this build."
+            exit 1
+          }
+          Write-Host "MSIX Pre-flight Audit PASSED -- all 7 crash-vector checks clean."
+          Write-Host "====================================================================="
 
       - name: Write AppxManifest.xml
         shell: powershell
