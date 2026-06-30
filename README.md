@@ -1,16 +1,98 @@
-# React + Vite
+# OpsManifest
+### Infrastructure Lifecycle Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> *Not a CMDB. Not a ticketing system. The structured pre-work that makes both of those accurate.*
 
-Currently, two official plugins are available:
+A React SPA that walks infrastructure PMs through the full server provisioning lifecycle — from hardware selection to CAB approval to project closure. Built for teams who know that the real problem isn't tracking infrastructure; it's the 40 decisions made before anything gets tracked.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**Live →** https://opsmanifest.pages.dev
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What it does
 
-## Expanding the ESLint configuration
+Every server provisioning project has the same shape: requirements → design → procurement → config → handoff → closure. OpsManifest makes that shape explicit, enforces the right questions at each stage, and produces audit-ready outputs for ServiceNow, Jira, or CAB.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```
+Project created → Stage-by-stage workflow
+     │
+     ├─ Hardware & OS selection      → validated against EOL calendar
+     ├─ System design                → architecture decisions recorded
+     ├─ Incident triage              → runbooks linked, escalation paths set
+     ├─ CAB approval                 → structured change record generated
+     ├─ RTM sign-off                 → requirements traced to deliverables
+     └─ Project closure              → handoff doc generated
+```
+
+---
+
+## Stack
+
+| Layer | What |
+|-------|------|
+| UI | React 19 + Vite 8 |
+| Styling | Tailwind CSS v3 |
+| State | Zustand v5 |
+| Persistence | Dexie.js v4 (IndexedDB) |
+| Cloud sync | Firebase Firestore (Pro+) |
+| AI | Groq API via `workers/ai-worker.js` CF Worker |
+| Payments | Razorpay + Stripe via `workers/razorpay-worker.js` |
+| Hosting | Cloudflare Pages |
+
+---
+
+## Workers
+
+Three Cloudflare Workers run alongside the Pages app:
+
+| Worker | File | Purpose |
+|--------|------|---------|
+| `opsmanifest-ai` | `workers/ai-worker.js` | Groq AI proxy — infrastructure Q&A, runbook generation |
+| `opsmanifest-razorpay` | `workers/razorpay-worker.js` | Razorpay payment proxy |
+| `stripe-worker` | `workers/stripe-worker.js` | Stripe payment proxy |
+
+---
+
+## Deploy
+
+```bash
+# Build and deploy to Cloudflare Pages
+npm run build
+npx wrangler pages deploy dist --project-name opsmanifest
+
+# Deploy Workers separately
+npx wrangler deploy workers/ai-worker.js --name opsmanifest-ai
+npx wrangler deploy workers/razorpay-worker.js --name opsmanifest-razorpay
+```
+
+---
+
+## Key files
+
+```
+src/
+├── App.jsx                    ← root component, routing
+├── store/useStore.js          ← Zustand global state
+├── lib/
+│   ├── firebaseConfig.js      ← Firestore config (Pro sync)
+│   └── orchestratorActions.js ← AI action handlers
+├── components/                ← stage UI components
+└── main.jsx                   ← entry point
+public/
+├── manifest.json              ← PWA manifest
+├── sw.js                      ← service worker
+└── *.html                     ← legal pages (TOS, MSA, SLA, DPA, AUP)
+workers/
+├── ai-worker.js               ← Groq API proxy
+├── razorpay-worker.js         ← Razorpay proxy
+└── stripe-worker.js           ← Stripe proxy
+```
+
+---
+
+## Working on this project
+
+```bash
+cd /home/kali/dev-workspace/infr-lifecycle-engine-main
+# ask Claude: "add a vendor risk assessment stage" or "fix the CAB approval export"
+```
