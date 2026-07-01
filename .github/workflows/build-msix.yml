@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '2.9.0.0'
+        default: '3.0.0.0'
 
 jobs:
   build-msix:
@@ -162,24 +162,31 @@ jobs:
           }
           Write-Host "Removed web-only files from MSIX root"
 
-          # ── Strip all resource-triggering <link> tags from index.html ────────
-          # manifest    — PWA manifest fetch crashes WebView2 on 26200.8655.
-          # icon        — favicon.svg fetch (now removed from package) triggers
-          #               URL resolution during HTML parse on 26200.8116.
-          # apple-touch-icon — same; unused in MSIX context (icon from AppxManifest).
+          # ── Strip all resource-triggering <link> and <meta> tags from index.html ─
+          # manifest         — PWA manifest fetch crashes WebView2 on 26200.8655.
+          # icon             — favicon.svg fetch triggers URL resolution at parse time.
+          # apple-touch-icon — unused in MSIX; AppxManifest provides the icon.
+          # apple-mobile-web-app-* meta tags — iOS-only; pointless in ms-appx-web: context.
+          # theme-color meta  — mobile browser chrome color; no effect in MSIX.
           $htmlPath = "msix\index.html"
           $html = Get-Content $htmlPath -Raw -Encoding UTF8
           $before = $html
+
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="manifest"[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''manifest''[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="icon"[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''icon''[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel="apple-touch-icon"[^>]*/>', '')
           $html = [regex]::Replace($html, '\r?\n?\s*<link[^>]+rel=''apple-touch-icon''[^>]*/>', '')
+          # apple-mobile-web-app-* and theme-color meta tags: iOS/PWA only, no-ops in MSIX
+          $html = [regex]::Replace($html, '\r?\n?\s*<meta[^>]+name="apple-mobile-web-app[^"]*"[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<meta[^>]+name=''apple-mobile-web-app[^'']*''[^>]*/>', '')
+          $html = [regex]::Replace($html, '\r?\n?\s*<meta[^>]+name="theme-color"[^>]*/>', '')
+
           if ($html -eq $before) {
-            Write-Warning "No link tags stripped from index.html - check template"
+            Write-Warning "No link/meta tags stripped from index.html - check template"
           } else {
-            Write-Host "Stripped manifest, icon, and apple-touch-icon links from index.html"
+            Write-Host "Stripped manifest, icon, apple-touch, and mobile meta tags from index.html"
           }
 
           # ── Remove splash <img> from MSIX index.html ─────────────────────────
@@ -228,16 +235,42 @@ jobs:
           foreach ($css in $cssFiles) {
             $content = Get-Content $css.FullName -Raw -Encoding UTF8
             $before  = $content
+
+            # -- @font-face (crash: 26200.8116 -- url() fetched at parse time)
             $content = [regex]::Replace($content, '@font-face\s*\{[^}]+\}', '')
+
+            # -- @keyframes (crash: 26200.8655, 26100.3194 -- CSS parser crash at parse time)
             $content = [regex]::Replace($content, '@keyframes\s+[\w-]+\s*\{(?:[^{}]*\{[^{}]*\})+\}', '')
+
+            # -- animation: (dead code after @keyframes strip; removes any edge-case parser risk)
+            # \b boundary matches after { or ; so only the shorthand is stripped (not animation-duration: etc.)
+            $content = [regex]::Replace($content, '\banimation:[^;}]+;?', '')
+
+            # -- transition: (same risk class as animation: -- runtime CSS state machine;
+            #    unknown impact on restricted WebView2 builds; strip for all MSIX builds)
+            $content = [regex]::Replace($content, '\btransition:[^;}]+;?', '')
+
+            # -- backdrop-filter / -webkit-backdrop-filter (compositor CSS;
+            #    GPU compositing path may behave differently on cert-lab WebView2 builds)
+            $content = [regex]::Replace($content, '-webkit-backdrop-filter:[^;}]+;?', '')
+            $content = [regex]::Replace($content, '\bbackdrop-filter:[^;}]+;?', '')
+
+            # -- :where() pseudo-class (CSS Selectors Level 4; unwrap to plain selector so
+            #    specificity changes from 0 to normal but rules remain functionally identical)
+            $content = [regex]::Replace($content, ':where\(([^)]*)\)', '$1')
+
             if ($content -ne $before) {
-              # No BOM — see comment in crossorigin-strip step for why UTF8Encoding($false) is required
+              # No BOM -- see crossorigin-strip step for why UTF8Encoding($false) is required
               [System.IO.File]::WriteAllText($css.FullName, $content, [System.Text.UTF8Encoding]::new($false))
-              $nFont = ([regex]::Matches($before, '@font-face\s*\{')).Count
-              $nKf   = ([regex]::Matches($before, '@keyframes\s+')).Count
-              Write-Host "Stripped $nFont @font-face + $nKf @keyframes blocks from $($css.Name)"
+              $nFont  = ([regex]::Matches($before, '@font-face\s*\{')).Count
+              $nKf    = ([regex]::Matches($before, '@keyframes\s+')).Count
+              $nAnim  = ([regex]::Matches($before, '\banimation:')).Count
+              $nTrans = ([regex]::Matches($before, '\btransition:')).Count
+              $nBdf   = ([regex]::Matches($before, 'backdrop-filter:')).Count
+              $nWhere = ([regex]::Matches($before, ':where\(')).Count
+              Write-Host "Stripped: $nFont @font-face, $nKf @keyframes, $nAnim animation:, $nTrans transition:, $nBdf backdrop-filter:, $nWhere :where() from $($css.Name)"
             } else {
-              Write-Host "No @font-face or @keyframes blocks in $($css.Name) (MSIX font-stub build - expected)"
+              Write-Host "No strippable rules in $($css.Name)"
             }
           }
 
@@ -409,6 +442,46 @@ jobs:
             Write-Host "  PASS: sw.js not present in MSIX package"
           }
 
+          # ── CHECK 8: animation: in CSS ───────────────────────────────────────────
+          Write-Host ""
+          Write-Host "CHECK 8 -- animation: in CSS (dead code / runtime CSS risk)"
+          $check8Fail = $false
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $n = ([regex]::Matches($content, '\banimation:')).Count
+            Write-Host "  $($css.Name): $n animation: declaration(s)"
+            if ($n -gt 0) { Write-Error "  FAIL: animation: remains in $($css.Name)"; $failed = $true; $check8Fail = $true }
+          }
+          if (-not $check8Fail) { Write-Host "  PASS: zero animation: in all CSS files" }
+
+          # ── CHECK 9: transition: in CSS ──────────────────────────────────────────
+          # CSS transitions share the runtime state machine with animation: -- same
+          # risk class on restricted WebView2 builds. Strip step removes all instances.
+          Write-Host ""
+          Write-Host "CHECK 9 -- transition: in CSS (runtime CSS risk, same class as animation:)"
+          $check9Fail = $false
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $n = ([regex]::Matches($content, '\btransition:')).Count
+            Write-Host "  $($css.Name): $n transition: declaration(s)"
+            if ($n -gt 0) { Write-Error "  FAIL: transition: remains in $($css.Name)"; $failed = $true; $check9Fail = $true }
+          }
+          if (-not $check9Fail) { Write-Host "  PASS: zero transition: in all CSS files" }
+
+          # ── CHECK 10: backdrop-filter: in CSS ────────────────────────────────────
+          # backdrop-filter triggers GPU compositor path. Cert-lab WebView2 builds may
+          # crash when the compositor encounters it under ms-appx-web: constraints.
+          Write-Host ""
+          Write-Host "CHECK 10 -- backdrop-filter: in CSS (GPU compositor risk)"
+          $check10Fail = $false
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $n = ([regex]::Matches($content, 'backdrop-filter:')).Count
+            Write-Host "  $($css.Name): $n backdrop-filter: declaration(s)"
+            if ($n -gt 0) { Write-Error "  FAIL: backdrop-filter: remains in $($css.Name)"; $failed = $true; $check10Fail = $true }
+          }
+          if (-not $check10Fail) { Write-Host "  PASS: zero backdrop-filter: in all CSS files" }
+
           # ── SUMMARY ───────────────────────────────────────────────────────────────
           Write-Host ""
           Write-Host "====================================================================="
@@ -416,7 +489,7 @@ jobs:
             Write-Error "MSIX Pre-flight Audit FAILED -- see FAIL lines above. Do NOT submit this build."
             exit 1
           }
-          Write-Host "MSIX Pre-flight Audit PASSED -- all 7 crash-vector checks clean."
+          Write-Host "MSIX Pre-flight Audit PASSED -- all 10 crash-vector checks clean."
           Write-Host "====================================================================="
 
       - name: Write AppxManifest.xml

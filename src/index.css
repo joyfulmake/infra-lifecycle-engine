@@ -184,11 +184,6 @@
 }
 .animate-pulse-subtle { animation: pulseSubtle 2s ease-in-out infinite; }
 
-@keyframes splash-pulse {
-  0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
-  40%          { transform: scale(1);   opacity: 1;   }
-}
-
 /* ── Theme variables ─────────────────────────────────────────────────────────── */
 :root {
   --sidebar-bg: #0D1520;
