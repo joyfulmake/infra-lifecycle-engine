@@ -9,13 +9,13 @@ Return here after certification is complete for post-approval steps.
 
 | Item | Status |
 |---|---|
-| Live PWA URL | https://opsmanifest.netlify.app |
-| Privacy policy | https://opsmanifest.netlify.app/privacy.html |
+| Live PWA URL | https://opsmanifest.pages.dev |
+| Privacy policy | https://opsmanifest.pages.dev/privacy.html |
 | Icons (192, 512) | ✓ in `public/` |
 | PWA manifest | ✓ `public/manifest.json` |
 | GitHub Actions MSIX workflow | ✓ `.github/workflows/build-msix.yml` |
 | Partner Center identity values | ✓ set as workflow defaults |
-| Submission status | In certification (awaiting Microsoft approval) |
+| Submission status | v3.1.0.0 in certification (submitted 2026-07-02) |
 
 ---
 
@@ -34,7 +34,7 @@ The MSIX is built entirely via GitHub Actions — no local Windows tooling requi
 | `package_name` | `Flourishing.opsmanifest` |
 | `publisher_id` | `CN=CF05ACFD-1A2C-4D3B-85CE-80828C73812E` |
 | `publisher_display_name` | `Flourishing` |
-| `app_version` | `1.3.0.0` |
+| `app_version` | `3.1.0.0` |
 
 **How to run:**
 1. Go to https://github.com/joyfulmake/infra-lifecycle-engine/actions
@@ -120,9 +120,9 @@ Guided infrastructure provisioning workflow for IT teams — system design, CAB 
 infrastructure, ITSM, provisioning, CAB, RTM, system design, Gantt, RAID log, IT operations, server lifecycle
 ```
 
-**Privacy policy URL:** `https://opsmanifest.netlify.app/privacy.html`
+**Privacy policy URL:** `https://opsmanifest.pages.dev/privacy.html`
 
-**Website URL:** `https://opsmanifest.netlify.app`
+**Website URL:** `https://opsmanifest.pages.dev`
 
 **Support contact:** `sriram.c76@gmail.com`
 
@@ -181,7 +181,7 @@ Microsoft certification typically takes **3–7 business days** for PWAs.
 
 | Failure | Fix |
 |---|---|
-| Privacy policy URL unreachable | Confirm https://opsmanifest.netlify.app/privacy.html loads in a fresh browser |
+| Privacy policy URL unreachable | Confirm https://opsmanifest.pages.dev/privacy.html loads in a fresh browser |
 | Identity mismatch in MSIX | Re-run workflow with exact values from App identity page |
 | Age rating incomplete | Complete the IARC questionnaire fully |
 | App crashes on launch | Test the live URL on a Windows machine in Edge/Chrome |
@@ -214,7 +214,7 @@ Add the Microsoft Store badge/link to the app:
 ### 5d. Update the presentation deck
 
 - Open `public/slides.html` and add the Store URL / badge on the last slide
-- Deploy: `git push origin main` (auto-deploys to Netlify)
+- Deploy: `git push origin main` (auto-deploys to Cloudflare Pages via GitHub Actions)
 
 ### 5e. Announce
 
@@ -245,7 +245,7 @@ When the app gets new features and you want to update the Store listing:
 The app manifest is already set up for landscape (required by Meta).
 
 **Steps:**
-1. Go to https://pwabuilder.com → enter `https://opsmanifest.netlify.app`
+1. Go to https://pwabuilder.com → enter `https://opsmanifest.pages.dev` (live Cloudflare Pages URL)
 2. "Package for Store" → Meta Quest
 3. Download the APK package
 4. Submit via Meta's Horizon OS developer portal: https://developers.meta.com/horizon/
@@ -261,9 +261,9 @@ The app manifest is already set up for landscape (required by Meta).
 |---|---|
 | Build MSIX | https://github.com/joyfulmake/infra-lifecycle-engine/actions |
 | Partner Center | https://partner.microsoft.com/dashboard |
-| Live app | https://opsmanifest.netlify.app |
-| Privacy policy | https://opsmanifest.netlify.app/privacy.html |
-| Presentation | https://opsmanifest.netlify.app/slides.html |
-| Netlify admin | https://app.netlify.com/projects/opsmanifest |
+| Live app | https://opsmanifest.pages.dev |
+| Privacy policy | https://opsmanifest.pages.dev/privacy.html |
+| Presentation | https://opsmanifest.pages.dev/slides.html |
+| Cloudflare Pages admin | https://dash.cloudflare.com → Pages → opsmanifest |
 | Microsoft Store badge assets | https://developer.microsoft.com/en-us/store/badges |
 | Microsoft Store Policies | https://aka.ms/msp |
