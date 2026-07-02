@@ -18,7 +18,7 @@ on:
       app_version:
         description: 'App version (x.x.x.x format)'
         required: false
-        default: '3.0.0.0'
+        default: '3.1.0.0'
 
 jobs:
   build-msix:
@@ -259,6 +259,13 @@ jobs:
             #    specificity changes from 0 to normal but rules remain functionally identical)
             $content = [regex]::Replace($content, ':where\(([^)]*)\)', '$1')
 
+            # -- @media range queries: @media (width>=640px) → @media (min-width:640px)
+            #    CSS4 range syntax added in Chrome 104 (Aug 2022). Convert to classic syntax
+            #    for maximum WebView2 compatibility across all cert-lab device configurations.
+            $content = [regex]::Replace($content, '@media\s*\(\s*width\s*>=\s*(\d+(?:\.\d+)?(?:px|em|rem))\s*\)', '@media (min-width:$1)')
+            $content = [regex]::Replace($content, '@media\s*\(\s*width\s*<=\s*(\d+(?:\.\d+)?(?:px|em|rem))\s*\)', '@media (max-width:$1)')
+            $content = [regex]::Replace($content, '@media\s*\(\s*height\s*>=\s*(\d+(?:\.\d+)?(?:px|em|rem))\s*\)', '@media (min-height:$1)')
+
             if ($content -ne $before) {
               # No BOM -- see crossorigin-strip step for why UTF8Encoding($false) is required
               [System.IO.File]::WriteAllText($css.FullName, $content, [System.Text.UTF8Encoding]::new($false))
@@ -268,7 +275,8 @@ jobs:
               $nTrans = ([regex]::Matches($before, '\btransition:')).Count
               $nBdf   = ([regex]::Matches($before, 'backdrop-filter:')).Count
               $nWhere = ([regex]::Matches($before, ':where\(')).Count
-              Write-Host "Stripped: $nFont @font-face, $nKf @keyframes, $nAnim animation:, $nTrans transition:, $nBdf backdrop-filter:, $nWhere :where() from $($css.Name)"
+              $nRange = ([regex]::Matches($before, '@media\s*\([^)]*width\s*[><=]')).Count
+              Write-Host "Stripped: $nFont @font-face, $nKf @keyframes, $nAnim animation:, $nTrans transition:, $nBdf backdrop-filter:, $nWhere :where() | Converted: $nRange @media range queries"
             } else {
               Write-Host "No strippable rules in $($css.Name)"
             }
@@ -308,6 +316,94 @@ jobs:
             Write-Error "FATAL: splash <style> block not found in index.html -- HTML template changed. Update the replacement regex in this step before packaging."
             exit 1
           }
+
+      - name: Generate minimal MSIX index.html
+        shell: powershell
+        run: |
+          # IRON-CLAD approach: replace the ENTIRE MSIX index.html with a purpose-built
+          # minimal version that has NEVER been a crash vector.
+          #
+          # The standard web index.html is designed for PWA/hosted-web use and contains
+          # elements that are irrelevant or risky in the ms-appx-web: packaged context:
+          #   - Splash screen div + animated dots (removed @keyframes at source, but the
+          #     div itself and the <style> block are still unnecessary dead weight)
+          #   - 12-second JS-load fallback timer (JS ALWAYS executes in a packaged MSIX;
+          #     the timer is dead code that stays live for 12s on every launch)
+          #   - <link rel="icon/manifest/apple-touch-icon"> (already stripped above,
+          #     but existence in source risks regression on template changes)
+          #   - <meta name="apple-mobile-web-app-*"> and <meta name="theme-color">
+          #     (iOS/PWA-only; stripped above; risk vector if missed)
+          #   - Skip-link anchor (accessibility aid for web; no value in packaged MSIX)
+          #   - HTML comments (minor; included in parse work)
+          #
+          # This step extracts the Vite-hashed CSS and JS asset paths from the
+          # current msix\index.html, then writes a fresh minimal HTML containing
+          # ONLY what is needed for the app to launch:
+          #   - charset + viewport meta
+          #   - error suppression handlers (unconditional — always ms-appx-web: here)
+          #   - theme attribute loader
+          #   - Segoe UI system font override
+          #   - Vite CSS bundle link
+          #   - title
+          #   - root div (with dark background to avoid white flash)
+          #   - Vite JS module script
+          #
+          # The result is ~750 bytes vs ~3 KB and contains zero ambiguous HTML.
+
+          $htmlPath = "msix\index.html"
+          $html = [System.IO.File]::ReadAllText($htmlPath, [System.Text.UTF8Encoding]::new($false))
+
+          # Extract Vite-hashed CSS href — Vite emits: <link rel="stylesheet" href="assets/index-HASH.css">
+          $cssMatch = [regex]::Match($html, 'href="(assets/[^"]+\.css)"')
+          if (-not $cssMatch.Success) {
+            Write-Error "FATAL: Cannot extract CSS href from msix\index.html"
+            exit 1
+          }
+          $cssHref = $cssMatch.Groups[1].Value
+
+          # Extract Vite-hashed JS src — Vite emits: <script type="module" src="assets/index-HASH.js">
+          $jsMatch = [regex]::Match($html, 'src="(assets/[^"]+\.js)"')
+          if (-not $jsMatch.Success) {
+            Write-Error "FATAL: Cannot extract JS src from msix\index.html"
+            exit 1
+          }
+          $jsHref = $jsMatch.Groups[1].Value
+
+          Write-Host "Extracted CSS: $cssHref"
+          Write-Host "Extracted JS:  $jsHref"
+
+          # Build minimal HTML as string concatenation to avoid PowerShell here-string
+          # YAML indentation issues (here-string terminator must be at column 0 which
+          # conflicts with the YAML block scalar indentation stripping).
+          # Single quotes used throughout; internal single quotes doubled; $ is literal.
+          # Variable interpolation ($cssHref / $jsHref) done via double-quoted fragments.
+          $h  = '<!doctype html>'
+          $h += '<html lang="en"><head>'
+          $h += '<meta charset="UTF-8" />'
+          $h += '<meta name="viewport" content="width=device-width,initial-scale=1.0" />'
+          $h += '<script>'
+          $h += 'window.onerror=function(){return true;};'
+          $h += 'window.addEventListener(''unhandledrejection'',function(e){e.preventDefault();});'
+          $h += 'try{var _t=localStorage.getItem(''opsmanifest_theme'')||''dark'';'
+          $h += 'document.documentElement.setAttribute(''data-theme'',_t);}catch(_e){}'
+          $h += '(function(){'
+          $h += 'var _s=document.createElement(''style'');'
+          $h += '_s.textContent=''*,*::before,*::after{font-family:"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif!important}'';'
+          $h += 'document.head.appendChild(_s);'
+          $h += '})();'
+          $h += 'window.__appMounted=false;'
+          $h += '</script>'
+          $h += "<link rel=`"stylesheet`" href=`"$cssHref`" />"
+          $h += '<title>OpsManifest</title>'
+          $h += '</head>'
+          $h += '<body>'
+          $h += '<div id="root" role="main" tabindex="-1" style="min-height:100vh;background:#0f172a"></div>'
+          $h += "<script type=`"module`" src=`"$jsHref`"></script>"
+          $h += '</body></html>'
+
+          [System.IO.File]::WriteAllText($htmlPath, $h, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "Generated minimal MSIX index.html ($($h.Length) bytes) -- splash, icons, PWA links, fallback timer removed"
+          Write-Host "No BOM, no @keyframes, no crossorigin, no @font-face, no unnecessary meta tags"
 
       - name: MSIX Pre-flight Audit — all WebView2 crash vectors
         shell: powershell
@@ -482,6 +578,21 @@ jobs:
           }
           if (-not $check10Fail) { Write-Host "  PASS: zero backdrop-filter: in all CSS files" }
 
+          # ── CHECK 11: @media range queries in CSS ────────────────────────────────
+          # CSS4 range syntax (@media (width>=640px)) was added in Chrome 104.
+          # Older WebView2 builds on cert-lab devices may not support it — causes
+          # parse failure or layout breakage. Strip step converts to classic syntax.
+          Write-Host ""
+          Write-Host "CHECK 11 -- @media range queries in CSS (CSS4 range syntax, compat risk)"
+          $check11Fail = $false
+          foreach ($css in $cssFiles) {
+            $content = [System.IO.File]::ReadAllText($css.FullName, [System.Text.UTF8Encoding]::new($false))
+            $n = ([regex]::Matches($content, '@media\s*\([^)]*(?:width|height)\s*[><=]')).Count
+            Write-Host "  $($css.Name): $n @media range query(ies)"
+            if ($n -gt 0) { Write-Error "  FAIL: @media range queries remain in $($css.Name)"; $failed = $true; $check11Fail = $true }
+          }
+          if (-not $check11Fail) { Write-Host "  PASS: zero @media range queries in all CSS files" }
+
           # ── SUMMARY ───────────────────────────────────────────────────────────────
           Write-Host ""
           Write-Host "====================================================================="
@@ -489,7 +600,7 @@ jobs:
             Write-Error "MSIX Pre-flight Audit FAILED -- see FAIL lines above. Do NOT submit this build."
             exit 1
           }
-          Write-Host "MSIX Pre-flight Audit PASSED -- all 10 crash-vector checks clean."
+          Write-Host "MSIX Pre-flight Audit PASSED -- all 11 crash-vector checks clean."
           Write-Host "====================================================================="
 
       - name: Write AppxManifest.xml
