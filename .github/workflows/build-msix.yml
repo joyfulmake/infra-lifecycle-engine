@@ -353,18 +353,24 @@ jobs:
           $htmlPath = "msix\index.html"
           $html = [System.IO.File]::ReadAllText($htmlPath, [System.Text.UTF8Encoding]::new($false))
 
-          # Extract Vite-hashed CSS href — Vite emits: <link rel="stylesheet" href="assets/index-HASH.css">
-          $cssMatch = [regex]::Match($html, 'href="(assets/[^"]+\.css)"')
+          # Extract Vite-hashed CSS href.
+          # Vite with base:'./' emits: href="./assets/index-HASH.css"
+          # Vite with base:'/'  emits: href="/assets/index-HASH.css"
+          # Regex handles both: optional leading ./ or / before assets/
+          $cssMatch = [regex]::Match($html, 'href="((?:\.?/)?assets/[^"]+\.css)"')
           if (-not $cssMatch.Success) {
-            Write-Error "FATAL: Cannot extract CSS href from msix\index.html"
+            Write-Host "HTML content for debug:"
+            Write-Host $html.Substring(0, [Math]::Min(2000, $html.Length))
+            Write-Error "FATAL: Cannot extract CSS href from msix\index.html -- check Vite output format"
             exit 1
           }
           $cssHref = $cssMatch.Groups[1].Value
 
-          # Extract Vite-hashed JS src — Vite emits: <script type="module" src="assets/index-HASH.js">
-          $jsMatch = [regex]::Match($html, 'src="(assets/[^"]+\.js)"')
+          # Extract Vite-hashed JS src.
+          # Same base-path variants as CSS above.
+          $jsMatch = [regex]::Match($html, 'src="((?:\.?/)?assets/[^"]+\.js)"')
           if (-not $jsMatch.Success) {
-            Write-Error "FATAL: Cannot extract JS src from msix\index.html"
+            Write-Error "FATAL: Cannot extract JS src from msix\index.html -- check Vite output format"
             exit 1
           }
           $jsHref = $jsMatch.Groups[1].Value
