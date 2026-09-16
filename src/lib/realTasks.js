@@ -92,7 +92,25 @@ function dbJobMigrationTasks(isOracle) {
   ];
 }
 
+import { getCurrentDomainId } from '../domains/currentDomain.js';
+import { getNonInfraCatalog } from '../domains/lookup.js';
+
+// Domain dispatcher — infra's own logic (getRealTasksInfra below) is
+// untouched and remains the default; a non-infra domain's catalog supplies
+// a flat, pre-authored task list per UUM code instead of infra's elaborate
+// conditional generator, since each domain's catalog already carries that
+// content directly (see src/domains/*.js uumTasks).
 export function getRealTasks(uum, ctx) {
+  const domainId = getCurrentDomainId();
+  if (domainId !== 'infra') {
+    const catalog = getNonInfraCatalog(domainId);
+    const tasks = catalog?.uumTasks?.[uum.code];
+    if (tasks) return tasks.slice();
+  }
+  return getRealTasksInfra(uum, ctx);
+}
+
+function getRealTasksInfra(uum, ctx) {
   const layers = uum.layers || [];
   const type = uum.type || 'update';
   const isDB   = layers.includes('db');

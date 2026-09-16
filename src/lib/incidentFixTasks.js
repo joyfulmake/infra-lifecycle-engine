@@ -1,4 +1,17 @@
+import { getCurrentDomainId } from '../domains/currentDomain.js';
+import { getNonInfraCatalog } from '../domains/lookup.js';
+
 export function getIncidentFixTasks(inc, ctx) {
+  const domainId = getCurrentDomainId();
+  if (domainId !== 'infra') {
+    const catalog = getNonInfraCatalog(domainId);
+    const tasks = catalog?.incidentFixTasks?.[inc.code];
+    if (tasks) return tasks.slice();
+  }
+  return getIncidentFixTasksInfra(inc, ctx);
+}
+
+function getIncidentFixTasksInfra(inc, ctx) {
   const layers = inc.layers || [];
   const tasks = [];
   const T2 = (role, name, dep, validate) => tasks.push({ role, name, dep: dep || '', validate: validate || '' });

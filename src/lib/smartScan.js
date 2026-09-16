@@ -100,11 +100,60 @@ export function runSmartScan(ctx) {
   const highCount = findings.filter(f => f.sev === 'HIGH').length;
   const riskLevel = critCount > 0 ? 'CRITICAL' : highCount > 1 ? 'HIGH' : highCount > 0 ? 'MEDIUM' : 'LOW';
 
-  const { suggestedInc, suggestedUUM } = getSuggestedCodes(ctx);
+  // getSuggestedCodes maps hw/os/db strings to hardcoded infra incident/UUM
+  // codes (inc_N/uum_N) — only meaningful for the infra domain; other
+  // domains' catalogs use different code schemes, so skip rather than
+  // suggest codes that don't exist in the active catalog.
+  const { suggestedInc, suggestedUUM } = getCurrentDomainId() === 'infra'
+    ? getSuggestedCodes(ctx)
+    : { suggestedInc: [], suggestedUUM: [] };
   return { findings, riskLevel, suggestedInc, suggestedUUM };
 }
 
+import { getCurrentDomainId } from '../domains/currentDomain.js';
+import { getNonInfraCatalog } from '../domains/lookup.js';
+
+// Generic task-plan builder for non-infra domains: one implementation task
+// plus one validation task per design section that has at least one field
+// filled in, using that domain's own section labels/owners, closing with an
+// end-to-end sign-off milestone — same shape (id/name/team/duration_hours/
+// depends_on/phase/milestone/description) the infra generator produces
+// below, so GanttTab/RTM/Matrix render it identically either way.
+function generateGenericTaskPlan(catalog, sysDesignData) {
+  const tasks = [];
+  let seq = 1;
+  const id = () => 'T' + String(seq++).padStart(2, '0');
+  let prevId = null;
+
+  catalog.designSections.forEach(section => {
+    const data = sysDesignData?.[section.key] || {};
+    const filled = Object.entries(data).filter(([k, v]) => k !== 'notes' && (v || '').toString().trim());
+    if (filled.length === 0) return;
+    const description = filled.slice(0, 3).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${String(v).substring(0, 30)}`).join('; ') || 'Per design';
+
+    const implId = id();
+    tasks.push({ id: implId, name: `${section.label} — implementation`, team: section.owner, duration_hours: Math.max(2, Math.ceil(filled.length / 2)), depends_on: prevId ? [prevId] : [], phase: 1, milestone: false, description });
+    const valId = id();
+    tasks.push({ id: valId, name: `${section.label} — validation`, team: 'QA Eng', duration_hours: 1, depends_on: [implId], phase: 1, milestone: false, description: `Validate ${section.label} configuration against design` });
+    prevId = valId;
+  });
+
+  if (prevId) {
+    tasks.push({ id: id(), name: 'All Teams — End-to-end smoke test and sign-off', team: 'PM / All Teams', duration_hours: 8, depends_on: [prevId], phase: 2, milestone: true, description: 'Verify all implemented sections pass validation. Sign off RTM before CAB.' });
+  }
+  return tasks;
+}
+
 export function generateTaskPlan(sysDesignData, ctx) {
+  const domainId = getCurrentDomainId();
+  if (domainId !== 'infra') {
+    const catalog = getNonInfraCatalog(domainId);
+    if (catalog) return generateGenericTaskPlan(catalog, sysDesignData);
+  }
+  return generateTaskPlanInfra(sysDesignData, ctx);
+}
+
+function generateTaskPlanInfra(sysDesignData, ctx) {
   const tasks = [];
   let seq = 1;
   const id = () => 'T' + String(seq++).padStart(2, '0');

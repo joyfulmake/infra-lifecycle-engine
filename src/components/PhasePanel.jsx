@@ -27,6 +27,7 @@ import { useCompatCheck } from '../lib/useCompatCheck.js';
 import CompatWarning from './CompatWarning.jsx';
 import { PROJECT_TYPES } from '../lib/compliancePlaybooks.js';
 import { COUNTRY_OPTIONS, DOMAIN_OPTIONS } from '../lib/complianceMatrix.js';
+import { DOMAINS, getDomainMeta } from '../domains/registry.js';
 
 const LOCK_ICON = (
   <svg className="w-3 h-3 opacity-60" fill="currentColor" viewBox="0 0 20 20">
@@ -859,8 +860,13 @@ export default function PhasePanel() {
       return;
     }
     s.build({ hw, os, db, app });
-    const defaults = getDefaultDesignValues({ hw, os, db, app });
-    s.setAllDesignFields(defaults);
+    // Auto-fill defaults are infra-specific (keyed to infra's unix/web/app/db/
+    // storage/backup/network/security section keys) — only apply them for
+    // the infra domain; other domains start with an empty design form.
+    if (s.activeDomain === 'infra') {
+      const defaults = getDefaultDesignValues({ hw, os, db, app });
+      s.setAllDesignFields(defaults);
+    }
     const updated = incrementBuildCount(authUser);
     if (updated) setAuthUser(updated);
     setActivePhase('phase1');
@@ -975,6 +981,7 @@ export default function PhasePanel() {
       name: name || id,
       email: authUser?.email || 'guest',
       savedAt: new Date().toISOString(),
+      activeDomain: s.activeDomain,
       isBuilt: s.isBuilt, scanComplete: s.scanComplete, designApplied: s.designApplied,
       phase2Active: s.phase2Active, cabApproved: s.cabApproved, cabDeclined: s.cabDeclined,
       rtmSigned: s.rtmSigned, promoted: s.promoted,
@@ -1131,17 +1138,50 @@ export default function PhasePanel() {
             </div>
           )}
 
+          {/* PM Domain selector — pre-build only; switching resets any in-progress build */}
+          {!s.isBuilt && (
+            <div className="mb-3">
+              <label className="text-xs font-medium text-white/82 block mb-1.5">PM Domain</label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {DOMAINS.map(d => {
+                  const active = s.activeDomain === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => {
+                        if (active) return;
+                        if (s.isDirty && !window.confirm(`Switch to ${d.label}? This clears the current in-progress build.`)) return;
+                        s.setActiveDomain(d.id);
+                      }}
+                      className="w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors flex items-center gap-2"
+                      style={active
+                        ? { background: `${d.accent}1A`, borderColor: `${d.accent}55` }
+                        : { background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.10)' }}
+                    >
+                      <span className="text-sm flex-shrink-0">{d.icon}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-semibold truncate" style={{ color: active ? d.accent : 'rgba(255,255,255,0.85)' }}>{d.shortLabel}</span>
+                      </span>
+                      {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: d.accent }} />}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-xs text-white/52 mt-1.5 leading-snug">{getDomainMeta(s.activeDomain).description}</div>
+            </div>
+          )}
+
           {/* Stack selects — HW drives OS compatibility filter */}
           <div className="space-y-2.5">
             {/* Hardware */}
             <div>
-              <label className="text-xs font-medium text-white/82 block mb-1">Hardware</label>
+              <label className="text-xs font-medium text-white/82 block mb-1">{getDomainMeta(s.activeDomain).axisLabels[0]}</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={hwSel}
                 onChange={e => { setHwSel(e.target.value); setHwCustom(''); setOsSel(''); setOsCustom(''); }}
               >
-                <option value="">— Select Hardware —</option>
+                <option value="">— Select {getDomainMeta(s.activeDomain).axisLabels[0]} —</option>
                 {HW_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                 <option value="__custom">+ Custom...</option>
               </select>
@@ -1164,7 +1204,7 @@ export default function PhasePanel() {
                 return (
                   <>
                     <label className="text-xs font-medium text-white/82 block mb-1">
-                      OS
+                      {getDomainMeta(s.activeDomain).axisLabels[1]}
                       {isFiltered && <span className="ml-1 text-teal/80 font-normal text-xs">(filtered for {effectiveHW.split(' ')[0]} {effectiveHW.split(' ')[1] || ''})</span>}
                     </label>
                     <select
@@ -1172,7 +1212,7 @@ export default function PhasePanel() {
                       value={osSel}
                       onChange={e => { setOsSel(e.target.value); setOsCustom(''); }}
                     >
-                      <option value="">— Select OS —</option>
+                      <option value="">— Select {getDomainMeta(s.activeDomain).axisLabels[1]} —</option>
                       {compatOS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                       {!isFiltered && <option value="__custom">+ Custom...</option>}
                       {isFiltered && <option value="__custom">+ Other (custom)...</option>}
@@ -1192,13 +1232,13 @@ export default function PhasePanel() {
 
             {/* Database */}
             <div>
-              <label className="text-xs font-medium text-white/82 block mb-1">Database</label>
+              <label className="text-xs font-medium text-white/82 block mb-1">{getDomainMeta(s.activeDomain).axisLabels[2]}</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={dbSel}
                 onChange={e => { setDbSel(e.target.value); setDbCustom(''); }}
               >
-                <option value="">— Select Database —</option>
+                <option value="">— Select {getDomainMeta(s.activeDomain).axisLabels[2]} —</option>
                 {DB_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                 <option value="__custom">+ Custom...</option>
               </select>
@@ -1214,13 +1254,13 @@ export default function PhasePanel() {
 
             {/* Application */}
             <div>
-              <label className="text-xs font-medium text-white/82 block mb-1">Application</label>
+              <label className="text-xs font-medium text-white/82 block mb-1">{getDomainMeta(s.activeDomain).axisLabels[3]}</label>
               <select
                 className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 mb-1 focus:outline-none focus:bg-white/15"
                 value={appSel}
                 onChange={e => { setAppSel(e.target.value); setAppCustom(''); }}
               >
-                <option value="">— Select Application —</option>
+                <option value="">— Select {getDomainMeta(s.activeDomain).axisLabels[3]} —</option>
                 {APP_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
                 <option value="__custom">+ Custom...</option>
               </select>

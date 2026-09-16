@@ -1,4 +1,47 @@
+import { getCurrentDomainId } from '../domains/currentDomain.js';
+import { getNonInfraCatalog } from '../domains/lookup.js';
+
+// Domain dispatcher — infra's own field-by-field logic (buildDesignTasksInfra
+// below) is untouched. A non-infra domain doesn't have infra's elaborate
+// per-field task rules, so it gets a generic-but-real builder: one
+// implementation task plus one validation task per design section that has
+// at least one field filled in, using that domain's own section labels and
+// owners (see buildGenericDesignTasks below).
 export function buildDesignTasks(sysDesignData) {
+  const domainId = getCurrentDomainId();
+  if (domainId !== 'infra') {
+    const catalog = getNonInfraCatalog(domainId);
+    if (catalog) return buildGenericDesignTasks(catalog.designSections, sysDesignData);
+  }
+  return buildDesignTasksInfra(sysDesignData);
+}
+
+function buildGenericDesignTasks(designSections, sysDesignData) {
+  const tasks = [];
+  designSections.forEach(section => {
+    const data = sysDesignData?.[section.key] || {};
+    const filled = Object.entries(data).filter(([k, v]) => k !== 'notes' && (v || '').toString().trim());
+    if (filled.length === 0) return;
+    const fieldNames = filled.slice(0, 3).map(([k]) => k.replace(/_/g, ' ')).join(', ');
+    tasks.push({
+      team: section.owner,
+      title: `${section.label}: implement ${fieldNames}${filled.length > 3 ? ', +' + (filled.length - 3) + ' more' : ''}`,
+      dur: Math.max(2, Math.ceil(filled.length / 2)),
+      dep: tasks.length ? 'Prior design section signed off' : 'Design section approved',
+      note: (data.notes || '').toString().substring(0, 60),
+    });
+    tasks.push({
+      team: 'QA Eng',
+      title: `Validate ${section.label} configuration against design`,
+      dur: 1,
+      dep: `${section.label} implementation complete`,
+      note: '',
+    });
+  });
+  return tasks;
+}
+
+function buildDesignTasksInfra(sysDesignData) {
   const d = sysDesignData;
   const tasks = [];
   const push = (team, title, dur, dep, note) =>
