@@ -181,6 +181,8 @@ export const useStore = create((set, get) => ({
     projectStartDate: '', changeFreezeStart: '', changeFreezeEnd: '', holidays: '',
     hoursPerDay: '8', pmEmail: '', pmBackupEmail: '',
     pmDecisionLog: '', // PM-only freeform decision journal (restricted edit)
+    projectType: '', // Phase 5 compliance library archetype — see src/lib/compliancePlaybooks.js
+    country: '', domain: '', // Phase 6 inferred compliance matrix — see src/lib/complianceMatrix.js
   },
 
   // Regions in scope
@@ -279,6 +281,31 @@ export const useStore = create((set, get) => ({
   // Capped at 500 entries. Persisted to Dexie + Firestore with the build.
   actionAuditLog: [],
 
+  // Dependency graph engine (Phase 3) — ids of flags a PM has reviewed and
+  // dismissed (unlinked RAID rows, out-of-order handoffs). Flag ids are
+  // deterministic from graph content, so a dismissal survives regeneration
+  // as long as the same condition persists.
+  dismissedGraphFlags: [],
+
+  // Math engine (Phase 4) — per-task execution tracking, keyed by the same
+  // task id the dependency graph and Gantt overrides use.
+  // { [taskId]: { percentComplete: 0-1, actualHours } }
+  taskProgress: {},
+
+  // Compliance library (Phase 5) — playbook item descriptions the PM has
+  // dismissed as not relevant, so they stop resurfacing as a suggestion.
+  // Accepting an item (not dismissing) doesn't need tracking here — it
+  // becomes a real customRaidEntries row and the RaidTab dedupe hides the
+  // suggestion automatically.
+  dismissedPlaybookItems: [],
+
+  // Inferred compliance matrix (Phase 6) — { [ruleId]: 'pending'|'agreed'|'mitigated'|'submitted' }
+  // Absent entries default to 'pending'. Advisory, not a hard CAB block —
+  // surfaced as a checklist the PM works through, consistent with how
+  // every other advisory in this app (coherence alerts, stale banners)
+  // informs rather than disables the existing approval actions.
+  complianceChecklist: {},
+
   // Active PM tab
   activeTab: 'exec',
 
@@ -339,6 +366,7 @@ export const useStore = create((set, get) => ({
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
     unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
+    dismissedGraphFlags: [], taskProgress: {}, dismissedPlaybookItems: [], complianceChecklist: {},
   }),
 
   completeScan: (results) => set({ scanComplete: true, scanResults: results || [], isDirty: true }),
@@ -422,6 +450,32 @@ export const useStore = create((set, get) => ({
     const log = [...(s.actionAuditLog || []), entry];
     return { actionAuditLog: log.slice(-500), isDirty: true };
   }),
+
+  // Dependency graph flag review
+  dismissGraphFlag: (id) => set(s => ({
+    dismissedGraphFlags: s.dismissedGraphFlags.includes(id) ? s.dismissedGraphFlags : [...s.dismissedGraphFlags, id],
+    isDirty: true,
+  })),
+  restoreGraphFlag: (id) => set(s => ({
+    dismissedGraphFlags: s.dismissedGraphFlags.filter(f => f !== id), isDirty: true,
+  })),
+
+  // Task execution progress (Phase 4 math engine input)
+  setTaskProgress: (taskId, patch) => set(s => ({
+    taskProgress: { ...s.taskProgress, [taskId]: { ...(s.taskProgress[taskId] || {}), ...patch } },
+    isDirty: true,
+  })),
+
+  // Compliance playbook suggestions (Phase 5)
+  dismissPlaybookItem: (key) => set(s => ({
+    dismissedPlaybookItems: s.dismissedPlaybookItems.includes(key) ? s.dismissedPlaybookItems : [...s.dismissedPlaybookItems, key],
+    isDirty: true,
+  })),
+
+  // Compliance matrix checklist (Phase 6)
+  setComplianceStatus: (ruleId, status) => set(s => ({
+    complianceChecklist: { ...s.complianceChecklist, [ruleId]: status }, isDirty: true,
+  })),
 
   addCustomUUM: (uum) => set(s => ({ customUUM: [...(s.customUUM || []), uum], isDirty: true })),
   updateCustomUUM: (id, patch) => set(s => ({
@@ -546,6 +600,10 @@ export const useStore = create((set, get) => ({
     vulnRegistry: b.vulnRegistry ?? [],
     stakeholderDiscussions: b.stakeholderDiscussions ?? [],
     actionAuditLog: b.actionAuditLog ?? [],
+    dismissedGraphFlags: b.dismissedGraphFlags ?? [],
+    taskProgress: b.taskProgress ?? {},
+    dismissedPlaybookItems: b.dismissedPlaybookItems ?? [],
+    complianceChecklist: b.complianceChecklist ?? {},
     riskAcknowledgments: b.riskAcknowledgments ?? {},
     costConfig: b.costConfig ?? { enabled: false, currency: 'USD', totalBudget: 0, dailyRatePerPerson: 800, teamSize: 5, contingencyPct: 20 },
     activeTab: 'exec',

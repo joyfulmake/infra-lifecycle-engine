@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useStore } from '../../store/useStore.js';
-import { ALL_INC, FIXES } from '../../lib/incidents.js';
-import { ALL_UUM } from '../../lib/uumItems.js';
+import { buildAutoRaidRows } from '../../lib/raidRows.js';
+import { getPlaybook, PROJECT_TYPES } from '../../lib/compliancePlaybooks.js';
+import { computeComplianceStatus } from '../../lib/complianceMatrix.js';
 import AgentInsights from '../AgentInsights.jsx';
 import { useCompatCheck } from '../../lib/useCompatCheck.js';
 import CompatWarning from '../CompatWarning.jsx';
@@ -22,6 +23,126 @@ const TYPE_OPTIONS = ['RISK', 'ISSUE', 'ASSUMPTION', 'DEPENDENCY', 'CHANGE', 'DE
 const STATUS_OPTIONS = ['OPEN', 'ACTIVE', 'SCHED', 'IN_PROGRESS', 'DONE', 'CLOSED', 'PARKED'];
 
 const EMPTY_FORM = { type: 'RISK', description: '', severity: 'MED', mitigation: '', status: 'OPEN', owner: '', eta: '' };
+
+const CHECKLIST_STATUSES = ['pending', 'agreed', 'mitigated', 'submitted'];
+const STATUS_STYLE = {
+  pending: 'bg-slate-100 text-slate-500',
+  agreed: 'bg-blue-100 text-blue-700',
+  mitigated: 'bg-amber-100 text-amber-700',
+  submitted: 'bg-green-100 text-green-700',
+};
+
+function ComplianceChecklist({ s }) {
+  const { country, domain } = s.requirements;
+  if (!country || !domain) {
+    return (
+      <div className="card p-3 mb-4 bg-slate-50 border border-dashed border-slate-300">
+        <div className="text-xs text-slate-500">
+          Set <span className="font-semibold text-slate-600">Country</span> and <span className="font-semibold text-slate-600">Domain / Industry</span> in the sidebar Requirements section to infer applicable regulatory obligations from your System Design scope.
+        </div>
+      </div>
+    );
+  }
+
+  const { matched, mandatoryPending } = computeComplianceStatus(s);
+  if (matched.length === 0) {
+    return (
+      <div className="card p-3 mb-4 bg-green-50 border border-green-200">
+        <div className="text-xs text-green-700">No compliance obligations inferred for {country} / {domain} against the current System Design scope.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-3 mb-4 bg-purple-50/50 border border-purple-200 fade-in">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-xs font-bold text-purple-700">Compliance Checklist — {country} / {domain}</div>
+          <div className="text-xs text-purple-500">
+            Inferred from System Design scope. Illustrative mapping — confirm with compliance/legal before treating as complete.
+            {mandatoryPending.length > 0 && <span className="text-amber-600 font-semibold"> {mandatoryPending.length} mandatory item(s) still pending.</span>}
+          </div>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {matched.map(rule => {
+          const status = s.complianceChecklist[rule.id] || 'pending';
+          return (
+            <div key={rule.id} className="flex items-start gap-2 bg-white rounded-md px-2.5 py-2 border border-purple-100">
+              <span className="badge badge-slate flex-shrink-0" title="Framework">{rule.framework}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-slate-700">{rule.requirement}</div>
+                {rule.mandatory && <span className="text-xs text-red-500 font-semibold">Mandatory</span>}
+              </div>
+              <select
+                value={status}
+                onChange={e => s.setComplianceStatus(rule.id, e.target.value)}
+                className={`text-xs font-semibold rounded px-1.5 py-1 border-0 flex-shrink-0 ${STATUS_STYLE[status]}`}
+              >
+                {CHECKLIST_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PlaybookSuggestions({ s, existingDescriptions }) {
+  const playbook = getPlaybook(s.requirements.projectType);
+
+  if (!s.requirements.projectType) {
+    return (
+      <div className="card p-3 mb-4 bg-slate-50 border border-dashed border-slate-300">
+        <div className="text-xs text-slate-500">
+          Set a <span className="font-semibold text-slate-600">Project Type</span> in the sidebar Requirements section to get seeded compliance risks, issues, and best practices for this kind of build.
+        </div>
+      </div>
+    );
+  }
+  if (!playbook) return null;
+
+  const pending = playbook.items.filter(item =>
+    !existingDescriptions.has(item.description) && !s.dismissedPlaybookItems.includes(item.description)
+  );
+  if (pending.length === 0) return null;
+
+  const label = PROJECT_TYPES.find(p => p.id === s.requirements.projectType)?.label || s.requirements.projectType;
+
+  return (
+    <div className="card p-3 mb-4 bg-indigo-50/50 border border-indigo-200 fade-in">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-xs font-bold text-indigo-700">Playbook Suggestions — {label}</div>
+          <div className="text-xs text-indigo-500">Program demand: {playbook.programDemand.join(' · ')}. Illustrative starting points — review before relying on for an actual audit.</div>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {pending.map(item => (
+          <div key={item.description} className="flex items-start gap-2 bg-white rounded-md px-2.5 py-2 border border-indigo-100">
+            <span className={`badge ${RAID_TYPES[item.type]?.color || 'badge-slate'} flex-shrink-0`}>{item.type}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-slate-700">{item.description}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{item.mitigation}</div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={() => s.addCustomRaidEntry({ ...item, id: `playbook-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, addedAt: new Date().toISOString(), source: 'playbook' })}
+                className="text-xs font-semibold px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+              >+ Add</button>
+              <button
+                onClick={() => s.dismissPlaybookItem(item.description)}
+                className="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1"
+                title="Not relevant to this build"
+              >✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function RaidRow({ row, isCustom, onEdit, onDelete }) {
   const cfg = RAID_TYPES[row.type] || RAID_TYPES.RISK;
@@ -76,32 +197,7 @@ export default function RaidTab() {
     );
   }
 
-  const autoRows = [];
-
-  s.selInc.forEach(code => {
-    const inc = ALL_INC.find(i => i.code === code) || (s.customInc || []).find(i => i.id === code);
-    if (!inc) return;
-    const fixed = s.promoted || s.selFix.includes(code);
-    autoRows.push({ type: 'ISSUE', description: inc.short + ': ' + (inc.txt || '').substring(0, 80), severity: fixed ? 'LOW' : 'CRITICAL', mitigation: FIXES[code] || 'Generic patch applied.', status: fixed ? 'CLOSED' : 'OPEN', owner: 'SysAdmin', eta: '' });
-    if (!fixed) autoRows.push({ type: 'RISK', description: inc.short + ' fix regression may affect adjacent layers', severity: 'MED', mitigation: 'Run regression suite across adjacent layers after staging fix.', status: 'ACTIVE', owner: 'QA Team', eta: '' });
-  });
-
-  s.selUUM.forEach(code => {
-    const uum = ALL_UUM.find(u => u.code === code) || (s.customUUM || []).find(u => u.id === code);
-    if (!uum) return;
-    const done = s.promoted;
-    autoRows.push({ type: 'CHANGE', description: uum.short + ' [' + (uum.type || 'change').toUpperCase() + ']: ' + (uum.txt || '').substring(0, 80), severity: done ? 'LOW' : uum.type === 'migration' ? 'HIGH' : uum.type === 'upgrade' ? 'MED' : 'LOW', mitigation: done ? 'Completed and verified.' : uum.type === 'migration' ? 'Dual-run. Data integrity check before decommission.' : uum.type === 'upgrade' ? 'Stage first. Rollback documented.' : 'Apply in window. Health check post-patch.', status: done ? 'DONE' : 'SCHED', owner: (uum.layers || []).includes('db') ? 'DBA + SysAdmin' : 'SysAdmin', eta: '' });
-  });
-
-  autoRows.push(
-    { type: 'ASSUMPTION', description: 'All function teams available for scheduled change windows', severity: 'MED', mitigation: 'Confirm at kick-off', status: 'OPEN', owner: 'Change Manager', eta: '' },
-    { type: 'ASSUMPTION', description: 'Non-prod environment mirrors production configuration and data volume', severity: 'HIGH', mitigation: 'Environment parity check before staging', status: 'OPEN', owner: 'Unix Admin', eta: '' },
-    { type: 'DEPENDENCY', description: 'CAB approval required before production change window', severity: 'HIGH', mitigation: 'CAB submission 5 days before window', status: s.cabApproved ? 'DONE' : 'OPEN', owner: 'Change Manager', eta: '' },
-    { type: 'DEPENDENCY', description: 'RTM sign-off from QA before cutover', severity: 'HIGH', mitigation: 'QA Lead signs all RTM items before cutover call', status: s.rtmSigned ? 'DONE' : 'OPEN', owner: 'QA Team', eta: '' },
-    { type: 'RISK', description: 'Production outage window overrun if migration exceeds estimate', severity: 'HIGH', mitigation: 'Two staging rehearsals. Rollback at T+30min if not on track.', status: 'ACTIVE', owner: 'Change Manager', eta: '' },
-    { type: 'RISK', description: 'Post-migration performance regression due to changed execution plans', severity: 'MED', mitigation: 'Baseline metrics pre-migration. Monitor 48h post-cutover.', status: 'ACTIVE', owner: 'DBA + QA Team', eta: '' },
-  );
-
+  const autoRows = buildAutoRaidRows(s);
   const customRows = (s.customRaidEntries || []).map(e => ({ ...e }));
 
   function handleEdit(row) {
@@ -170,6 +266,9 @@ export default function RaidTab() {
           </button>
         </div>
       </div>
+
+      <ComplianceChecklist s={s} />
+      <PlaybookSuggestions s={s} existingDescriptions={new Set(allRows.map(r => r.description))} />
 
       {/* Inline add/edit form */}
       {showForm && (

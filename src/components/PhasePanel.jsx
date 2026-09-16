@@ -25,6 +25,8 @@ import {
 import OrgPanel from './OrgPanel.jsx';
 import { useCompatCheck } from '../lib/useCompatCheck.js';
 import CompatWarning from './CompatWarning.jsx';
+import { PROJECT_TYPES } from '../lib/compliancePlaybooks.js';
+import { COUNTRY_OPTIONS, DOMAIN_OPTIONS } from '../lib/complianceMatrix.js';
 
 const LOCK_ICON = (
   <svg className="w-3 h-3 opacity-60" fill="currentColor" viewBox="0 0 20 20">
@@ -1033,6 +1035,9 @@ export default function PhasePanel() {
     ['Data Volume', 'data_volume', 'text', null, 'data_volume'],
     ['Compliance', 'compliance', 'text', null, 'compliance'],
     ['DR Tier', 'drTier', 'select', ['Tier 1 (Hot)', 'Tier 2 (Warm)', 'Tier 3 (Cold)']],
+    ['Project Type', 'projectType', 'select', PROJECT_TYPES],
+    ['Country', 'country', 'select', COUNTRY_OPTIONS],
+    ['Domain / Industry', 'domain', 'select', DOMAIN_OPTIONS],
     ['Constraints', 'constraints', 'text', null, 'constraints'],
     ['PM Email', 'pmEmail', 'text', null, null],
     ['PM Backup Email', 'pmBackupEmail', 'text', null, null],
@@ -1099,7 +1104,10 @@ export default function PhasePanel() {
                       value={s.requirements[key] || ''}
                       onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
                     >
-                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                      {opts.map(o => typeof o === 'string'
+                        ? <option key={o} value={o}>{o}</option>
+                        : <option key={o.id} value={o.id}>{o.label}</option>
+                      )}
                     </select>
                   ) : suggestId ? (
                     <SuggestInput

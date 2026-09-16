@@ -68,18 +68,18 @@ export default function ExecOverview() {
 
   if (!s.isBuilt) {
     return (
-      <div className="h-full flex items-center justify-between bg-white border-b border-slate-200 px-6">
-        <div className="text-center flex-1">
-          <div className="text-2xl font-bold text-slate-800 mb-1">Enterprise Infrastructure Lifecycle Engine</div>
-          <div className="text-slate-500 text-sm">Build your platform topology in the left panel to begin</div>
-          <div className="flex gap-2 justify-center mt-3 flex-wrap">
+      <div className="min-h-[96px] h-auto flex flex-col min-[1160px]:flex-row items-center justify-between gap-3 bg-white border-b border-slate-200 px-4 min-[1160px]:px-6 py-3 min-[1160px]:py-0">
+        <div className="text-center flex-1 min-w-0">
+          <div className="text-lg min-[1160px]:text-2xl font-bold text-slate-800 mb-1">Enterprise Infrastructure Lifecycle Engine</div>
+          <div className="text-slate-500 text-xs min-[1160px]:text-sm">Build your platform topology in the left panel to begin</div>
+          <div className="hidden min-[1160px]:flex gap-2 justify-center mt-3 flex-wrap">
             {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(label => (
               <span key={label} className="badge badge-slate text-xs px-3 py-1" style={{ border: '1px solid var(--app-accent-border)' }}>{label}</span>
             ))}
           </div>
         </div>
         {/* OpsMentor + User */}
-        <div className="flex-shrink-0 ml-6 flex flex-col items-end gap-2">
+        <div className="flex-shrink-0 min-[1160px]:ml-6 flex flex-row min-[1160px]:flex-col items-center min-[1160px]:items-end gap-2">
           {/* OpsMentor — always visible in top strip */}
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('opsmanifest-orchestrator-open'))}
@@ -136,9 +136,9 @@ export default function ExecOverview() {
   }
 
   return (
-    <div className="h-full min-h-[96px] bg-white border-b border-slate-200 px-6 py-3 flex gap-4 items-start">
+    <div className="h-auto min-h-24 min-[1160px]:h-full bg-white border-b border-slate-200 px-3 min-[1160px]:px-6 py-2.5 min-[1160px]:py-3 flex flex-col min-[1160px]:flex-row gap-2.5 min-[1160px]:gap-4 items-stretch min-[1160px]:items-start">
       {/* KPI Tiles */}
-      <div className="grid grid-cols-4 gap-3 flex-1 min-w-0 relative">
+      <div className="grid grid-cols-2 min-[520px]:grid-cols-4 gap-2 min-[1160px]:gap-3 flex-1 min-w-0 relative">
         <KpiTile
           label="Active Incidents"
           value={activeInc}
@@ -166,11 +166,11 @@ export default function ExecOverview() {
       </div>
 
       {/* Risk + Milestones + User */}
-      <div className="flex flex-col gap-2 flex-shrink-0 min-w-48">
-        {/* OpsMentor — always visible */}
+      <div className="flex flex-row min-[1160px]:flex-col flex-wrap items-center min-[1160px]:items-stretch justify-between gap-2 flex-shrink-0 min-[1160px]:min-w-48">
+        {/* OpsMentor — desktop only; mobile/tablet use the top bar trigger */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('opsmanifest-orchestrator-open'))}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-white text-xs font-bold hover:opacity-90 transition-opacity w-full"
+          className="hidden min-[1160px]:flex items-center gap-1.5 rounded-lg px-2 py-1 text-white text-xs font-bold hover:opacity-90 transition-opacity w-full"
           style={{ background: 'linear-gradient(135deg, #0f172a 0%, #0d9488 100%)' }}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-teal-300 animate-pulse flex-shrink-0" />
@@ -178,8 +178,8 @@ export default function ExecOverview() {
           <span className="text-teal-200">›</span>
         </button>
         {/* Risk bar */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
+        <div className="min-w-24 min-[1160px]:min-w-0 min-[1160px]:w-full">
+          <div className="flex items-center justify-between mb-1 gap-2">
             <span className="text-xs font-semibold text-slate-500">RISK</span>
             <span className="text-xs font-bold" style={{ color: riskColor }}>{riskLabel}</span>
           </div>
@@ -189,11 +189,11 @@ export default function ExecOverview() {
               style={{ width: riskScore + '%', backgroundColor: riskColor }}
             />
           </div>
-          <div className="text-xs text-slate-400 mt-0.5">{s.ctx.hw} / {s.ctx.os}</div>
+          <div className="hidden min-[1160px]:block text-xs text-slate-400 mt-0.5">{s.ctx.hw} / {s.ctx.os}</div>
         </div>
 
-        {/* Milestones */}
-        <div className="flex gap-1 items-start">
+        {/* Milestones — desktop only, tablet/mobile too tight for 7 dots */}
+        <div className="hidden min-[1160px]:flex gap-1 items-start">
           {milestones.map((m, i) => (
             <div key={m.label} className="flex items-center gap-0.5">
               <MilestoneDot label={m.label} done={m.done} />
@@ -221,7 +221,7 @@ export default function ExecOverview() {
             <div className="w-4 h-4 rounded-full bg-teal-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
               {authUser.displayName?.[0]?.toUpperCase() || 'U'}
             </div>
-            <span className="text-xs text-slate-600 font-medium leading-tight">{authUser.displayName}</span>
+            <span className="hidden min-[520px]:inline text-xs text-slate-600 font-medium leading-tight">{authUser.displayName}</span>
             <span className={`text-xs font-bold rounded px-1 ${PLAN_BADGE[authUser.plan] || PLAN_BADGE.free}`}>
               {PLANS[authUser.plan]?.name}
             </span>

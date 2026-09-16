@@ -12,6 +12,7 @@ import InfraDiagramTab from './tabs/InfraDiagramTab.jsx';
 import CmdbTab from './tabs/CmdbTab.jsx';
 import RolesTab from './tabs/RolesTab.jsx';
 import MatrixTab from './tabs/MatrixTab.jsx';
+import DependencyGraphTab from './tabs/DependencyGraphTab.jsx';
 import VulnTab from './tabs/VulnTab.jsx';
 import RiskTrackerTab from './tabs/RiskTrackerTab.jsx';
 import CostTab from './tabs/CostTab.jsx';
@@ -80,6 +81,12 @@ const TABS = [
     lockMsg: 'Inject Phase 2 to activate',
   },
   {
+    id: 'graph',
+    label: 'Dependency Graph',
+    unlocked: s => s.designApplied,
+    lockMsg: 'Apply System Design first',
+  },
+  {
     id: 'vuln',
     label: 'Vulnerabilities',
     unlocked: s => s.isBuilt,
@@ -118,6 +125,7 @@ function TabContent({ activeTab }) {
     case 'closure': return <ClosureTab />;
     case 'roles': return <RolesTab />;
     case 'matrix': return <MatrixTab />;
+    case 'graph': return <DependencyGraphTab />;
     case 'vuln':   return <VulnTab />;
     case 'risks':  return <RiskTrackerTab />;
     case 'cost':   return <CostTab />;
@@ -174,7 +182,7 @@ export default function PmTabs() {
       )}
 
       {/* Tab bar */}
-      <div className="flex items-end gap-1 px-6 pt-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
+      <div className="flex items-end gap-1 px-3 min-[1160px]:px-6 pt-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
         {TABS.map(tab => {
           const unlocked = isTabUnlocked(tab);
           const isActive = activeTab === tab.id;

@@ -556,4 +556,126 @@
 [data-theme="dark"] .auth-modal-content [class~="bg-slate-50"]     { background-color: #0F172A !important; }
 [data-theme="dark"] .auth-modal-content [class~="border-slate-200"]{ border-color: #334155 !important; }
 
-:root { --build-v: '2.1'; }
+/* ══════════════════════════════════════════════════════════════════════════════
+   Adaptive app shell — sidebar + OpsMentor dock on desktop (>=1160px),
+   off-canvas overlays with backdrop below that. Kept in sync with
+   App.jsx's DESKTOP_BP constant.
+   ══════════════════════════════════════════════════════════════════════════════ */
+.mobile-topbar { display: none; }
+
+.app-center { padding-top: 0; }
+
+.app-sidebar, .app-mentor { position: static; transform: none; z-index: auto; }
+.app-drawer-close { display: none; }
+.app-backdrop { display: none; }
+
+@media (max-width: 1159px) {
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    padding: 0 6px 0 4px;
+    background: linear-gradient(180deg, #0D1520 0%, #0A1018 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    z-index: 45;
+  }
+  .mobile-topbar-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px;
+    color: rgba(255,255,255,0.85);
+    border-radius: 8px;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }
+  .mobile-topbar-btn:active { background: rgba(255,255,255,0.08); }
+  .mobile-topbar-btn--accent { color: #2DD4BF; }
+  .mobile-topbar-title {
+    font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.9);
+    letter-spacing: 0.01em;
+  }
+
+  .app-center { padding-top: 48px; }
+
+  .app-sidebar {
+    position: fixed; top: 0; left: 0; height: 100%;
+    max-width: 86vw;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 8px 0 32px rgba(0,0,0,0.35);
+  }
+  .app-sidebar.is-open { transform: translateX(0); }
+
+  .app-mentor {
+    position: fixed; top: 0; right: 0; height: 100%;
+    max-width: 90vw;
+    z-index: 50;
+    transform: translateX(100%);
+    transition: transform 0.25s ease, width 0.25s ease;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.25);
+    max-width: 90vw;
+  }
+  .app-mentor.is-open { transform: translateX(0); }
+
+  .app-drawer-close {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; top: 8px; right: 8px;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.75);
+    z-index: 2;
+  }
+  .app-drawer-close:active { background: rgba(255,255,255,0.16); }
+
+  .app-backdrop.is-open {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(8,12,20,0.55);
+    backdrop-filter: blur(1px);
+    z-index: 40;
+    animation: fadeIn 0.2s ease-out;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Premium polish — elevation scale, refined tab bar, button motion.
+   Additive only: existing @apply classes are untouched, these layer on top.
+   ══════════════════════════════════════════════════════════════════════════════ */
+:root {
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.06), 0 1px 1px rgba(15,23,42,0.04);
+  --shadow-md: 0 4px 12px rgba(15,23,42,0.08), 0 1px 3px rgba(15,23,42,0.06);
+  --shadow-lg: 0 12px 32px rgba(15,23,42,0.12), 0 2px 8px rgba(15,23,42,0.06);
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.btn-primary, .btn-teal, .btn-red, .btn-amber, .btn-green {
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.18s var(--ease-premium), transform 0.18s var(--ease-premium), background-color 0.15s ease, opacity 0.15s ease;
+}
+.btn-primary:not(:disabled):hover, .btn-teal:not(:disabled):hover,
+.btn-red:not(:disabled):hover, .btn-amber:not(:disabled):hover, .btn-green:not(:disabled):hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.btn-primary:not(:disabled):active, .btn-teal:not(:disabled):active,
+.btn-red:not(:disabled):active, .btn-amber:not(:disabled):active, .btn-green:not(:disabled):active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.tab-btn {
+  border-radius: 8px 8px 0 0;
+}
+.tab-btn-active {
+  box-shadow: 0 -1px 0 0 var(--app-accent) inset;
+}
+
+@media (max-width: 640px) {
+  .exec-kpi-tile { padding: 10px 12px; }
+}
+
+:root { --build-v: '2.2'; }
