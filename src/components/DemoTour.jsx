@@ -3,65 +3,62 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const SLIDES = [
   {
     icon: '⚙',
-    title: 'OpsManifest — Enterprise Infra Lifecycle',
-    body: 'Structured pre-work for server provisioning, CAB approval, RTM sign-off, and project closure. Works alongside ServiceNow / Jira — not a replacement.',
+    title: 'OpsManifest',
+    body: 'One guided workflow for server provisioning: design, risk, approval, and sign-off — all in one place. Works alongside ServiceNow / Jira, not a replacement for them.',
     step: 'Welcome',
     color: ['#0F1F35', '#1A2E4A'],
     accent: '#14B8A6',
   },
   {
     icon: '🖥',
-    title: 'Phase 1: Build Your Stack',
-    body: 'Select hardware, OS, database, and application tier. Hit Build — the AI Smart Scan instantly checks your stack against live CVE and EOL data and pre-selects relevant incidents.',
-    step: 'Phase 1',
+    title: '1. Build Your Stack',
+    body: 'Pick hardware, OS, database, and app tier in the sidebar, then hit Build. An instant AI scan checks it against live CVE and end-of-life data.',
+    step: 'Navigate',
     color: ['#0F1F35', '#1E3A5F'],
     accent: '#3B82F6',
-    hint: 'Sidebar → Hardware / OS / DB / App selectors',
+    hint: 'Sidebar → Hardware / OS / DB / App',
   },
   {
-    icon: '🔍',
-    title: 'System Design — 8 Sections',
-    body: 'Fill Network, Storage, Security, Backup, Compliance, Monitoring, DR, and HA details. Hit "Generate Task Plan" — tasks auto-schedule into the Gantt chart across your team.',
-    step: 'Design',
+    icon: '📐',
+    title: '2. Design & Schedule',
+    body: 'Fill in your system design, then hit Generate Task Plan — tasks auto-schedule into a Gantt chart across your team, no spreadsheet needed.',
+    step: 'Navigate',
     color: ['#0F1F35', '#1F1740'],
     accent: '#8B5CF6',
     hint: 'Tab: System Design → Generate Task Plan',
   },
   {
-    icon: '⚠',
-    title: 'Phase 2: Incidents + UUM Changes',
-    body: 'Select incidents (outages, CVEs, compliance gaps) and UUM items (upgrades, migrations, patches). Type freely — the engine auto-detects layers, type, severity, and maps them to Gantt, RTM, and Matrix.',
-    step: 'Phase 2',
+    icon: '🔗',
+    title: '3. Track Risk',
+    body: 'Add incidents and changes in Phase 2. The Dependency Graph tab links every task to its real risks automatically, so nothing falls through the cracks.',
+    step: 'Navigate',
     color: ['#0F1F35', '#2A1010'],
     accent: '#EF4444',
-    hint: 'Sidebar → Phase 2 → Inject',
-  },
-  {
-    icon: '🗺',
-    title: 'Infra Maps & Mission Intelligence',
-    body: 'Three views on the Diagram tab: Visual topology, ASCII Map (copy-paste into any doc or ticket), and Mission Intel — a 4-section delivery analysis with triple-layer architecture (Business / Functional / Technical), live compatibility matrix, and Groq AI-powered deep analysis.',
-    step: 'Diagram',
-    color: ['#0F1F35', '#0D2A2A'],
-    accent: '#0D9488',
-    hint: 'Tab: Infra Diagram → ASCII Map | Mission Intel',
-  },
-  {
-    icon: '📊',
-    title: 'Gantt + Cross-Stack Matrix',
-    body: 'Automated task scheduling with Critical Path Method, 7-point FSM state tracking, float calculation, and a cross-stack dependency matrix across 8 swimlane layers. Groq AI deepens any task on demand.',
-    step: 'Gantt',
-    color: ['#0F1F35', '#0D2217'],
-    accent: '#22C55E',
-    hint: 'Tabs: Gantt | Matrix',
+    hint: 'Sidebar → Phase 2 · Tab: Dependency Graph',
   },
   {
     icon: '✅',
-    title: 'CAB Gate → RTM → Closure',
-    body: 'Submit to CAB, sign the RTM row-by-row, then complete the closure checklist. Export a 13-sheet styled Excel workbook for governance and audit trail. Cloud sync keeps your team in step.',
-    step: 'Closure',
+    title: '4. Approve & Close',
+    body: 'Submit to CAB, sign off the RTM, then close out. Export a full Excel workbook for your audit trail — done in one flow, start to finish.',
+    step: 'Navigate',
+    color: ['#0F1F35', '#0D2217'],
+    accent: '#22C55E',
+    hint: 'Sidebar → CAB Gate · Tab: RTM · Tab: Closure',
+  },
+  {
+    icon: '🏆',
+    title: 'Built to Outclass Enterprise PPM',
+    body: 'Five things ServiceNow, Clarity, Planview, Jira Align, and MS Project don’t do out of the box:',
+    step: 'Why OpsManifest',
     color: ['#0F1F35', '#1A0F2E'],
-    accent: '#8B5CF6',
-    hint: 'Sidebar → CAB Gate | Tab: RTM | Tab: Closure',
+    accent: '#F59E0B',
+    bullets: [
+      'Live CVE/EOL scan gates your design — before you build, not after',
+      'Every task auto-links to its real risks, with live schedule & cost health',
+      'CAB approval and RTM sign-off are native, not a workflow you configure',
+      'Country + industry auto-surface the compliance obligations that apply',
+      'Zero per-seat license — deployed free, no six-figure PPM contract',
+    ],
   },
 ];
 
@@ -194,9 +191,23 @@ export default function DemoTour() {
           <div style={{ fontSize: 19, fontWeight: 700, color: '#F8FAFC', lineHeight: 1.3, marginBottom: 13 }}>
             {slide.title}
           </div>
-          <p style={{ fontSize: 14, color: 'rgba(241,245,249,0.92)', lineHeight: 1.72, marginBottom: 13 }}>
+          <p style={{ fontSize: 14, color: 'rgba(241,245,249,0.92)', lineHeight: 1.72, marginBottom: slide.bullets ? 10 : 13 }}>
             {slide.body}
           </p>
+          {slide.bullets && (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, marginBottom: 13 }}>
+              {slide.bullets.map((b, i) => (
+                <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 8, fontSize: 13.5, lineHeight: 1.5, color: 'rgba(241,245,249,0.92)' }}>
+                  <span style={{
+                    flexShrink: 0, width: 18, height: 18, borderRadius: 5, marginTop: 1,
+                    background: slide.accent, color: '#0F1F35', fontSize: 11, fontWeight: 800,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{i + 1}</span>
+                  {b}
+                </li>
+              ))}
+            </ul>
+          )}
           {slide.hint && (
             <div style={{
               fontSize: 12.5, color: 'rgba(255,255,255,0.80)',
