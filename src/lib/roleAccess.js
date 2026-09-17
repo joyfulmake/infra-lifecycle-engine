@@ -1,6 +1,8 @@
-// Role → design section mapping
-// Each RACI role is mapped to the design sections they own/can edit
-const ROLE_SECTION_MAP = {
+// Role → design section mapping (infra only — infra sections carry separate
+// Admin/Lead role pairs per section, which a plain "owner" field lookup can't
+// express; every other domain's ownership is derived directly from its own
+// DESIGN_SECTIONS[].owner field instead, see canEditDesignSection below).
+const INFRA_ROLE_SECTION_MAP = {
   'Unix Admin':     ['unix'],
   'Unix Lead':      ['unix'],
   'Web Admin':      ['web'],
@@ -31,10 +33,21 @@ export function getUserRolesForBuild(authUser, roleAssignments) {
     .map(([role]) => role);
 }
 
-// Returns true if the user can edit a given design section
-// Takes precedence over global readOnly when user owns that section
-export function canEditDesignSection(userRoles, sectionKey) {
-  return userRoles.some(role => (ROLE_SECTION_MAP[role] || []).includes(sectionKey));
+// Returns true if the user can edit a given design section.
+// Takes precedence over global readOnly when user owns that section.
+// `isInfraDomain` + `designSections` (the active domain's DESIGN_SECTIONS)
+// are required for correct non-infra behavior — without them this silently
+// fell back to the infra map for every domain, meaning PM/Deputy PM (and
+// every function-team role) could never unlock ANY section post-Phase 2 in
+// the other 15 domains, since none of their section keys or role names ever
+// matched infra's hardcoded map.
+export function canEditDesignSection(userRoles, sectionKey, isInfraDomain = true, designSections = null) {
+  if (isInfraDomain) {
+    return userRoles.some(role => (INFRA_ROLE_SECTION_MAP[role] || []).includes(sectionKey));
+  }
+  if (userRoles.includes('PM') || userRoles.includes('Deputy PM')) return true;
+  const section = (designSections || []).find(sec => sec.key === sectionKey);
+  return !!section && userRoles.includes(section.owner);
 }
 
 // True if the user holds the QA Team Lead role in this build

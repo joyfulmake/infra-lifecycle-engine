@@ -4,8 +4,9 @@
 import { getUserRolesForBuild, canEditDesignSection, isQATeamLead } from './roleAccess.js';
 import { runSmartScan } from './smartScan.js';
 import { getDefaultDesignValues } from './designDefaults.js';
-import { useStore } from '../store/useStore.js';
+import { useStore, DESIGN_SECTIONS } from '../store/useStore.js';
 import { checkCompatibility } from './compatibilityRules.js';
+import { getDomainMeta } from '../domains/registry.js';
 
 // ── Permission check ──────────────────────────────────────────────────────────
 // Returns { allowed: true } or { allowed: false, reason: string }
@@ -31,7 +32,7 @@ export function checkPermission(action, authUser, s) {
     case 'SET_DESIGN_FIELD': {
       // When no PM is gating the build (guest or setup mode), allow all design field updates
       if (!s.requirements?.pmEmail) return { allowed: true };
-      const ok = canEditDesignSection(userRoles, action.params?.section);
+      const ok = canEditDesignSection(userRoles, action.params?.section, s.activeDomain === 'infra', DESIGN_SECTIONS);
       return ok
         ? { allowed: true }
         : { allowed: false, reason: `Your role does not own the "${action.params?.section}" design section.` };
@@ -358,6 +359,9 @@ export function buildStateContext(s, authUser, pastBuildsSummary = null) {
     .map(([sec]) => sec)
     .join(', ');
 
+  const domainMeta = getDomainMeta(s.activeDomain);
+  const isInfraDomain = s.activeDomain === 'infra';
+
   return {
     phase,
     stack:    `${sanitizeForLlm(s.ctx?.hw, 40) || '?'}/${sanitizeForLlm(s.ctx?.os, 40) || '?'}/${sanitizeForLlm(s.ctx?.db, 40) || '?'}/${sanitizeForLlm(s.ctx?.app, 40) || '?'}`,
@@ -376,12 +380,19 @@ export function buildStateContext(s, authUser, pastBuildsSummary = null) {
     isPM,
     userRoles,
     userEmail: authUser?.email || 'guest',
-    // Vendor compatibility issues for the selected stack -- surfaced to LLM as explicit context
-    compatIssues: checkCompatibility(s.ctx || {}).map(r => ({
+    // Which PM domain this build is in -- OpsMentor's worker prompt was
+    // hardcoded to always answer "through the lens of an infra PM" and
+    // constrain SET_DESIGN_FIELD to infra's own section keys regardless of
+    // domain; this is what lets the worker actually adapt.
+    domain: { id: s.activeDomain, label: domainMeta.label, isInfra: isInfraDomain },
+    designSectionKeys: DESIGN_SECTIONS.map(sec => sec.key),
+    // Vendor compatibility issues (infra platform-pairing rules -- SQL
+    // Server on AIX, etc.) only apply to the infra domain.
+    compatIssues: isInfraDomain ? checkCompatibility(s.ctx || {}).map(r => ({
       title: r.title,
       severity: r.severity,
       refs: (r.refs || []).map(rf => rf.label + ' -- ' + rf.url),
-    })),
+    })) : [],
     pastBuildsSummary,
   };
 }

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useStore } from '../../store/useStore.js';
+import { useStore, DESIGN_SECTIONS } from '../../store/useStore.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { canUseFeature } from '../../lib/auth.js';
 import { getUserRolesForBuild } from '../../lib/roleAccess.js';
 import AgentInsights from '../AgentInsights.jsx';
 
-const ROLES = [
+const INFRA_ROLES = [
   { role: 'PM',             fn: 'Project Management',    defaultRaci: 'A',   desc: 'Overall delivery accountability and stakeholder management' },
   { role: 'Deputy PM',      fn: 'Project Management',    defaultRaci: 'A',   desc: 'PM cover; coordinates cross-functional updates' },
   { role: 'Change Manager', fn: 'Change Management',     defaultRaci: 'A',   desc: 'CAB co-ordination, change freeze oversight, RFC submission' },
@@ -27,6 +27,35 @@ const ROLES = [
   { role: 'SecOps Lead',    fn: 'Security',              defaultRaci: 'A/C', desc: 'Security sign-off; compliance framework owner' },
   { role: 'QA Team Lead',   fn: 'Quality Assurance',     defaultRaci: 'A/R', desc: 'Smoke test execution, go/no-go decision, RTM sign-off' },
 ];
+
+// This 20-role table (Unix Admin, DB Admin, Storage Admin...) was hardcoded
+// regardless of domain — every one of the other 15 domains showed the exact
+// same infra technical roles, meaningless for e.g. a Healthcare or SAP build.
+// Each domain's own DESIGN_SECTIONS already carries an `owner` per section
+// (EHR Analyst, Cloud Architect, SAP Basis, etc. — authored when those
+// catalogs were built, just never wired to this tab) — derive the function
+// team rows from that instead of maintaining a second per-domain role list.
+function buildGenericRoles(designSections) {
+  const seen = new Set();
+  const functionRoles = [];
+  (designSections || []).forEach(sec => {
+    if (!sec.owner || seen.has(sec.owner)) return;
+    seen.add(sec.owner);
+    functionRoles.push({
+      role: sec.owner,
+      fn: sec.label,
+      defaultRaci: 'R',
+      desc: `Owns the ${sec.label} section — technical execution and section sign-off`,
+    });
+  });
+  return [
+    { role: 'PM',             fn: 'Project Management', defaultRaci: 'A',   desc: 'Overall delivery accountability and stakeholder management' },
+    { role: 'Deputy PM',      fn: 'Project Management', defaultRaci: 'A',   desc: 'PM cover; coordinates cross-functional updates' },
+    { role: 'Change Manager', fn: 'Change Management',  defaultRaci: 'A',   desc: 'CAB co-ordination, change freeze oversight, RFC submission' },
+    ...functionRoles,
+    { role: 'QA Team Lead',   fn: 'Quality Assurance',  defaultRaci: 'A/R', desc: 'Smoke test execution, go/no-go decision, RTM sign-off' },
+  ];
+}
 
 const RACI_OPTS = ['R', 'A', 'C', 'I', 'A/R', 'A/C', '-'];
 const RACI_COLOR = {
@@ -168,6 +197,7 @@ function RoleRow({ roleDef, assignment, onSave, canEdit }) {
 export default function RolesTab() {
   const s = useStore();
   const { authUser } = useAuth();
+  const ROLES = s.activeDomain === 'infra' ? INFRA_ROLES : buildGenericRoles(DESIGN_SECTIONS);
 
   const pmEmail = s.requirements?.pmEmail || '';
   const pmBackupEmail = s.requirements?.pmBackupEmail || '';

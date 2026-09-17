@@ -442,7 +442,7 @@ export default function SystemDesignTab() {
 
       {/* Sections */}
       {visibleSections.map(section => {
-        const roleOwnsSection = canEditDesignSection(userRoles, section.key);
+        const roleOwnsSection = canEditDesignSection(userRoles, section.key, s.activeDomain === 'infra', DESIGN_SECTIONS);
         const sectionReadOnly = (isReadOnly && !techMode) && !roleOwnsSection;
         return (
           <DesignSection
