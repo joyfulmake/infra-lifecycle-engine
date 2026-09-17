@@ -5,6 +5,7 @@ import { getRealTasks } from '../../lib/realTasks.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { buildProjectGraph } from '../../engine/projectGraph.js';
 import { computeTaskRWCB, computeRiskAdjustedCostExposure } from '../../engine/mathEngine.js';
+import StatTile from '../ui/StatTile.jsx';
 
 const BUFFER = 1.3;
 
@@ -28,15 +29,10 @@ function GaugBar({ used, total, color = 'teal' }) {
   );
 }
 
+// Thin adapter over the shared StatTile primitive (src/components/ui/StatTile.jsx)
+const COST_TONE = { teal: 'accent', amber: 'warning', red: 'danger', slate: 'neutral' };
 function StatCard({ label, value, sub, accent }) {
-  const accents = { teal: 'border-teal-400', amber: 'border-amber-400', red: 'border-red-400', slate: 'border-slate-300' };
-  return (
-    <div className={`card p-4 border-l-4 ${accents[accent] || accents.slate}`}>
-      <div className="text-xs text-slate-500 font-medium">{label}</div>
-      <div className="text-xl font-black text-slate-800 mt-0.5">{value}</div>
-      {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
-    </div>
-  );
+  return <StatTile label={label} value={value} sub={sub} tone={COST_TONE[accent] || 'neutral'} />;
 }
 
 // Estimate total task hours from store state

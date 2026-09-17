@@ -6,6 +6,7 @@ import { findOutOfOrderHandoffs } from '../../engine/functionTeamMatrix.js';
 import { computeTaskRWCB, computeRoleCapacityDrag, computeEVM, computePVI, computeDeliveryConfidence, computeRoleDeliveryConfidence } from '../../engine/mathEngine.js';
 import { calcDates } from '../../lib/scheduling.js';
 import AgentInsights from '../AgentInsights.jsx';
+import StatTile from '../ui/StatTile.jsx';
 
 const TEAM_COLORS = {
   'NetAdmin': '#3B82F6', 'StorageAdmin': '#8B5CF6', 'BackupAdmin': '#F59E0B',
@@ -191,14 +192,6 @@ function Chevron() {
   );
 }
 
-function StatTile({ label, value, accent }) {
-  return (
-    <div className="exec-kpi-tile flex-1 min-w-24">
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{label}</div>
-      <div className="text-lg font-bold leading-tight" style={{ color: accent || '#334155' }}>{value}</div>
-    </div>
-  );
-}
 
 export default function DependencyGraphTab() {
   const s = useStore();
@@ -279,20 +272,20 @@ export default function DependencyGraphTab() {
       <div className="flex gap-2 mb-2 flex-wrap">
         <StatTile label="Chains" value={chains.length} />
         <StatTile label="Tasks" value={totalTasks} />
-        <StatTile label="Links" value={totalLinks} accent="var(--app-accent)" />
-        <StatTile label="Cycles" value={cycles.length} accent={cycles.length ? '#DC2626' : '#22C55E'} />
-        <StatTile label="Needs Review" value={visibleFlags.length} accent={visibleFlags.length ? '#D97706' : '#22C55E'} />
+        <StatTile label="Links" value={totalLinks} hex="var(--app-accent)" />
+        <StatTile label="Cycles" value={cycles.length} hex={cycles.length ? '#DC2626' : '#22C55E'} />
+        <StatTile label="Needs Review" value={visibleFlags.length} hex={visibleFlags.length ? '#D97706' : '#22C55E'} />
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
-        <StatTile label="Schedule (SPI)" value={evm.spi.toFixed(2)} accent={evm.spi >= 1 ? '#22C55E' : evm.spi >= 0.85 ? '#D97706' : '#DC2626'} />
-        <StatTile label="Cost (CPI)" value={evm.cpi.toFixed(2)} accent={evm.cpi >= 1 ? '#22C55E' : evm.cpi >= 0.85 ? '#D97706' : '#DC2626'} />
-        <StatTile label="Velocity" value={pvi.band.toUpperCase()} accent={pvi.band === 'green' ? '#22C55E' : pvi.band === 'amber' ? '#D97706' : '#DC2626'} />
-        <StatTile label="Risk Buffer" value={`+${Math.round(totalBufferHours)}h`} accent={totalBufferHours > 0 ? '#D97706' : '#22C55E'} />
+        <StatTile label="Schedule (SPI)" value={evm.spi.toFixed(2)} hex={evm.spi >= 1 ? '#22C55E' : evm.spi >= 0.85 ? '#D97706' : '#DC2626'} />
+        <StatTile label="Cost (CPI)" value={evm.cpi.toFixed(2)} hex={evm.cpi >= 1 ? '#22C55E' : evm.cpi >= 0.85 ? '#D97706' : '#DC2626'} />
+        <StatTile label="Velocity" value={pvi.band.toUpperCase()} hex={pvi.band === 'green' ? '#22C55E' : pvi.band === 'amber' ? '#D97706' : '#DC2626'} />
+        <StatTile label="Risk Buffer" value={`+${Math.round(totalBufferHours)}h`} hex={totalBufferHours > 0 ? '#D97706' : '#22C55E'} />
         <StatTile
           label="Delivery Confidence"
           value={avgDeliveryConfidence != null ? `${avgDeliveryConfidence}/100` : '—'}
-          accent={avgDeliveryConfidence == null ? '#94A3B8' : avgDeliveryConfidence >= 80 ? '#22C55E' : avgDeliveryConfidence >= 55 ? '#D97706' : '#DC2626'}
+          hex={avgDeliveryConfidence == null ? '#94A3B8' : avgDeliveryConfidence >= 80 ? '#22C55E' : avgDeliveryConfidence >= 55 ? '#D97706' : '#DC2626'}
         />
         {Object.keys(roleDrag).length > 0 && (
           <div className="exec-kpi-tile flex-1 min-w-48">

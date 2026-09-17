@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore.js';
+import { verifyAuditChain } from '../../lib/auditChain.js';
 import { computeAllRisks, riskScore, riskLabel } from '../../lib/riskEngine.js';
 import { buildProjectGraph } from '../../engine/projectGraph.js';
 import { detectCycles, findUnlinkedRaidItems } from '../../engine/graphValidation.js';
@@ -27,6 +28,18 @@ function RagTile({ label, band, value, detail }) {
 export default function GovernanceReportTab() {
   const s = useStore();
   const domain = getDomainMeta(s.activeDomain);
+
+  // Tamper-evident check on the action audit log (see src/lib/auditChain.js).
+  // Re-verified whenever the log changes — proves whether the chain that's
+  // actually in this build is internally consistent, not a claim about it.
+  const [auditStatus, setAuditStatus] = useState({ checked: false, valid: true });
+  useEffect(() => {
+    let cancelled = false;
+    verifyAuditChain(s.actionAuditLog || []).then(result => {
+      if (!cancelled) setAuditStatus({ checked: true, ...result });
+    });
+    return () => { cancelled = true; };
+  }, [s.actionAuditLog]);
 
   const report = useMemo(() => {
     // Risk — reuse the existing cross-source risk engine (coherence, RAID,
@@ -180,6 +193,15 @@ export default function GovernanceReportTab() {
           <span className="font-semibold">Dependency Graph health:</span> {report.cycles.length > 0 && `${report.cycles.length} circular dependency detected. `}
           {report.unlinked.length > 0 && `${report.unlinked.length} RAID item(s) not linked to any task. `}
           Open the Dependency Graph tab to review.
+        </div>
+      )}
+
+      {auditStatus.checked && (s.actionAuditLog || []).length > 0 && (
+        <div className={`mt-3 rounded-lg border px-3.5 py-2.5 text-xs ${auditStatus.valid ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-300 bg-red-50 text-red-700'}`}>
+          <span className="font-semibold">Audit log integrity:</span> {(s.actionAuditLog || []).length} entries, hash-chained.{' '}
+          {auditStatus.valid
+            ? 'Chain verified — no entry has been modified since it was written.'
+            : `Chain broken at entry ${auditStatus.brokenAt} (${auditStatus.reason}) — this log may have been tampered with.`}
         </div>
       )}
     </div>

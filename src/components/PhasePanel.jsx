@@ -1045,6 +1045,7 @@ export default function PhasePanel() {
     ['DR Tier', 'drTier', 'select', ['Tier 1 (Hot)', 'Tier 2 (Warm)', 'Tier 3 (Cold)']],
     ['Project Type', 'projectType', 'select', PROJECT_TYPES],
     ['Country', 'country', 'select', COUNTRY_OPTIONS],
+    ['Data Residency Region', 'dataResidencyRegion', 'select', COUNTRY_OPTIONS],
     ['Domain / Industry', 'domain', 'select', DOMAIN_OPTIONS],
     ['Constraints', 'constraints', 'text', null, 'constraints'],
     ['PM Email', 'pmEmail', 'text', null, null],
@@ -1059,8 +1060,15 @@ export default function PhasePanel() {
           <div className="w-2 h-2 rounded-full bg-teal flex-shrink-0" />
           <div className="text-sm font-bold text-white tracking-tight">OpsManifest</div>
           <button
+            onClick={() => window.dispatchEvent(new CustomEvent('opsmanifest-palette-open'))}
+            className="ml-auto text-xs text-white/52 hover:text-white/85 border border-white/12 rounded px-1.5 py-0.5 transition-all"
+            title="Command palette — jump to any tab or action"
+          >
+            ⌘K
+          </button>
+          <button
             onClick={s.toggleTheme}
-            className="ml-auto w-6 h-6 rounded flex items-center justify-center text-white/62 hover:text-white/90 hover:bg-white/8 transition-all"
+            className="w-6 h-6 rounded flex items-center justify-center text-white/62 hover:text-white/90 hover:bg-white/8 transition-all"
             title={s.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           >
             {s.theme === 'dark' ? '☀' : '🌙'}

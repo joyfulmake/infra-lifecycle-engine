@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DESIGN_SECTIONS, FIELD_LABELS, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS } from '../domains/infra.js';
 import { applyDomain } from '../domains/applyDomain.js';
+import { appendAuditEntry } from '../lib/auditChain.js';
 
 const initDesignData = () => {
   const d = {};
@@ -55,9 +56,11 @@ export const useStore = create((set, get) => ({
     loadProfile: '', dataVolume: '', compliance: '', drTier: 'Tier 1', constraints: '',
     projectStartDate: '', changeFreezeStart: '', changeFreezeEnd: '', holidays: '',
     hoursPerDay: '8', pmEmail: '', pmBackupEmail: '',
-    pmDecisionLog: '', // PM-only freeform decision journal (restricted edit)
+    pmDecisionLog: '', // legacy plaintext — new saves go to pmDecisionLogEnc (see cryptoVault.js)
+    pmDecisionLogEnc: null, // { v, salt, iv, data } — AES-GCM envelope, see ExecSummaryTab.jsx EncryptedPmLog
     projectType: '', // Phase 5 compliance library archetype — see src/lib/compliancePlaybooks.js
     country: '', domain: '', // Phase 6 inferred compliance matrix — see src/lib/complianceMatrix.js
+    dataResidencyRegion: '', // Where data for this build must be stored/processed — may differ from Country (a multinational org's build can run in one country but require EU-only data residency)
   },
 
   // Regions in scope
@@ -343,11 +346,15 @@ export const useStore = create((set, get) => ({
   // Cost config
   setCostConfig: (cfg) => set({ costConfig: cfg, isDirty: true }),
 
-  // Action audit log
-  logAuditAction: (entry) => set(s => {
-    const log = [...(s.actionAuditLog || []), entry];
-    return { actionAuditLog: log.slice(-500), isDirty: true };
-  }),
+  // Action audit log — hash-chained (see src/lib/auditChain.js) so a
+  // retroactive edit to any entry is detectable via verifyAuditChain().
+  // Async (Zustand actions may be); fire-and-forget is safe here since the
+  // only caller (OrchestratorPanel.jsx) doesn't await the result.
+  logAuditAction: (entry) => {
+    appendAuditEntry(get().actionAuditLog || [], entry).then(chain => {
+      set({ actionAuditLog: chain.slice(-500), isDirty: true });
+    });
+  },
 
   // Dependency graph flag review
   dismissGraphFlag: (id) => set(s => ({

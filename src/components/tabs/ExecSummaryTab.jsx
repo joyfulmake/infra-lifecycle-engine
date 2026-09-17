@@ -1,9 +1,119 @@
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { ALL_INC } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import AgentInsights from '../AgentInsights.jsx';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { canEditPMLog } from '../../lib/roleAccess.js';
+import { encryptField, decryptField, isEncryptedEnvelope } from '../../lib/cryptoVault.js';
+import { getSessionPassphrase } from '../../lib/sessionVaultKey.js';
+
+// PM Decision Log is the one field already marked PM-only/restricted, so
+// it's the first real field-encryption use of cryptoVault.js: stored as an
+// AES-GCM envelope (requirements.pmDecisionLogEnc), not plaintext. Editing
+// happens on a local draft — encryption runs once on Save, not per
+// keystroke. Falls back to the legacy plaintext requirements.pmDecisionLog
+// for builds saved before this existed; saving again upgrades it.
+function EncryptedPmLog({ s, editable }) {
+  const [draft, setDraft] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | locked | unlocking | ready | error
+  const [error, setError] = useState('');
+  const loadedRef = useRef(false);
+
+  const envelope = s.requirements?.pmDecisionLogEnc;
+  const legacyPlaintext = s.requirements?.pmDecisionLog;
+
+  async function unlock() {
+    setStatus('unlocking');
+    setError('');
+    try {
+      if (isEncryptedEnvelope(envelope)) {
+        const passphrase = getSessionPassphrase();
+        if (!passphrase) { setStatus('locked'); return; }
+        const plaintext = await decryptField(envelope, passphrase);
+        setDraft(plaintext);
+      } else {
+        setDraft(legacyPlaintext || '');
+      }
+      setStatus('ready');
+    } catch (e) {
+      setError(e.message);
+      setStatus('error');
+    }
+  }
+
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    if (!isEncryptedEnvelope(envelope)) { setDraft(legacyPlaintext || ''); setStatus('ready'); }
+    else setStatus('locked');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save() {
+    setStatus('unlocking');
+    try {
+      const passphrase = getSessionPassphrase();
+      if (!passphrase) { setStatus('ready'); return; }
+      const newEnvelope = await encryptField(draft, passphrase);
+      s.setRequirements({ ...s.requirements, pmDecisionLogEnc: newEnvelope, pmDecisionLog: '' });
+      setStatus('ready');
+    } catch (e) {
+      setError(e.message);
+      setStatus('error');
+    }
+  }
+
+  if (!editable && isEncryptedEnvelope(envelope)) {
+    return (
+      <div className="text-xs text-slate-500 border border-slate-100 bg-slate-50 rounded px-3 py-2 min-h-[80px] flex items-center gap-2">
+        <span>🔒</span><span className="italic">Encrypted — only PM/Deputy PM with the vault passphrase can view this.</span>
+      </div>
+    );
+  }
+  if (!editable) {
+    return (
+      <div className="text-xs text-slate-500 border border-slate-100 bg-slate-50 rounded px-3 py-2 min-h-[80px] whitespace-pre-wrap">
+        {legacyPlaintext || <span className="text-slate-300 italic">No PM notes yet.</span>}
+      </div>
+    );
+  }
+
+  if (status === 'locked') {
+    return (
+      <button onClick={unlock} className="w-full text-xs text-teal-700 border border-teal-200 bg-teal-50 rounded px-3 py-3 hover:bg-teal-100 transition-colors flex items-center justify-center gap-2">
+        <span>🔒</span> Unlock encrypted decision log
+      </button>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <div className="text-xs text-red-600 border border-red-200 bg-red-50 rounded px-3 py-2 space-y-2">
+        <div>{error}</div>
+        <button onClick={unlock} className="text-red-700 underline">Try again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <textarea
+        className="w-full text-xs border border-slate-200 rounded px-3 py-2 text-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-teal-400"
+        rows={5}
+        placeholder="Record decisions, approval context, scope changes, escalations, override rationale..."
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={save}
+        disabled={status === 'unlocking'}
+      />
+      <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-400">
+        <span>🔒</span>
+        <span>{envelope ? 'Encrypted at rest (AES-256-GCM)' : 'Saves encrypted from now on'} — saves automatically when you click away</span>
+        {status === 'unlocking' && <span className="text-teal-600">Saving…</span>}
+      </div>
+    </div>
+  );
+}
 
 export default function ExecSummaryTab() {
   const s = useStore();
@@ -202,19 +312,7 @@ export default function ExecSummaryTab() {
           <div className="text-xs text-slate-400 mb-2">
             Freeform journal for PM decisions, escalations, approval context, and override rationale. Restricted to PM and Deputy PM.
           </div>
-          {pmLogEditable ? (
-            <textarea
-              className="w-full text-xs border border-slate-200 rounded px-3 py-2 text-slate-700 resize-none focus:outline-none focus:ring-1 focus:ring-teal-400"
-              rows={5}
-              placeholder="Record decisions, approval context, scope changes, escalations, override rationale..."
-              value={s.requirements?.pmDecisionLog || ''}
-              onChange={e => s.setRequirements({ ...s.requirements, pmDecisionLog: e.target.value })}
-            />
-          ) : (
-            <div className="text-xs text-slate-500 border border-slate-100 bg-slate-50 rounded px-3 py-2 min-h-[80px] whitespace-pre-wrap">
-              {s.requirements?.pmDecisionLog || <span className="text-slate-300 italic">No PM notes yet.</span>}
-            </div>
-          )}
+          <EncryptedPmLog s={s} editable={pmLogEditable} />
         </div>
       </div>
     </div>

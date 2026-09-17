@@ -8,7 +8,8 @@ import AgentInsights from '../AgentInsights.jsx';
 import { useCompatCheck } from '../../lib/useCompatCheck.js';
 import CompatWarning from '../CompatWarning.jsx';
 import { useAuth } from '../../lib/AuthContext.jsx';
-import { canEditRaidEntry } from '../../lib/roleAccess.js';
+import { canEditRaidEntry, getUserRolesForBuild } from '../../lib/roleAccess.js';
+import { hasCapability } from '../../lib/permissions.js';
 
 const RAID_TYPES = {
   ISSUE: { color: 'badge-red', bg: 'bg-red-50' },
@@ -36,6 +37,12 @@ const STATUS_STYLE = {
 };
 
 function ComplianceChecklist({ s }) {
+  const { authUser } = useAuth();
+  const userRoles = getUserRolesForBuild(authUser, s.roleAssignments);
+  // Guest/unassigned users default to 'view_build' only via permissions.js,
+  // so an unauthenticated viewer never gets edit rights here even if the
+  // build has no roles assigned yet.
+  const canEditStatus = authUser && hasCapability(userRoles, 'edit_compliance_status');
   const { country, domain } = s.requirements;
   if (!country || !domain) {
     return (
@@ -77,13 +84,17 @@ function ComplianceChecklist({ s }) {
                 <div className="text-xs text-slate-700">{rule.requirement}</div>
                 {rule.mandatory && <span className="text-xs text-red-500 font-semibold">Mandatory</span>}
               </div>
-              <select
-                value={status}
-                onChange={e => s.setComplianceStatus(rule.id, e.target.value)}
-                className={`text-xs font-semibold rounded px-1.5 py-1 border-0 flex-shrink-0 ${STATUS_STYLE[status]}`}
-              >
-                {CHECKLIST_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
-              </select>
+              {canEditStatus ? (
+                <select
+                  value={status}
+                  onChange={e => s.setComplianceStatus(rule.id, e.target.value)}
+                  className={`text-xs font-semibold rounded px-1.5 py-1 border-0 flex-shrink-0 ${STATUS_STYLE[status]}`}
+                >
+                  {CHECKLIST_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+                </select>
+              ) : (
+                <span className={`text-xs font-semibold rounded px-1.5 py-1 flex-shrink-0 ${STATUS_STYLE[status]}`} title="PM, Deputy PM, or SecOps can change this">{status}</span>
+              )}
             </div>
           );
         })}

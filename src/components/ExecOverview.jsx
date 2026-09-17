@@ -1,28 +1,22 @@
+import { useMemo } from 'react';
 import { useStore } from '../store/useStore.js';
 import { ALL_INC } from '../lib/incidents.js';
 import { ALL_UUM } from '../lib/uumItems.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { PLANS, promoDaysRemaining } from '../lib/auth.js';
 import { PLAN_BADGE } from './AuthModal.jsx';
-import { getDomainMeta } from '../domains/registry.js';
+import StatTile from './ui/StatTile.jsx';
+import { getUserRolesForBuild } from '../lib/roleAccess.js';
+import { buildProjectGraph } from '../engine/projectGraph.js';
+import { computeRoleCapacityDrag } from '../engine/mathEngine.js';
 
+// Thin adapter over the shared StatTile primitive — keeps this file's call
+// sites (color="red"/"amber"/"teal"/"slate"/"green") unchanged while the
+// actual rendering comes from one shared component (see src/index.css
+// .ui-stat-tile and src/components/ui/StatTile.jsx).
+const COLOR_TO_TONE = { red: 'danger', amber: 'warning', teal: 'accent', slate: 'neutral', green: 'success' };
 function KpiTile({ label, value, sub, color }) {
-  const valueColors = {
-    red: 'text-red-600', amber: 'text-amber-600', teal: 'text-teal', slate: 'text-slate-700', green: 'text-green-700',
-  };
-  const valueClass = valueColors[color] || valueColors.slate;
-  return (
-    <div className="exec-kpi-tile">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: 'var(--app-accent)' }} />
-        <div className="min-w-0">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest truncate">{label}</div>
-          <div className={`text-xl font-bold leading-tight ${valueClass}`}>{value}</div>
-        </div>
-      </div>
-      {sub && <div className="text-xs text-slate-400 truncate pl-3">{sub}</div>}
-    </div>
-  );
+  return <StatTile label={label} value={value} sub={sub} tone={COLOR_TO_TONE[color] || 'neutral'} />;
 }
 
 function MilestoneDot({ label, done }) {
@@ -57,6 +51,27 @@ export default function ExecOverview() {
   const riskColor = riskScore >= 60 ? '#DC2626' : riskScore >= 35 ? '#D97706' : '#0D9488';
   const riskLabel = riskScore >= 60 ? 'HIGH' : riskScore >= 35 ? 'MEDIUM' : 'LOW';
 
+  // Role-aware dashboard: a signed-in user matched to a specific function
+  // team's RACI role sees a KPI relevant to THEM (their capacity drag from
+  // linked open risks) in place of the generic UUM count — a DBA and a
+  // Change Manager don't need the same fixed tile set. Falls back to the
+  // generic view for anyone not matched to a team-shaped role (PM, Change
+  // Manager, QA Lead already have CAB/RTM tiles that suit them directly).
+  const userRoles = getUserRolesForBuild(authUser, s.roleAssignments);
+  const myRoleDrag = useMemo(() => {
+    if (!s.phase2Active || userRoles.length === 0) return null;
+    const { graph } = buildProjectGraph(s);
+    const drag = computeRoleCapacityDrag(graph);
+    for (const myRole of userRoles) {
+      const match = Object.entries(drag).find(([teamRole]) =>
+        teamRole.toLowerCase().includes(myRole.toLowerCase()) || myRole.toLowerCase().includes(teamRole.toLowerCase())
+      );
+      if (match) return { role: myRole, hours: match[1] };
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.phase2Active, s.customRaidEntries, s.selInc, s.selUUM, s.customUUM, s.sysDesignData, s.sdAiTasks, s.ganttOverrides, userRoles.join(',')]);
+
   const milestones = [
     { label: 'Phase 1', done: s.isBuilt },
     { label: 'AI Scan', done: s.scanComplete },
@@ -71,8 +86,8 @@ export default function ExecOverview() {
     return (
       <div className="min-h-[96px] h-auto flex flex-col min-[1160px]:flex-row items-center justify-between gap-3 bg-white border-b border-slate-200 px-4 min-[1160px]:px-6 py-3 min-[1160px]:py-0">
         <div className="text-center flex-1 min-w-0">
-          <div className="text-lg min-[1160px]:text-2xl font-bold text-slate-800 mb-1">Enterprise {getDomainMeta(s.activeDomain).label} Platform</div>
-          <div className="text-slate-500 text-xs min-[1160px]:text-sm">Build your platform topology in the left panel to begin</div>
+          <div className="text-lg min-[1160px]:text-2xl font-bold text-slate-800 mb-1">Where do you want to start?</div>
+          <div className="text-slate-500 text-xs min-[1160px]:text-sm">Pick a domain and stack in the left panel — infra, apps, SAP, cloud, and 12 more — then build.</div>
           <div className="hidden min-[1160px]:flex gap-2 justify-center mt-3 flex-wrap">
             {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(label => (
               <span key={label} className="badge badge-slate text-xs px-3 py-1" style={{ border: '1px solid var(--app-accent-border)' }}>{label}</span>
@@ -146,12 +161,21 @@ export default function ExecOverview() {
           sub={activeInc > 0 ? (s.promoted ? 'All Resolved' : `${s.selFix.length} fixed in staging`) : 'No incidents'}
           color={s.promoted ? 'green' : incSev}
         />
-        <KpiTile
-          label="UUM Items"
-          value={uumCount}
-          sub={uumCount > 0 ? (s.promoted ? 'Completed' : 'Scheduled') : 'None scheduled'}
-          color={s.promoted ? 'green' : uumCount > 0 ? 'amber' : 'slate'}
-        />
+        {myRoleDrag ? (
+          <KpiTile
+            label={`${myRoleDrag.role} Drag`}
+            value={`${Math.round(myRoleDrag.hours)}h`}
+            sub={myRoleDrag.hours > 0 ? 'From your open linked risks' : 'No open risk drag on your tasks'}
+            color={myRoleDrag.hours > 8 ? 'red' : myRoleDrag.hours > 0 ? 'amber' : 'green'}
+          />
+        ) : (
+          <KpiTile
+            label="UUM Items"
+            value={uumCount}
+            sub={uumCount > 0 ? (s.promoted ? 'Completed' : 'Scheduled') : 'None scheduled'}
+            color={s.promoted ? 'green' : uumCount > 0 ? 'amber' : 'slate'}
+          />
+        )}
         <KpiTile
           label="CAB Status"
           value={s.cabApproved ? 'APPROVED' : 'PENDING'}

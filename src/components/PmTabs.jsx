@@ -18,7 +18,7 @@ import VulnTab from './tabs/VulnTab.jsx';
 import RiskTrackerTab from './tabs/RiskTrackerTab.jsx';
 import CostTab from './tabs/CostTab.jsx';
 
-const TABS = [
+export const TABS = [
   {
     id: 'exec',
     label: 'Executive Summary',

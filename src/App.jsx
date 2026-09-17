@@ -5,6 +5,7 @@ import PmTabs from './components/PmTabs.jsx';
 import AuthModal from './components/AuthModal.jsx';
 import DemoTour from './components/DemoTour.jsx';
 import OrchestratorPanel from './components/OrchestratorPanel.jsx';
+import CommandPalette from './components/CommandPalette.jsx';
 import { useAuth } from './lib/AuthContext.jsx';
 import { useStore } from './store/useStore.js';
 
@@ -143,6 +144,7 @@ export default function App() {
 
       {showAuthModal && <AuthModal reason={authModalReason} onClose={() => setShowAuthModal(false)} />}
       <DemoTour />
+      <CommandPalette />
     </>
   );
 }
