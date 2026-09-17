@@ -381,6 +381,8 @@ All AI outputs feed into the Zustand store. `useCoherenceEngine` (mounted in PmT
 
 ## Styling conventions
 
+- **Font: IBM Plex Sans** (`@fontsource/ibm-plex-sans`, weights 400/500/600/700), imported in `main.jsx` and set as the base `font-family` in `index.css`. Replaced Inter — chosen for a more distinctly "enterprise software" character that fits the CAB/RTM/compliance tone. Bundled locally for the same reason Inter was (no `fonts.googleapis.com` request — unreachable from `ms-appx-web:` context, see MSIX history below). The `ms-appx-web:` inline script in `index.html` still forces Segoe UI regardless of which web font is bundled, so MSIX is unaffected by this change.
+- **Theme-aware contrast tokens**: `--color-success/warning/danger/info/neutral` in `index.css` have a light-mode set (tuned for 4.5:1 on white `--color-surface`) and a separate brighter `[data-theme="dark"]` set (tuned for 4.5:1 on navy `--color-surface`) — always use these tokens for status text rather than a literal Tailwind shade like `text-green-500`, which reliably fails contrast on one theme or the other. The sidebar has its own separate theme system (`--sidebar-bg` + the `[data-theme="light"] .sidebar-root [class*="..."]` override block) since it's a different visual context from `.main-root`; a light-theme color fix in one does not cover the other.
 - Tailwind utility classes for layout and spacing
 - Custom semantic classes in `index.css`: `tab-btn`, `tab-btn-active`, scrollbar styles
 - Left panel background: `#0D1520` gradient (was `#1A2E4A`), width: `360px` (was 320px) — set via inline style on the wrapper div in App.jsx; PhasePanel root uses `w-full` to fill it. Auto-collapse threshold is 1160px viewport width.

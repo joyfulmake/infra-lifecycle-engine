@@ -1,11 +1,11 @@
 import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
-// Inter bundled locally — no external network request on startup.
+// IBM Plex Sans bundled locally — no external network request on startup.
 // fonts.googleapis.com is render-blocking and unreachable from ms-appx-web: context.
-import '@fontsource/inter/400.css'
-import '@fontsource/inter/500.css'
-import '@fontsource/inter/600.css'
-import '@fontsource/inter/700.css'
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource/ibm-plex-sans/700.css'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './lib/AuthContext.jsx'
@@ -46,8 +46,8 @@ class AppErrorBoundary extends Component {
           background:'#0f172a',gap:16,padding:24,textAlign:'center'
         }}>
           <img src="/icon-192.png" alt="OpsManifest" style={{width:64,height:64,borderRadius:12}} />
-          <div style={{color:'#f1f5f9',fontFamily:'Inter,sans-serif',fontSize:17,fontWeight:600}}>OpsManifest</div>
-          <div style={{color:'#94a3b8',fontFamily:'Inter,sans-serif',fontSize:13}}>
+          <div style={{color:'#f1f5f9',fontFamily:'IBM Plex Sans,sans-serif',fontSize:17,fontWeight:600}}>OpsManifest</div>
+          <div style={{color:'#94a3b8',fontFamily:'IBM Plex Sans,sans-serif',fontSize:13}}>
             The application could not load. Please check your connection and try again.
           </div>
           <button
@@ -55,7 +55,7 @@ class AppErrorBoundary extends Component {
             style={{
               marginTop:8,background:'#0d9488',color:'#fff',border:'none',
               padding:'8px 24px',borderRadius:6,cursor:'pointer',
-              fontFamily:'Inter,sans-serif',fontSize:14,fontWeight:500
+              fontFamily:'IBM Plex Sans,sans-serif',fontSize:14,fontWeight:500
             }}
           >
             Retry

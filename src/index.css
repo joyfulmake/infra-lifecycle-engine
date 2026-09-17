@@ -51,7 +51,7 @@
     margin: 0;
     background-color: #F1F5F9;
     color: #111827;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
     font-size: 13.5px;
     font-weight: 440;
     line-height: 1.57;
@@ -284,12 +284,26 @@
 [data-theme="light"] .sidebar-root [class*="border-red-5"] { border-color: #FCA5A5 !important; }
 [data-theme="light"] .sidebar-root [class*="border-red-6"] { border-color: #F87171 !important; }
 
+/* Pale accent shades (teal/sky/indigo) tuned for the navy sidebar read as
+   near-invisible on the white one — same class of bug as the green/amber/red
+   overrides above, just for the app's own accent palette. */
+[data-theme="light"] .sidebar-root [class*="text-teal-2"],
+[data-theme="light"] .sidebar-root [class*="text-teal-3"] { color: #0F766E !important; }
+[data-theme="light"] .sidebar-root [class*="text-teal-4"] { color: #0D9488 !important; }
+[data-theme="light"] .sidebar-root [class*="text-sky-4"]  { color: #0369A1 !important; }
+[data-theme="light"] .sidebar-root [class*="text-indigo-2"] { color: #4338CA !important; }
+
 /* ── Light theme: scrollbar ──────────────────────────────────────────────────── */
 [data-theme="light"] .sidebar-root::-webkit-scrollbar-thumb { background: #CBD5E1 !important; }
 
 /* ── Light theme: premium body ───────────────────────────────────────────────── */
 [data-theme="light"] body { background-color: #F8FAFC; }
 [data-theme="light"] .main-root { background-color: #F8FAFC !important; }
+
+/* .section-hdr is a compiled @apply class (text-white/95 baked in), so it never
+   matches the [class*="text-white/..."] attribute selectors above, which only
+   catch elements carrying that literal Tailwind class name. Override directly. */
+[data-theme="light"] .sidebar-root .section-hdr { color: #1E293B !important; border-bottom-color: #E2E8F0 !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    Dark theme — full-page main area overrides
@@ -717,6 +731,15 @@
   --color-border: #334155;
   --color-text: #F1F5F9;
   --color-text-muted: #94A3B8;
+  /* The light-theme success/warning/danger/info/neutral shades above are
+     tuned for 4.5:1 against white — on the dark navy surface here they'd
+     have the same problem in reverse (too dark to read), so dark theme gets
+     its own brighter set, still meeting 4.5:1 against --color-surface. */
+  --color-success: #4ADE80;
+  --color-warning: #FBBF24;
+  --color-danger: #F87171;
+  --color-info: #60A5FA;
+  --color-neutral: #94A3B8;
 }
 
 /* ── Shared stat tile primitive — src/components/ui/StatTile.jsx ──────────── */
