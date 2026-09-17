@@ -1082,8 +1082,6 @@ Rules:
 
       diagram: `Infrastructure Diagram${n}. Three views: Visual topology (layered stack), ASCII Map (copy directly into your CAB document), Mission Intel (business, functional, and technical analysis). The ASCII Map view is the fastest way to add architecture context to a change request.`,
 
-      cmdb: `CMDB live EOL data${n}. ${!s.scanComplete ? 'Run the AI Smart Scan first — it loads your stack components automatically.' : 'Check the EOSL and Security-Only columns. Any component entering security-only mode during your project window is a material CAB risk that needs a mitigation plan.'}`,
-
       vuln:    `Vulnerability Registry${n}. CVEs, EOL exposure, stakeholder sign-offs, and the full OpsMentor action audit trail. ${(s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length > 0 ? `${(s.vulnRegistry || []).filter(v => v.status === 'ACTIVE').length} active — each needs a disposition before go-live.` : 'All clear — log new CVE findings here as they surface.'}`,
 
       risks: `Risk Tracker${n}. Score: ${liveScore} — ${liveRl.label}. ${liveScore >= 18 ? 'CRITICAL posture — address red items immediately; the project may be blocked.' : liveScore >= 10 ? 'HIGH — CAB will challenge these. Ensure every risk has an owner and a mitigation logged in RAID.' : 'Risk posture is acceptable. Keep monitoring as scope evolves.'}`,

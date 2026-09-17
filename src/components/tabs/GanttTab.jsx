@@ -9,7 +9,7 @@ import { useAuth } from '../../lib/AuthContext.jsx';
 import { canManageSchedule } from '../../lib/roleAccess.js';
 import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
-import { enrichTaskWithGroq } from '../../lib/groq.js';
+import { enrichTaskWithGroq, friendlyGroqError } from '../../lib/groq.js';
 import { BUFFER, taskKey, addWorkingHours, fmtDate, isWeekend, calcDates, computeCPM } from '../../lib/scheduling.js';
 
 const TEAM_COLORS = {
@@ -166,7 +166,7 @@ function FsmPanel({ task, ctx }) {
     try {
       const result = await enrichTaskWithGroq(task, ctx, baseMeta);
       setAiMeta(result.enriched); setAiModel(result.model);
-    } catch (e) { setAiError(e.message); }
+    } catch { setAiError(friendlyGroqError()); }
     finally { setAiLoading(false); }
   }
 
@@ -226,7 +226,7 @@ function FsmPanel({ task, ctx }) {
 
       {GROQ_CONFIGURED && (
         <div className="mt-2 pt-2 border-t border-slate-100">
-          {aiError && <div className="text-xs text-red-500 mb-1">{aiError}</div>}
+          {aiError && <div className="text-xs text-slate-500 mb-1">{aiError}</div>}
           <button
             onClick={handleDeepen}
             disabled={aiLoading}

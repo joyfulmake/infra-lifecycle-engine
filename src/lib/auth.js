@@ -14,11 +14,11 @@ export const PLANS = {
       '2 builds per year (browser storage)',
       'Full build workflow — all 7 phases',
       'Save & load builds locally',
-      'Excel export — core 9 sheets',
+      'Excel export — core 12 sheets',
       'AI Smart Scan (no API key)',
       'CAB + RTM + Closure workflow',
     ],
-    gated: ['CMDB configuration database', 'Full 13-sheet Excel + CMDB', 'Tech review locking', 'Team collaboration'],
+    gated: ['Full 16-sheet Excel export', 'Tech review locking', 'Team collaboration'],
   },
   professional: {
     id: 'professional',
@@ -28,11 +28,10 @@ export const PLANS = {
     buildsPerYear: 15,
     teamSize: 1,
     recommended: true,
-    description: '15 builds per year — CMDB, full exports, advanced workflows for power users',
+    description: '15 builds per year — full exports, advanced workflows for power users',
     features: [
       '15 builds per year',
-      'CMDB — CI register with EOL/EOS tracking',
-      'Full 13-sheet Excel export incl. CMDB sheet',
+      'Full 16-sheet Excel export incl. CMDB Configuration Item Register',
       'Tech review locking workflow',
       'Role-based design editing (PM / Admin)',
       'Build versioning',
@@ -270,7 +269,6 @@ const FEATURE_TIER = {
   save_builds:  1,  // starter+
   excel_export: 1,  // starter+
   excel_full:   2,  // professional+
-  cmdb:         2,  // professional+
   tech_review:  2,  // professional+
   team:         3,  // team+
   unlimited:    4,  // enterprise+

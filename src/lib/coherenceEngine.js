@@ -247,51 +247,6 @@ export function runCoherenceChecks(state) {
     });
   }
 
-  // 12. Live EOL alerts from endoflife.date API
-  const liveEolData = state.liveEolData || {};
-  const liveEolEntries = Object.entries(liveEolData);
-  if (liveEolEntries.length > 0) {
-    const today = new Date();
-    function liveStatus(cycle) {
-      if (!cycle) return 'unknown';
-      const eolDate = cycle.eol === true ? new Date('1970-01-01') :
-        cycle.eol === false ? null : cycle.eol ? new Date(cycle.eol) : null;
-      const eosDate = cycle.support === false ? new Date('1970-01-01') :
-        (typeof cycle.support === 'string' ? new Date(cycle.support) : null);
-      if (eolDate && eolDate < today) return 'eol';
-      if (eosDate && eosDate < today) return 'eos';
-      const yr = 365 * 24 * 60 * 60 * 1000;
-      if (eolDate && (eolDate - today) < yr) return 'eos_soon';
-      if (eosDate && (eosDate - today) < yr) return 'eos_soon';
-      return 'active';
-    }
-
-    const eolComponents = liveEolEntries
-      .filter(([, d]) => liveStatus(d.matchedCycle) === 'eol')
-      .map(([name]) => name);
-    const eosSoonComponents = liveEolEntries
-      .filter(([, d]) => ['eos_soon', 'eos'].includes(liveStatus(d.matchedCycle)))
-      .map(([name]) => name);
-
-    if (eolComponents.length > 0) {
-      alerts.push({
-        id: 'live_eol_detected',
-        severity: 'warn',
-        tabs: ['cmdb', 'exec', 'design'],
-        message: `Live API confirms ${eolComponents.length} stack component(s) are End of Life: ${eolComponents.slice(0, 2).join(', ')}${eolComponents.length > 2 ? ` +${eolComponents.length - 2} more` : ''}.`,
-        action: 'CMDB tab for detailed lifecycle report',
-      });
-    }
-    if (eosSoonComponents.length > 0 && !eolComponents.length) {
-      alerts.push({
-        id: 'live_eos_soon',
-        severity: 'info',
-        tabs: ['cmdb'],
-        message: `${eosSoonComponents.length} component(s) approaching end-of-support in the next 12 months per live API.`,
-        action: 'CMDB tab for lifecycle planning',
-      });
-    }
-  }
 
   // ── Check 13: TLS cipher compatibility ──────────────────────────────────────
   {
@@ -335,24 +290,6 @@ export function runCoherenceChecks(state) {
   // ── Check 14: Custom entry compatibility signals ──────────────────────────
   {
     const customUUM = state.customUUM || [];
-    const liveEol   = state.liveEolData || {};
-    const customWithEolRisk = customUUM.filter(u => {
-      const name = (u.short || u.txt || '').toLowerCase();
-      return Object.entries(liveEol).some(([k, v]) => {
-        if (!v?.matchedCycle?.eol) return false;
-        const daysLeft = (new Date(v.matchedCycle.eol) - Date.now()) / 86400000;
-        return k.toLowerCase().split(' ').some(w => w.length > 3 && name.includes(w)) && daysLeft < 365;
-      });
-    });
-    if (customWithEolRisk.length > 0) {
-      alerts.push({
-        id: 'custom_entry_eol',
-        severity: 'warn',
-        tabs: ['diagram', 'cmdb'],
-        message: `Custom component "${customWithEolRisk[0].short || customWithEolRisk[0].txt}" matches a stack entry with EOL < 12 months — verify upgrade path before committing to this architecture.`,
-        action: 'Infra Diagram → Mission Intel for compatibility analysis',
-      });
-    }
 
     // Flag migration-type custom entries that have no Phase 2 UUM equivalent
     const migrationEntries = customUUM.filter(u => u.type === 'migration');

@@ -206,7 +206,7 @@ export default function RiskTrackerTab() {
         <div className="flex-1">
           <h2 className="text-base font-bold text-slate-800">Risk Tracker</h2>
           <p className="text-xs text-slate-500 mt-0.5 mb-3">
-            Live risk posture across all build phases. Syncs with Coherence, RAID, RTM, Vulnerabilities, CMDB, and Incidents.
+            Live risk posture across all build phases. Syncs with Coherence, RAID, RTM, Vulnerabilities, and Incidents.
           </p>
           <div className="flex gap-2 flex-wrap">
             {critCount > 0 && <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold">{critCount} Critical</span>}

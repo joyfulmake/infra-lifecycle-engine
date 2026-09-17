@@ -1,6 +1,18 @@
 import { GROQ_CONFIGURED, GROQ_WORKER_URL } from './groqConfig.js';
 
 /**
+ * Turn any Groq/worker failure (network error, worker down, or an expired/invalid
+ * GROQ_API_KEY on the Cloudflare Worker) into a calm, non-alarming message for the
+ * UI. Never surfaces the raw worker error text — that can read as a raw auth
+ * failure (e.g. "Invalid API Key") which is confusing and looks broken to a paying
+ * user, when in fact the free rule-based analysis they're already looking at is
+ * completely unaffected. Callers should render this instead of `error.message`.
+ */
+export function friendlyGroqError() {
+  return 'AI enrichment is temporarily unavailable — the standard analysis above is unaffected.';
+}
+
+/**
  * Fully enrich a custom UUM entry with description, risks, prerequisites, and a task list.
  * Returns { enriched: { description, risks, prerequisites, tasks } }
  */

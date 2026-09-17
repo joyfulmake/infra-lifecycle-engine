@@ -7,7 +7,7 @@ import { getIncidentFixTasks } from '../../lib/incidentFixTasks.js';
 import { buildDesignTasks } from '../../lib/designTasks.js';
 import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
-import { enrichTaskWithGroq } from '../../lib/groq.js';
+import { enrichTaskWithGroq, friendlyGroqError } from '../../lib/groq.js';
 
 // ── Layer definitions (bottom of stack → top) ────────────────────────────────
 
@@ -156,8 +156,8 @@ function FsmDetailPanel({ item, ctx, onClose }) {
       const result = await enrichTaskWithGroq(task, ctx, baseMeta);
       setAiMeta(result.enriched);
       setAiModel(result.model);
-    } catch (e) {
-      setAiError(e.message);
+    } catch {
+      setAiError(friendlyGroqError());
     } finally {
       setAiLoading(false);
     }
@@ -222,7 +222,7 @@ function FsmDetailPanel({ item, ctx, onClose }) {
         {GROQ_CONFIGURED && (
           <div className="mt-3 pt-3 border-t border-slate-700">
             {aiError && (
-              <div className="text-xs text-red-400 mb-2 bg-red-950 border border-red-800 rounded px-2 py-1">{aiError}</div>
+              <div className="text-xs text-slate-400 mb-2 bg-slate-800 border border-slate-700 rounded px-2 py-1">{aiError}</div>
             )}
             {isAi && aiModel && (
               <div className="text-xs text-slate-500 mb-2">Enriched by <span className="text-teal-400">{aiModel}</span></div>

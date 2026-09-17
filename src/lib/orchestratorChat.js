@@ -917,11 +917,10 @@ export function ruleBasedResponse(message, s, authUser, acknowledgedCompatIds) {
       { pattern: /\b(matrix|dependency\s?matrix|dep\s?matrix)\b/i,             tab: 'matrix',  label: 'Dependency Matrix' },
       { pattern: /\b(closure|close.?out|post.?go.?live)\b/i,                   tab: 'closure', label: 'Closure Checklist' },
       { pattern: /\b(roles?|raci|raci\s?table)\b/i,                            tab: 'roles',   label: 'Roles / RACI' },
-      // Infra Diagram / CMDB are hidden tabs outside the infra domain (they're
-      // built around infra-only design fields) — don't route OpsMentor there either.
+      // Infra Diagram is a hidden tab outside the infra domain (it's built
+      // around infra-only design fields) — don't route OpsMentor there either.
       ...(s.activeDomain === 'infra' ? [
         { pattern: /\b(infra\s?diagram|diagram|topology|architecture\s?map)\b/i, tab: 'diagram', label: 'Infra Diagram' },
-        { pattern: /\b(cmdb|cmdb\s?tab|eol|end.of.life|lifecycle)\b/i,           tab: 'cmdb',    label: 'CMDB / EOL' },
       ] : []),
     ];
     const found = TAB_MAP.find(t => t.pattern.test(target));

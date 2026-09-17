@@ -1215,56 +1215,16 @@ export default function PhasePanel() {
             { id: 'exec',    label: 'Exec Summary', check: () => true },
             ...(s.activeDomain === 'infra' ? [
               { id: 'diagram', label: 'Infra Diagram', check: s => s.isBuilt },
-              { id: 'cmdb',    label: 'CMDB',          check: s => s.isBuilt },
             ] : []),
             { id: 'roles',   label: 'Roles',         check: s => s.isBuilt },
           ]} />
 
-          {/* Requirements */}
-          <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white mb-1.5 flex items-center gap-1.5">
-            <span className="text-white/82 text-xs">{reqOpen ? '▾' : '▸'}</span> Requirements
-          </button>
-          {reqOpen && (
-            <div className="bg-white/5 rounded-lg p-3 mb-2 space-y-2 fade-in">
-              {reqFields.map(([label, key, type, opts, suggestId]) => (
-                <div key={key}>
-                  <label className="text-xs font-medium text-white/82 block mb-1">{label}</label>
-                  {type === 'select' ? (
-                    <select
-                      className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 focus:outline-none focus:bg-white/15"
-                      value={s.requirements[key] || ''}
-                      onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
-                    >
-                      {opts.map(o => typeof o === 'string'
-                        ? <option key={o} value={o}>{o}</option>
-                        : <option key={o.id} value={o.id}>{o.label}</option>
-                      )}
-                    </select>
-                  ) : suggestId ? (
-                    <SuggestInput
-                      fieldId={suggestId}
-                      value={s.requirements[key] || ''}
-                      onChange={v => s.setRequirements({ ...s.requirements, [key]: v })}
-                      placeholder={label}
-                      type={type}
-                    />
-                  ) : (
-                    <input
-                      type={type}
-                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/52 focus:outline-none"
-                      placeholder={label}
-                      value={s.requirements[key] || ''}
-                      onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* PM Domain selector — pre-build only; switching resets any in-progress build.
-              Collapsed to a single "current domain" row by default so 16 domains across
-              5 categories don't clutter the sidebar — expand to browse/switch. */}
+              This is the first choice in Phase 1 (not Requirements/Stack) because every
+              other field below — requirement labels, HW/OS/DB/App axis labels, catalog
+              content, tabs, roles — is derived from whichever domain is active. Collapsed
+              to a single "current domain" row by default so 16 domains across 5
+              categories don't clutter the sidebar — expand to browse/switch. */}
           {!s.isBuilt && (
             <div className="mb-3">
               <label className="text-xs font-medium text-white/82 block mb-1.5">PM Domain</label>
@@ -1316,6 +1276,48 @@ export default function PhasePanel() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Requirements */}
+          <button onClick={() => setReqOpen(!reqOpen)} className="w-full text-left text-xs font-medium text-white/75 hover:text-white mb-1.5 flex items-center gap-1.5">
+            <span className="text-white/82 text-xs">{reqOpen ? '▾' : '▸'}</span> Requirements
+          </button>
+          {reqOpen && (
+            <div className="bg-white/5 rounded-lg p-3 mb-2 space-y-2 fade-in">
+              {reqFields.map(([label, key, type, opts, suggestId]) => (
+                <div key={key}>
+                  <label className="text-xs font-medium text-white/82 block mb-1">{label}</label>
+                  {type === 'select' ? (
+                    <select
+                      className="w-full text-xs bg-white/10 text-white border border-white/25 rounded px-2 py-1.5 focus:outline-none focus:bg-white/15"
+                      value={s.requirements[key] || ''}
+                      onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
+                    >
+                      {opts.map(o => typeof o === 'string'
+                        ? <option key={o} value={o}>{o}</option>
+                        : <option key={o.id} value={o.id}>{o.label}</option>
+                      )}
+                    </select>
+                  ) : suggestId ? (
+                    <SuggestInput
+                      fieldId={suggestId}
+                      value={s.requirements[key] || ''}
+                      onChange={v => s.setRequirements({ ...s.requirements, [key]: v })}
+                      placeholder={label}
+                      type={type}
+                    />
+                  ) : (
+                    <input
+                      type={type}
+                      className="w-full text-xs bg-white/10 text-white border border-white/20 rounded px-2 py-1 placeholder:text-white/52 focus:outline-none"
+                      placeholder={label}
+                      value={s.requirements[key] || ''}
+                      onChange={e => s.setRequirements({ ...s.requirements, [key]: e.target.value })}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           )}
 

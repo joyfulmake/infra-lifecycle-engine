@@ -139,39 +139,6 @@ export function computeAllRisks(s) {
     actionHint:  'Set the go-live date in the Phase 1 panel or via OpsMentor: "go-live date is YYYY-MM-DD".',
   });
 
-  // ── 9. EOL components from live API ─────────────────────────────────────
-  Object.entries(s.liveEolData || {}).forEach(([comp, data]) => {
-    if (data?.error) return;
-    const cycle = data?.matchedCycle;
-    if (!cycle) return;
-    const eol = cycle.eol;
-    const eos = cycle.support || cycle.eol;
-    const now = new Date();
-    const eolDate = eol && eol !== true ? new Date(eol) : null;
-    const eosDate = eos && eos !== true ? new Date(eos) : null;
-    if (eol === true || (eolDate && eolDate < now)) {
-      risks.push({
-        id:          `live-eol-${comp}`,
-        source:      'live-eol',
-        severity:    'CRITICAL',
-        title:       `${comp} is End-of-Life (API confirmed)`,
-        description: `Live endoflife.date API confirms ${comp} is past EOL. Continuing exposes the system to unpatched CVEs.`,
-        tab:         'cmdb',
-        actionHint:  'Open CMDB tab to review lifecycle details. Plan migration to a supported version.',
-      });
-    } else if (eosDate && eosDate < now) {
-      risks.push({
-        id:          `live-eos-${comp}`,
-        source:      'live-eol',
-        severity:    'HIGH',
-        title:       `${comp} past End of Standard Support`,
-        description: `${comp} is in security-only support phase. Feature patches and bug fixes are no longer released.`,
-        tab:         'cmdb',
-        actionHint:  'Open CMDB tab. Evaluate upgrade timeline to avoid security-only window.',
-      });
-    }
-  });
-
   // Sort: CRITICAL first, then HIGH, MEDIUM, LOW; within same severity by source
   return risks.sort((a, b) => (SEV_SCORE[b.severity] || 0) - (SEV_SCORE[a.severity] || 0));
 }

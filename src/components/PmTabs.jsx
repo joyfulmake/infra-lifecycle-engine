@@ -9,7 +9,6 @@ import RaidTab from './tabs/RaidTab.jsx';
 import RtmTab from './tabs/RtmTab.jsx';
 import ClosureTab from './tabs/ClosureTab.jsx';
 import InfraDiagramTab from './tabs/InfraDiagramTab.jsx';
-import CmdbTab from './tabs/CmdbTab.jsx';
 import RolesTab from './tabs/RolesTab.jsx';
 import MatrixTab from './tabs/MatrixTab.jsx';
 import DependencyGraphTab from './tabs/DependencyGraphTab.jsx';
@@ -29,18 +28,10 @@ export const TABS = [
     label: 'Infra Diagram',
     unlocked: s => s.isBuilt,
     lockMsg: 'Build environment first',
-    // Topology layers (Hardware/OS/Storage/Network...) and CMDB below are
-    // built around infra's own design-section fields (unix.cpu, web.ssl_protocols,
-    // db.buf_pool, etc.) which don't exist in the other 15 domains' catalogs —
-    // hidden rather than shown broken/empty until they're made domain-generic.
-    hidden: s => s.activeDomain !== 'infra',
-  },
-  {
-    id: 'cmdb',
-    label: 'CMDB',
-    unlocked: s => s.isBuilt,
-    lockMsg: 'Build environment first',
-    proBadge: true,
+    // Topology layers (Hardware/OS/Storage/Network...) are built around infra's
+    // own design-section fields (unix.cpu, web.ssl_protocols, db.buf_pool, etc.)
+    // which don't exist in the other 15 domains' catalogs — hidden rather than
+    // shown broken/empty until they're made domain-generic.
     hidden: s => s.activeDomain !== 'infra',
   },
   {
@@ -130,7 +121,6 @@ function TabContent({ activeTab }) {
   switch (activeTab) {
     case 'exec': return <ExecSummaryTab />;
     case 'diagram': return <InfraDiagramTab />;
-    case 'cmdb': return <CmdbTab />;
     case 'design': return <SystemDesignTab />;
     case 'gantt': return <GanttTab />;
     case 'raid': return <RaidTab />;
