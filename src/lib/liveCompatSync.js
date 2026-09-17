@@ -1,5 +1,5 @@
 /**
- * useLiveCompatSync — runs on every app open.
+ * useLiveCompatSync — runs once, the first time an infra build exists.
  *
  * Fetches live EOL dates from endoflife.date for every compatibility rule
  * that has an EOL_RULE_SLUGS entry. Results go into store.liveCompatData
@@ -9,11 +9,24 @@
  * Platform incompatibility rules (SQL Server on AIX, SAP HANA on AIX, etc.)
  * have no machine-readable vendor PAM API — they remain statically authoritative.
  *
+ * These are all infra platform-pairing rules (RHEL/Ubuntu/Windows Server/AIX/
+ * Oracle/PostgreSQL EOL, etc.) — CompatWarning, the only consumer, is infra-
+ * only. Firing ~10 concurrent third-party requests on every app open
+ * regardless of domain wasted calls and polluted the console for the other
+ * 15 domains, which never surface this data at all.
+ *
+ * Gated on `isBuilt` as well as `activeDomain`, not just activeDomain alone —
+ * PmTabs (and this hook) mounts on first paint, before the user has picked a
+ * domain, while `activeDomain` still holds its 'infra' default; gating on
+ * activeDomain alone fired for every domain that happened to still be
+ * 'infra' at that first mount instant, regardless of what the user picked
+ * afterward. Waiting for `isBuilt` means the domain choice is already final.
+ *
  * API calls are grouped by product slug to minimise requests (one fetch per
  * product, not per rule). Failures are silent — static rules remain in force.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore.js';
 import { fetchProductCycles, cycleLiveStatus } from './eolApi.js';
 import { EOL_RULE_SLUGS } from './compatibilityRules.js';
@@ -21,8 +34,14 @@ import { EOL_RULE_SLUGS } from './compatibilityRules.js';
 export function useLiveCompatSync() {
   const setLiveCompatData    = useStore(s => s.setLiveCompatData);
   const setLiveCompatVerifiedAt = useStore(s => s.setLiveCompatVerifiedAt);
+  const activeDomain = useStore(s => s.activeDomain);
+  const isBuilt = useStore(s => s.isBuilt);
+  const firedRef = useRef(false);
 
   useEffect(() => {
+    if (!isBuilt || activeDomain !== 'infra' || firedRef.current) return;
+    firedRef.current = true;
+
     const verifiedAt = new Date().toISOString();
     setLiveCompatVerifiedAt(verifiedAt);
 
@@ -64,5 +83,5 @@ export function useLiveCompatSync() {
         });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // once per mount = once per app open
+  }, [activeDomain, isBuilt]); // fires once, the first time an infra build exists
 }

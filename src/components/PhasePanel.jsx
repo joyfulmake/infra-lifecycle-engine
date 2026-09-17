@@ -643,38 +643,55 @@ function ScanModal({ onClose, onComplete }) {
   const [done, setDone] = useState(false);
   const [result, setResult] = useState(null);
   const [autoCloseIn, setAutoCloseIn] = useState(null); // countdown seconds
-  const { ctx } = useStore();
+  const { ctx, activeDomain } = useStore();
+  const isInfraScan = activeDomain === 'infra';
+  const firedRef = useRef(false);
 
   useEffect(() => {
+    // Tracked via a ref (not the first setTimeout's own id) so cleanup can
+    // cancel whichever hop of the recursive chain is currently pending.
+    const timerRef = { current: null };
     let i = 0;
     const tick = () => {
       i++;
       setStage(i);
       if (i < SCAN_STAGES.length - 1) {
-        setTimeout(tick, 320 + Math.random() * 280);
+        timerRef.current = setTimeout(tick, 320 + Math.random() * 280);
       } else {
-        setTimeout(() => {
+        timerRef.current = setTimeout(() => {
           const res = runSmartScan(ctx);
           setResult(res);
           setDone(true);
         }, 400);
       }
     };
-    const t = setTimeout(tick, 250);
-    return () => clearTimeout(t);
+    timerRef.current = setTimeout(tick, 250);
+    return () => clearTimeout(timerRef.current);
   }, []);
 
-  // Auto-apply results after 4 s so the modal never traps the user
+  // Auto-apply results after 4 s so the modal never traps the user. The
+  // countdown state update and the onComplete side effect (which updates the
+  // PARENT's state) are deliberately kept in separate effects -- calling
+  // onComplete from inside the setAutoCloseIn functional updater triggered
+  // React's "Cannot update a component while rendering a different
+  // component" warning, since updater functions must stay pure.
   useEffect(() => {
     if (!done || !result) return;
     setAutoCloseIn(4);
-    const iv = setInterval(() => setAutoCloseIn(n => {
-      if (n <= 1) { clearInterval(iv); onComplete(result, result.suggestedInc || [], result.suggestedUUM || []); return 0; }
-      return n - 1;
-    }), 1000);
+    firedRef.current = false;
+    const iv = setInterval(() => {
+      setAutoCloseIn(n => (n <= 1 ? 0 : n - 1));
+    }, 1000);
     return () => clearInterval(iv);
+  }, [done, result]);
+
+  useEffect(() => {
+    if (autoCloseIn === 0 && result && !firedRef.current) {
+      firedRef.current = true;
+      onComplete(result, result.suggestedInc || [], result.suggestedUUM || []);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [done]);
+  }, [autoCloseIn]);
 
   const riskBadge = result
     ? { CRITICAL: 'bg-red-700 text-white', HIGH: 'bg-orange-600 text-white', MEDIUM: 'bg-amber-500 text-white', LOW: 'bg-green-600 text-white' }[result.riskLevel]
@@ -731,7 +748,7 @@ function ScanModal({ onClose, onComplete }) {
               {(result.suggestedInc?.length > 0 || result.suggestedUUM?.length > 0) && (
                 <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-3 text-xs text-blue-800">
                   <div className="font-semibold mb-0.5">AI Pre-Selection Ready</div>
-                  <div>{result.suggestedInc?.length || 0} incident(s) + {result.suggestedUUM?.length || 0} UUM item(s) matched to your stack — will be pre-selected for your review.</div>
+                  <div>{result.suggestedInc?.length || 0} {isInfraScan ? 'incident(s)' : 'known issue(s)'} + {result.suggestedUUM?.length || 0} {isInfraScan ? 'UUM item(s)' : 'scope item(s)'} matched to your {isInfraScan ? 'stack' : 'build'} — will be pre-selected for your review.</div>
                 </div>
               )}
               <div className="flex gap-2">
