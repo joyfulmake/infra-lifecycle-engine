@@ -23,10 +23,10 @@ function daysUntil(dateStr) {
 
 function DaysChip({ days }) {
   if (days === null) return null;
-  if (days < 0) return <span className="text-xs font-bold text-red-500">Expired</span>;
-  if (days < 90) return <span className="text-xs font-bold text-red-500">{days}d left</span>;
-  if (days < 365) return <span className="text-xs font-bold text-amber-500">{days}d left</span>;
-  return <span className="text-xs text-slate-400">{Math.round(days / 30)}mo left</span>;
+  if (days < 0) return <span className="text-xs font-bold" style={{ color: 'var(--color-danger)' }}>Expired</span>;
+  if (days < 90) return <span className="text-xs font-bold" style={{ color: 'var(--color-danger)' }}>{days}d left</span>;
+  if (days < 365) return <span className="text-xs font-bold" style={{ color: 'var(--color-warning)' }}>{days}d left</span>;
+  return <span className="text-xs" style={{ color: 'var(--color-neutral)' }}>{Math.round(days / 30)}mo left</span>;
 }
 
 // Security-only period: support has ended but EOL has not
@@ -39,27 +39,27 @@ function securityOnlyStatus(cycle) {
 }
 
 function ExtendedSupportChip({ cycle }) {
-  if (!cycle?.extendedSupport) return <span className="text-xs text-slate-300">—</span>;
+  if (!cycle?.extendedSupport) return <span className="text-xs" style={{ color: 'var(--color-neutral)' }}>—</span>;
   if (typeof cycle.extendedSupport === 'boolean') {
-    return <span className="text-xs text-green-500">Available</span>;
+    return <span className="text-xs" style={{ color: 'var(--color-success)' }}>Available</span>;
   }
   const days = daysUntil(cycle.extendedSupport);
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-green-500">Until {cycle.extendedSupport}</span>
+      <span className="text-xs" style={{ color: 'var(--color-success)' }}>Until {cycle.extendedSupport}</span>
       {days !== null && <DaysChip days={days} />}
     </div>
   );
 }
 
 function LtsBadge({ cycle }) {
-  if (!cycle?.lts) return <span className="text-xs text-slate-300">—</span>;
+  if (!cycle?.lts) return <span className="text-xs" style={{ color: 'var(--color-neutral)' }}>—</span>;
   if (typeof cycle.lts === 'boolean') return <span className="badge badge-green text-xs">LTS</span>;
   const days = daysUntil(cycle.lts);
   return (
     <div className="flex flex-col gap-0.5">
       <span className="badge badge-green text-xs">LTS</span>
-      {days !== null && days > 0 && <span className="text-xs text-slate-400">until {cycle.lts}</span>}
+      {days !== null && days > 0 && <span className="text-xs" style={{ color: 'var(--color-neutral)' }}>until {cycle.lts}</span>}
     </div>
   );
 }
