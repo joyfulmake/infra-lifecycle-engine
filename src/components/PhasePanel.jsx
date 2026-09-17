@@ -783,7 +783,10 @@ export default function PhasePanel() {
   const [osCustom, setOsCustom] = useState('');
   const [dbCustom, setDbCustom] = useState('');
   const [appCustom, setAppCustom] = useState('');
-  const [domainPickerOpen, setDomainPickerOpen] = useState(false);
+  // Open by default (pre-build) — the domain choice should be the first
+  // explicit thing a user does, not a silently pre-selected "Infra" chip
+  // they have to notice and click "Change" to override.
+  const [domainPickerOpen, setDomainPickerOpen] = useState(true);
   const [hwSel, setHwSel] = useState('');
   const [osSel, setOsSel] = useState('');
   const [dbSel, setDbSel] = useState('');
@@ -860,7 +863,7 @@ export default function PhasePanel() {
   // sections" would be.
   const axisLabels = getDomainMeta(s.activeDomain).axisLabels;
   const PHASE_HINTS = {
-    phase1:      `Select ${axisLabels.join(' / ')} and click Build Environment.`,
+    phase1:      `Choose your PM domain, then select ${axisLabels.join(' / ')} and click Build Environment.`,
     scan:        'Click Run AI Smart Scan — no API key needed. Unlocks System Design.',
     design:      `Fill all ${DESIGN_SECTIONS.length} design sections with your team, then Generate Task Plan.`,
     phase2:      'Select incidents and UUM items relevant to your change, then Inject.',
@@ -876,8 +879,8 @@ export default function PhasePanel() {
   // covers the current one). Shown via native title attr on hover.
   const STEP_INFO = {
     phase1: {
-      what: `Choose ${axisLabels.join(' / ')} for this project and lock in scope.`,
-      why: 'Everything downstream — the scan, design sections, and tasks — is generated from this exact combination.',
+      what: `Pick your PM domain (infra, cloud migration, SAP, healthcare, and 12 more), then choose ${axisLabels.join(' / ')} for this project.`,
+      why: 'Everything downstream — the scan, design sections, and tasks — is generated to match your domain and this exact combination.',
     },
     scan: {
       what: 'Run a free, local CVE/EOL scan against your stack — no API key needed.',
@@ -2198,7 +2201,7 @@ export default function PhasePanel() {
       {/* Disclaimer */}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.10)', padding: '12px 16px 14px', marginTop: 'auto' }}>
         <p style={{ fontSize: '10.5px', lineHeight: '1.6', color: 'rgba(255,255,255,0.72)', margin: 0 }}>
-          OpsManifest guides infra teams through structured provisioning workflows — not a replacement for ITSM, CMDB, or platforms such as ServiceNow, Jira, or Confluence.
+          OpsManifest guides delivery teams through structured governance workflows across {getDomainsByCategory().reduce((n, c) => n + c.domains.length, 0)} PM domains — not a replacement for ITSM, CMDB, or platforms such as ServiceNow, Jira, or Confluence.
         </p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '5px', flexWrap: 'wrap' }}>
           <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none' }}>About ↗</a>
