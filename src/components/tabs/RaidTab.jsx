@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore.js';
 import { buildAutoRaidRows } from '../../lib/raidRows.js';
 import { getPlaybook, PROJECT_TYPES } from '../../lib/compliancePlaybooks.js';
 import { computeComplianceStatus } from '../../lib/complianceMatrix.js';
+import { computeRiskHeatScore } from '../../engine/mathEngine.js';
 import AgentInsights from '../AgentInsights.jsx';
 import { useCompatCheck } from '../../lib/useCompatCheck.js';
 import CompatWarning from '../CompatWarning.jsx';
@@ -22,7 +23,9 @@ const SEV_OPTIONS = ['CRITICAL', 'HIGH', 'MED', 'LOW'];
 const TYPE_OPTIONS = ['RISK', 'ISSUE', 'ASSUMPTION', 'DEPENDENCY', 'CHANGE', 'DECISION'];
 const STATUS_OPTIONS = ['OPEN', 'ACTIVE', 'SCHED', 'IN_PROGRESS', 'DONE', 'CLOSED', 'PARKED'];
 
-const EMPTY_FORM = { type: 'RISK', description: '', severity: 'MED', mitigation: '', status: 'OPEN', owner: '', eta: '' };
+const EMPTY_FORM = { type: 'RISK', description: '', severity: 'MED', mitigation: '', status: 'OPEN', owner: '', eta: '', probability: '', impact: '' };
+const PI_SCALE = [1, 2, 3, 4, 5];
+const SEV_COLOR_TEXT = { CRITICAL: '#DC2626', HIGH: '#D97706', MED: '#3B82F6', LOW: '#64748B' };
 
 const CHECKLIST_STATUSES = ['pending', 'agreed', 'mitigated', 'submitted'];
 const STATUS_STYLE = {
@@ -154,6 +157,9 @@ function RaidRow({ row, isCustom, onEdit, onDelete }) {
       <td className="py-2 px-3 text-xs text-slate-700 max-w-xs">{row.description}</td>
       <td className="py-2 px-3 text-xs">
         <span className={['badge', row.severity === 'CRITICAL' ? 'badge-red' : row.severity === 'HIGH' ? 'badge-amber' : row.severity === 'MED' ? 'badge-blue' : 'badge-slate'].join(' ')}>{row.severity}</span>
+        {row.probability && row.impact && (
+          <span className="ml-1 text-xs text-slate-400" title={`Probability ${row.probability} x Impact ${row.impact}`}>P{row.probability}×I{row.impact}</span>
+        )}
       </td>
       <td className="py-2 px-3 text-xs text-slate-600 max-w-xs">{row.mitigation}</td>
       <td className={`py-2 px-3 text-xs ${statusColor}`}>{row.status}</td>
@@ -201,7 +207,7 @@ export default function RaidTab() {
   const customRows = (s.customRaidEntries || []).map(e => ({ ...e }));
 
   function handleEdit(row) {
-    setForm({ type: row.type || 'RISK', description: row.description || '', severity: row.severity || 'MED', mitigation: row.mitigation || '', status: row.status || 'OPEN', owner: row.owner || '', eta: row.eta || '' });
+    setForm({ type: row.type || 'RISK', description: row.description || '', severity: row.severity || 'MED', mitigation: row.mitigation || '', status: row.status || 'OPEN', owner: row.owner || '', eta: row.eta || '', probability: row.probability || '', impact: row.impact || '' });
     setEditId(row.id);
     setShowForm(true);
   }
@@ -292,6 +298,51 @@ export default function RaidTab() {
                 {SEV_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
+            {(form.type === 'RISK' || form.type === 'ISSUE') && (
+              <div className="col-span-2 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 border border-slate-200 p-2.5">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Probability (1-5)</label>
+                  <select
+                    value={form.probability}
+                    onChange={e => {
+                      const probability = e.target.value;
+                      setForm(f => {
+                        const next = { ...f, probability };
+                        if (probability && next.impact) next.severity = computeRiskHeatScore(probability, next.impact).band;
+                        return next;
+                      });
+                    }}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-800"
+                  >
+                    <option value="">— not set —</option>
+                    {PI_SCALE.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Impact (1-5)</label>
+                  <select
+                    value={form.impact}
+                    onChange={e => {
+                      const impact = e.target.value;
+                      setForm(f => {
+                        const next = { ...f, impact };
+                        if (next.probability && impact) next.severity = computeRiskHeatScore(next.probability, impact).band;
+                        return next;
+                      });
+                    }}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-800"
+                  >
+                    <option value="">— not set —</option>
+                    {PI_SCALE.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                {form.probability && form.impact && (
+                  <div className="col-span-2 text-xs text-slate-500">
+                    Heat score <span className="font-bold text-slate-700">{computeRiskHeatScore(form.probability, form.impact).score}/25</span> — severity auto-set to <span className="font-bold" style={{ color: SEV_COLOR_TEXT[computeRiskHeatScore(form.probability, form.impact).band] }}>{computeRiskHeatScore(form.probability, form.impact).band}</span> (you can still override below)
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <label className="block text-xs text-slate-500 mb-1">Status</label>
               <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-800">

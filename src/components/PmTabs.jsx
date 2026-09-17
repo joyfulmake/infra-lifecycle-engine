@@ -13,6 +13,7 @@ import CmdbTab from './tabs/CmdbTab.jsx';
 import RolesTab from './tabs/RolesTab.jsx';
 import MatrixTab from './tabs/MatrixTab.jsx';
 import DependencyGraphTab from './tabs/DependencyGraphTab.jsx';
+import GovernanceReportTab from './tabs/GovernanceReportTab.jsx';
 import VulnTab from './tabs/VulnTab.jsx';
 import RiskTrackerTab from './tabs/RiskTrackerTab.jsx';
 import CostTab from './tabs/CostTab.jsx';
@@ -111,6 +112,12 @@ const TABS = [
     unlocked: () => true,
     // No staleDot — cost tab is always neutral unless over budget
   },
+  {
+    id: 'governance',
+    label: 'Governance Report',
+    unlocked: s => s.isBuilt,
+    lockMsg: 'Build environment first',
+  },
 ];
 
 function TabContent({ activeTab }) {
@@ -129,6 +136,7 @@ function TabContent({ activeTab }) {
     case 'vuln':   return <VulnTab />;
     case 'risks':  return <RiskTrackerTab />;
     case 'cost':   return <CostTab />;
+    case 'governance': return <GovernanceReportTab />;
     default: return <ExecSummaryTab />;
   }
 }

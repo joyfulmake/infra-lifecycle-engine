@@ -96,6 +96,7 @@ export function buildProjectGraph(state) {
     const id = row.id || `raid-${i}`;
     graph.addNode({
       id, type: 'raid', raidType: row.type, severity: row.severity,
+      probability: row.probability, impact: row.impact,
       description: row.description, owner: row.owner, status: row.status, raw: row,
     });
     const rowTokens = tokenize(row.description + ' ' + row.owner);

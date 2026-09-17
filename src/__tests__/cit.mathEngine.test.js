@@ -3,7 +3,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { DependencyGraph } from '../engine/graph.js';
-import { computeTaskRWCB, computeRoleCapacityDrag, computeEVM, computePVI, SEVERITY_WEIGHT } from '../engine/mathEngine.js';
+import { computeTaskRWCB, computeRoleCapacityDrag, computeEVM, computePVI, SEVERITY_WEIGHT, computeRiskHeatScore, computeDeliveryConfidence, computeRoleDeliveryConfidence, computeRiskAdjustedCostExposure } from '../engine/mathEngine.js';
 
 function graphWithLinkedRisks() {
   const g = new DependencyGraph();
@@ -92,5 +92,98 @@ describe('computeEVM / computePVI', () => {
     const evm = { spi: 1, cpi: 0 };
     expect(computePVI(evm, 1).value).toBe(1); // all weight on schedule
     expect(computePVI(evm, 0).value).toBe(0); // all weight on cost
+  });
+});
+
+describe('computeRiskHeatScore (Probability x Impact)', () => {
+  it('computes score and bands per standard PMI-style thresholds', () => {
+    expect(computeRiskHeatScore(5, 5)).toMatchObject({ score: 25, band: 'CRITICAL' });
+    expect(computeRiskHeatScore(4, 4)).toMatchObject({ score: 16, band: 'CRITICAL' });
+    expect(computeRiskHeatScore(2, 5)).toMatchObject({ score: 10, band: 'HIGH' });
+    expect(computeRiskHeatScore(1, 5)).toMatchObject({ score: 5, band: 'MED' });
+    expect(computeRiskHeatScore(1, 1)).toMatchObject({ score: 1, band: 'LOW' });
+  });
+
+  it('clamps out-of-range probability/impact to 1-5', () => {
+    expect(computeRiskHeatScore(0, 10)).toMatchObject({ score: 5, band: 'MED' });
+    expect(computeRiskHeatScore(-3, 5)).toMatchObject({ probability: 1 });
+  });
+});
+
+describe('computeTaskRWCB with Probability x Impact', () => {
+  it('uses P x I heat score instead of severity when a linked RAID row carries both', () => {
+    const g = new DependencyGraph();
+    g.addNode({ id: 'task-1', type: 'task', role: 'DBA', hours: 4 });
+    g.addNode({ id: 'risk-pi', type: 'raid', raidType: 'RISK', severity: 'LOW', probability: 5, impact: 5, status: 'OPEN' });
+    g.addEdge('risk-pi', 'task-1', 'impacts');
+    const { raw } = computeTaskRWCB(g, 'task-1', { hoursPerSeverityPoint: 1, maxBufferMultiple: 100 });
+    // heat score 25 / 5 = 5, not SEVERITY_WEIGHT.LOW (1) — P/I takes priority over the stale severity label
+    expect(raw).toBe(5);
+  });
+
+  it('falls back to SEVERITY_WEIGHT when no P/I is set (existing behavior unchanged)', () => {
+    const g = new DependencyGraph();
+    g.addNode({ id: 'task-1', type: 'task', role: 'DBA', hours: 4 });
+    g.addNode({ id: 'risk-sev', type: 'raid', raidType: 'RISK', severity: 'HIGH', status: 'OPEN' });
+    g.addEdge('risk-sev', 'task-1', 'impacts');
+    const { raw } = computeTaskRWCB(g, 'task-1', { hoursPerSeverityPoint: 1, maxBufferMultiple: 100 });
+    expect(raw).toBe(SEVERITY_WEIGHT.HIGH);
+  });
+});
+
+describe('computeDeliveryConfidence', () => {
+  it('returns unassessed when no factors are set', () => {
+    expect(computeDeliveryConfidence({})).toMatchObject({ score: null, band: 'unassessed' });
+    expect(computeDeliveryConfidence()).toMatchObject({ score: null, band: 'unassessed' });
+  });
+
+  it('averages only the factors that were actually provided', () => {
+    const { score, band, assessedFactorCount } = computeDeliveryConfidence({ resourceAvailability: 100 });
+    expect(score).toBe(100);
+    expect(band).toBe('green');
+    expect(assessedFactorCount).toBe(1);
+  });
+
+  it('bands low when multiple factors are weak', () => {
+    const { score, band } = computeDeliveryConfidence({
+      resourceAvailability: 20, technicalFeasibility: 'LOW', skillsetMatch: 'GAP', scopeStability: 'VOLATILE',
+    });
+    expect(score).toBeLessThan(55);
+    expect(band).toBe('red');
+  });
+
+  it('bands high when all factors are strong', () => {
+    const { band } = computeDeliveryConfidence({
+      resourceAvailability: 95, technicalFeasibility: 'HIGH', skillsetMatch: 'STRONG', scopeStability: 'STABLE',
+    });
+    expect(band).toBe('green');
+  });
+});
+
+describe('computeRoleDeliveryConfidence', () => {
+  it('averages assessed tasks per role and skips unassessed ones', () => {
+    const tasks = [
+      { id: 't1', role: 'DBA' }, { id: 't2', role: 'DBA' }, { id: 't3', role: 'NetAdmin' },
+    ];
+    const progress = {
+      t1: { resourceAvailability: 100 }, t2: { resourceAvailability: 40 },
+      // t3 has no assessment -> excluded entirely
+    };
+    const result = computeRoleDeliveryConfidence(tasks, progress);
+    expect(result.DBA.score).toBe(70);
+    expect(result.DBA.taskCount).toBe(2);
+    expect(result.NetAdmin).toBeUndefined();
+  });
+});
+
+describe('computeRiskAdjustedCostExposure', () => {
+  it('converts buffer hours to cost via the same day-rate model as CostTab', () => {
+    // 16 buffer hours / 8 hpd = 2 days x $800/day = $1600
+    expect(computeRiskAdjustedCostExposure(16, 800, 8)).toBe(1600);
+  });
+
+  it('rounds up partial days so risk exposure is never understated', () => {
+    expect(computeRiskAdjustedCostExposure(1, 800, 8)).toBe(100 * 1); // ceil(1/8 * 800) = ceil(100) = 100
+    expect(computeRiskAdjustedCostExposure(9, 800, 8)).toBe(Math.ceil(9 / 8 * 800));
   });
 });

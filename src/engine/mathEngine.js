@@ -11,13 +11,95 @@ const LINKABLE_TYPES = new Set(['RISK', 'ISSUE', 'DEPENDENCY', 'CHANGE']);
 // task's own hours so one mis-weighted risk can't blow out the estimate
 // unnoticed — the cap is a visible ceiling, not a silent clamp (callers can
 // see raw vs capped and flag it if they differ significantly).
+//
+// Weight per linked item uses Probability x Impact (both 1-5, standard PM
+// risk-matrix scale) when a RAID entry carries them, since that's a finer
+// signal than the 4-bucket severity enum — falls back to SEVERITY_WEIGHT
+// for entries that don't (every existing RAID row, and any new one where
+// the PM hasn't set P/I), so this is purely additive.
 export function computeTaskRWCB(graph, taskId, { hoursPerSeverityPoint = 1, maxBufferMultiple = 2 } = {}) {
   const task = graph.getNode(taskId);
   if (!task) return { raw: 0, capped: 0, hitCap: false };
   const linked = graph.predecessorsOf(taskId).filter(n => n.type === 'raid' && n.status !== 'CLOSED' && n.status !== 'DONE');
-  const raw = linked.reduce((sum, r) => sum + (SEVERITY_WEIGHT[r.severity] || 1) * hoursPerSeverityPoint, 0);
+  const raw = linked.reduce((sum, r) => sum + weightForRaidNode(r) * hoursPerSeverityPoint, 0);
   const ceiling = (task.hours || 2) * maxBufferMultiple;
   return { raw, capped: Math.min(raw, ceiling), hitCap: raw > ceiling };
+}
+
+function weightForRaidNode(r) {
+  if (r.probability && r.impact) return computeRiskHeatScore(r.probability, r.impact).score / 5; // 1-25 -> ~0.2-5 range, comparable to SEVERITY_WEIGHT
+  return SEVERITY_WEIGHT[r.severity] || 1;
+}
+
+// Standard 5x5 Probability x Impact risk matrix. Score 1-25; band follows
+// the common PMI-style thresholds. Used both to weight RWCB above and to
+// auto-suggest a severity label when a PM sets P/I on a RAID entry instead
+// of picking severity directly (see RaidTab.jsx).
+export function computeRiskHeatScore(probability, impact) {
+  const p = Math.max(1, Math.min(5, Number(probability) || 1));
+  const i = Math.max(1, Math.min(5, Number(impact) || 1));
+  const score = p * i;
+  const band = score >= 16 ? 'CRITICAL' : score >= 10 ? 'HIGH' : score >= 5 ? 'MED' : 'LOW';
+  return { score, band, probability: p, impact: i };
+}
+
+// Multi-factor Delivery Confidence — the capacity-planning factors that
+// matter beyond "is anyone assigned": how much of the needed time is
+// actually available, whether the technical approach is sound, whether the
+// team has the right skills, and whether scope is still moving underneath
+// them. These are structured PM/team self-assessment inputs (there's no
+// external HR/capacity system this app can read from), stored per task
+// alongside the existing % complete / actual hours (see taskProgress in
+// useStore.js) — this function just scores whatever has been entered.
+const FEASIBILITY_SCORE = { HIGH: 100, MEDIUM: 60, LOW: 20 };
+const SKILLSET_SCORE = { STRONG: 100, ADEQUATE: 65, GAP: 25 };
+const SCOPE_SCORE = { STABLE: 100, MINOR_CHANGE: 65, VOLATILE: 25 };
+
+export function computeDeliveryConfidence(assessment = {}) {
+  const factors = {
+    resourceAvailability: assessment.resourceAvailability ?? null, // 0-100, direct
+    technicalFeasibility: assessment.technicalFeasibility ?? null, // HIGH|MEDIUM|LOW
+    skillsetMatch: assessment.skillsetMatch ?? null, // STRONG|ADEQUATE|GAP
+    scopeStability: assessment.scopeStability ?? null, // STABLE|MINOR_CHANGE|VOLATILE
+  };
+
+  const scores = [];
+  if (factors.resourceAvailability != null) scores.push(Math.max(0, Math.min(100, factors.resourceAvailability)));
+  if (factors.technicalFeasibility) scores.push(FEASIBILITY_SCORE[factors.technicalFeasibility] ?? 60);
+  if (factors.skillsetMatch) scores.push(SKILLSET_SCORE[factors.skillsetMatch] ?? 65);
+  if (factors.scopeStability) scores.push(SCOPE_SCORE[factors.scopeStability] ?? 65);
+
+  if (scores.length === 0) return { score: null, band: 'unassessed', factors };
+  const score = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  const band = score >= 80 ? 'green' : score >= 55 ? 'amber' : 'red';
+  return { score, band, factors, assessedFactorCount: scores.length };
+}
+
+// Rolls per-task Delivery Confidence up to a per-role view, mirroring
+// computeRoleCapacityDrag's shape so both can render in the same panel.
+export function computeRoleDeliveryConfidence(taskNodes, taskProgress) {
+  const byRole = {};
+  taskNodes.forEach(t => {
+    const dc = computeDeliveryConfidence(taskProgress[t.id]);
+    if (dc.score == null) return;
+    if (!byRole[t.role]) byRole[t.role] = [];
+    byRole[t.role].push(dc.score);
+  });
+  const result = {};
+  Object.entries(byRole).forEach(([role, scores]) => {
+    const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    result[role] = { score: avg, band: avg >= 80 ? 'green' : avg >= 55 ? 'amber' : 'red', taskCount: scores.length };
+  });
+  return result;
+}
+
+// Risk-adjusted cost exposure: converts total RWCB buffer hours across all
+// tasks into a cost figure using the existing CostTab rate model, so cost
+// tracking automatically reflects the SAME task-linked risk data the
+// Dependency Graph surfaces — one number computed once, read in two tabs.
+export function computeRiskAdjustedCostExposure(totalBufferHours, dailyRatePerPerson, hoursPerDay = 8) {
+  const days = totalBufferHours / hoursPerDay;
+  return Math.ceil(days * dailyRatePerPerson);
 }
 
 // Risk-Adjusted Capacity: for each role, how many hours of that role's

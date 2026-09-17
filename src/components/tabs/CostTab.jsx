@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { buildDesignTasks } from '../../lib/designTasks.js';
 import { getRealTasks } from '../../lib/realTasks.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
+import { buildProjectGraph } from '../../engine/projectGraph.js';
+import { computeTaskRWCB, computeRiskAdjustedCostExposure } from '../../engine/mathEngine.js';
 
 const BUFFER = 1.3;
 
@@ -105,7 +107,21 @@ export default function CostTab() {
   const baseCost      = Math.ceil(daysNeeded * dailyTeamCost);
   const activeVulns   = s.vulnRegistry.filter(v => v.status === 'ACTIVE').length;
   const riskAdj       = Math.ceil(baseCost * (localCfg.contingencyPct / 100));
-  const totalEst      = baseCost + riskAdj;
+
+  // Risk-Weighted Contingency Buffer, read from the SAME Dependency Graph
+  // engine (task <-> RAID linkage) rather than a second cost-side estimate —
+  // one number, computed once, consistent between the Dependency Graph and
+  // Cost tabs. Only meaningful once a design/UUM scope actually exists.
+  const rwcbCost = useMemo(() => {
+    if (!s.designApplied) return { totalBufferHours: 0, cost: 0 };
+    const { graph, chains } = buildProjectGraph(store);
+    let totalBufferHours = 0;
+    chains.forEach(c => c.tasks.forEach(t => { totalBufferHours += computeTaskRWCB(graph, t.id).capped; }));
+    return { totalBufferHours, cost: computeRiskAdjustedCostExposure(totalBufferHours, localCfg.dailyRatePerPerson, hpd) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.sysDesignData, store.sdAiTasks, store.selUUM, store.customUUM, store.customRaidEntries, store.ganttOverrides, localCfg.dailyRatePerPerson, hpd, store.designApplied]);
+
+  const totalEst      = baseCost + riskAdj + rwcbCost.cost;
   const overBudget    = localCfg.totalBudget > 0 && totalEst > localCfg.totalBudget;
 
   if (!enabled) {
@@ -228,8 +244,12 @@ export default function CostTab() {
           sub={`${hrs.total}h total task hours`}     accent="slate" />
         <StatCard label="Risk Contingency"
           value={fmt(riskAdj, currency)}
-          sub={`${localCfg.contingencyPct}% + ${activeVulns} active vulns`}
+          sub={`${localCfg.contingencyPct}% flat + ${activeVulns} active vulns`}
           accent={activeVulns > 0 ? 'amber' : 'slate'} />
+        <StatCard label="Risk-Weighted Buffer"
+          value={fmt(rwcbCost.cost, currency)}
+          sub={rwcbCost.totalBufferHours > 0 ? `${Math.round(rwcbCost.totalBufferHours)}h from linked RAID risks` : 'No open risks linked to tasks'}
+          accent={rwcbCost.totalBufferHours > 0 ? 'amber' : 'slate'} />
         <StatCard label="Budget"
           value={localCfg.totalBudget > 0 ? fmt(localCfg.totalBudget, currency) : 'Not set'}
           sub={localCfg.totalBudget > 0 ? (overBudget ? `Over by ${fmt(totalEst - localCfg.totalBudget, currency)}` : `${fmt(localCfg.totalBudget - totalEst, currency)} remaining`) : 'Set a budget to track'}
@@ -259,7 +279,8 @@ export default function CostTab() {
             { label: 'System Design tasks',    hrs: hrs.design,  cost: Math.ceil((hrs.design  / hpd) * dailyTeamCost) },
             { label: 'UUM / Operations tasks', hrs: hrs.uumOps,  cost: Math.ceil((hrs.uumOps  / hpd) * dailyTeamCost) },
             { label: 'OpsMentor custom tasks', hrs: hrs.mentor,  cost: Math.ceil((hrs.mentor  / hpd) * dailyTeamCost) },
-            { label: 'Risk contingency',       hrs: null,         cost: riskAdj },
+            { label: 'Risk contingency (flat %)', hrs: null,      cost: riskAdj },
+            { label: 'Risk-weighted buffer (Dependency Graph)', hrs: Math.round(rwcbCost.totalBufferHours), cost: rwcbCost.cost },
           ].map(row => (
             <div key={row.label} className="flex items-center px-4 py-2.5 text-xs">
               <span className="flex-1 text-slate-700">{row.label}</span>
@@ -300,7 +321,8 @@ export default function CostTab() {
       <div className="text-xs text-slate-400 space-y-0.5 border-t border-slate-100 pt-3">
         <div className="font-semibold text-slate-500">Assumptions</div>
         <div>Hours include 30% buffer (BUFFER=1.3). All team members work at the same daily rate.</div>
-        <div>Risk contingency is applied to base cost only, not recursively.</div>
+        <div>Risk contingency (flat %) is applied to base cost only, not recursively.</div>
+        <div>Risk-weighted buffer reads the same task-to-RAID linkage as the Dependency Graph tab — it reflects only risks a PM has actually logged and linked, not a general-purpose estimate.</div>
         <div>Active vulnerabilities add to risk perception but are not itemised separately in this estimate.</div>
       </div>
     </div>

@@ -12,6 +12,17 @@
 // zero changes to those files. Infra is the default and is never mutated
 // away from its own content unless a different domain is explicitly chosen,
 // so existing infra behavior is provably unchanged.
+//
+// `category` groups domains for the PhasePanel selector so it stays simple
+// to navigate at 16 domains instead of one flat list — see CATEGORIES below.
+
+export const CATEGORIES = [
+  { id: 'core', label: 'Core' },
+  { id: 'horizontal', label: 'Horizontals' },
+  { id: 'enterprise', label: 'Enterprise Apps' },
+  { id: 'industry', label: 'Industries' },
+  { id: 'appdev', label: 'App Delivery' },
+];
 
 export const DOMAINS = [
   {
@@ -20,6 +31,7 @@ export const DOMAINS = [
     shortLabel: 'Infra',
     icon: '🖥',
     accent: '#0D9488',
+    category: 'core',
     description: 'Server/platform lifecycle — hardware through app tier, CAB/RTM governed.',
     axisLabels: ['Hardware', 'OS', 'Database', 'Application'],
   },
@@ -29,8 +41,49 @@ export const DOMAINS = [
     shortLabel: 'Cloud Migration',
     icon: '☁',
     accent: '#3B82F6',
+    category: 'horizontal',
     description: 'Discovery through cutover for a lift-shift, replatform, or refactor migration.',
     axisLabels: ['Source Platform', 'Target Cloud', 'Migration Pattern', 'Landing Zone'],
+  },
+  {
+    id: 'devOps',
+    label: 'DevOps / Platform Engineering',
+    shortLabel: 'DevOps',
+    icon: '⚙',
+    accent: '#06B6D4',
+    category: 'horizontal',
+    description: 'Platform charter through GA — toolchain, pipelines, Kubernetes, observability.',
+    axisLabels: ['Org Profile', 'CI/CD Tool', 'Platform', 'IaC Tool'],
+  },
+  {
+    id: 'cybersecurity',
+    label: 'Cybersecurity',
+    shortLabel: 'Cybersecurity',
+    icon: '🛡',
+    accent: '#DC2626',
+    category: 'horizontal',
+    description: 'SOC operations, vulnerability management, pentest, zero-trust, and compliance audits.',
+    axisLabels: ['SOC Model', 'SIEM/EDR Platform', 'Target Framework', 'Environment'],
+  },
+  {
+    id: 'networkRefresh',
+    label: 'Network Refresh',
+    shortLabel: 'Network Refresh',
+    icon: '📡',
+    accent: '#0EA5E9',
+    category: 'horizontal',
+    description: 'Switch/router hardware lifecycle, SD-WAN, wireless, segmentation, and firewall replacement.',
+    axisLabels: ['Network Vendor', 'WAN Transport', 'Site Scope', 'Management Model'],
+  },
+  {
+    id: 'dataAnalytics',
+    label: 'Data & Analytics',
+    shortLabel: 'Data & Analytics',
+    icon: '📊',
+    accent: '#EC4899',
+    category: 'horizontal',
+    description: 'Warehouse/lake migration, ETL/ELT pipelines, BI rollout, governance, and streaming.',
+    axisLabels: ['Warehouse Platform', 'Orchestration Tool', 'Ingestion Pattern', 'BI Tool'],
   },
   {
     id: 'sapPm',
@@ -38,8 +91,39 @@ export const DOMAINS = [
     shortLabel: 'SAP',
     icon: '🧩',
     accent: '#F97316',
+    category: 'enterprise',
     description: 'ECC-to-S/4HANA and greenfield/brownfield SAP programs.',
     axisLabels: ['SAP Product', 'Release', 'Deployment Model', 'Module Scope'],
+  },
+  {
+    id: 'salesforcePm',
+    label: 'Salesforce Program',
+    shortLabel: 'Salesforce',
+    icon: '⚡',
+    accent: '#EAB308',
+    category: 'enterprise',
+    description: 'Sales/Service/Experience Cloud implementations, CPQ rollouts, org consolidation.',
+    axisLabels: ['Cloud Product', 'Edition', 'Implementation Type', 'Integration Scope'],
+  },
+  {
+    id: 'oracleEbsPm',
+    label: 'Oracle EBS / Fusion',
+    shortLabel: 'Oracle EBS',
+    icon: '🗄',
+    accent: '#65A30D',
+    category: 'enterprise',
+    description: 'EBS upgrades, EBS-to-Fusion Cloud migrations, and Fusion module rollouts.',
+    axisLabels: ['Source System', 'Target Platform', 'Deployment Approach', 'Module Scope'],
+  },
+  {
+    id: 'dynamics365Pm',
+    label: 'Dynamics 365',
+    shortLabel: 'Dynamics 365',
+    icon: '🔷',
+    accent: '#6366F1',
+    category: 'enterprise',
+    description: 'F&O/Sales/Customer Service implementations, Business Central migrations, Power Platform.',
+    axisLabels: ['Product Line', 'Source System', 'Deployment Model', 'Power Platform Scope'],
   },
   {
     id: 'bfsiPm',
@@ -47,8 +131,49 @@ export const DOMAINS = [
     shortLabel: 'BFSI',
     icon: '🏦',
     accent: '#8B5CF6',
+    category: 'industry',
     description: 'Core banking, payments, and regulated financial infrastructure change.',
     axisLabels: ['Institution Type', 'Core System', 'Regulatory Region', 'Channel'],
+  },
+  {
+    id: 'healthcarePm',
+    label: 'Healthcare',
+    shortLabel: 'Healthcare',
+    icon: '🏥',
+    accent: '#F43F5E',
+    category: 'industry',
+    description: 'EHR/EMR implementation, clinical interoperability, HIPAA compliance, medical device and imaging change.',
+    axisLabels: ['Care Setting', 'EHR Platform', 'Regulatory Region', 'Channel'],
+  },
+  {
+    id: 'manufacturingPm',
+    label: 'Manufacturing / Industry 4.0',
+    shortLabel: 'Manufacturing',
+    icon: '🏭',
+    accent: '#64748B',
+    category: 'industry',
+    description: 'MES/SCADA, IIoT, predictive maintenance, digital twin, and OT/IT convergence on the shop floor.',
+    axisLabels: ['Manufacturing Type', 'MES/SCADA Platform', 'Plant Scope', 'Program Type'],
+  },
+  {
+    id: 'telecomPm',
+    label: 'Telecom',
+    shortLabel: 'Telecom',
+    icon: '📶',
+    accent: '#A855F7',
+    category: 'industry',
+    description: '5G core rollout, OSS/BSS migration, NFV, RAN upgrades, and fiber/FTTH buildout.',
+    axisLabels: ['Operator Type', 'Equipment Vendor', 'Coverage Area', 'Program Type'],
+  },
+  {
+    id: 'retailPm',
+    label: 'Retail / e-Commerce',
+    shortLabel: 'Retail',
+    icon: '🛒',
+    accent: '#10B981',
+    category: 'industry',
+    description: 'Platform migration, omnichannel inventory, PCI-DSS payment compliance, and peak-season capacity.',
+    axisLabels: ['Retail Model', 'Commerce Platform', 'Regulatory Region', 'Program Type'],
   },
   {
     id: 'appDev',
@@ -56,6 +181,7 @@ export const DOMAINS = [
     shortLabel: 'App Dev',
     icon: '📱',
     accent: '#22C55E',
+    category: 'appdev',
     description: 'Sprint-based web/mobile delivery — discovery through release and hypercare.',
     axisLabels: ['App Type', 'Frontend Stack', 'Backend Stack', 'Deployment Target'],
   },
@@ -63,4 +189,8 @@ export const DOMAINS = [
 
 export function getDomainMeta(id) {
   return DOMAINS.find(d => d.id === id) || DOMAINS[0];
+}
+
+export function getDomainsByCategory() {
+  return CATEGORIES.map(cat => ({ ...cat, domains: DOMAINS.filter(d => d.category === cat.id) }));
 }

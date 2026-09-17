@@ -27,7 +27,7 @@ import { useCompatCheck } from '../lib/useCompatCheck.js';
 import CompatWarning from './CompatWarning.jsx';
 import { PROJECT_TYPES } from '../lib/compliancePlaybooks.js';
 import { COUNTRY_OPTIONS, DOMAIN_OPTIONS } from '../lib/complianceMatrix.js';
-import { DOMAINS, getDomainMeta } from '../domains/registry.js';
+import { getDomainMeta, getDomainsByCategory } from '../domains/registry.js';
 
 const LOCK_ICON = (
   <svg className="w-3 h-3 opacity-60" fill="currentColor" viewBox="0 0 20 20">
@@ -756,6 +756,7 @@ export default function PhasePanel() {
   const [osCustom, setOsCustom] = useState('');
   const [dbCustom, setDbCustom] = useState('');
   const [appCustom, setAppCustom] = useState('');
+  const [domainPickerOpen, setDomainPickerOpen] = useState(false);
   const [hwSel, setHwSel] = useState('');
   const [osSel, setOsSel] = useState('');
   const [dbSel, setDbSel] = useState('');
@@ -1065,7 +1066,7 @@ export default function PhasePanel() {
             {s.theme === 'dark' ? '☀' : '🌙'}
           </button>
         </div>
-        <div className="text-xs text-white/78 pl-4 leading-snug">Infrastructure Lifecycle Engine</div>
+        <div className="text-xs text-white/78 pl-4 leading-snug">{getDomainMeta(s.activeDomain).label}</div>
       </div>
 
       {/* Phase nav */}
@@ -1138,36 +1139,59 @@ export default function PhasePanel() {
             </div>
           )}
 
-          {/* PM Domain selector — pre-build only; switching resets any in-progress build */}
+          {/* PM Domain selector — pre-build only; switching resets any in-progress build.
+              Collapsed to a single "current domain" row by default so 16 domains across
+              5 categories don't clutter the sidebar — expand to browse/switch. */}
           {!s.isBuilt && (
             <div className="mb-3">
               <label className="text-xs font-medium text-white/82 block mb-1.5">PM Domain</label>
-              <div className="grid grid-cols-1 gap-1.5">
-                {DOMAINS.map(d => {
-                  const active = s.activeDomain === d.id;
-                  return (
-                    <button
-                      key={d.id}
-                      onClick={() => {
-                        if (active) return;
-                        if (s.isDirty && !window.confirm(`Switch to ${d.label}? This clears the current in-progress build.`)) return;
-                        s.setActiveDomain(d.id);
-                      }}
-                      className="w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors flex items-center gap-2"
-                      style={active
-                        ? { background: `${d.accent}1A`, borderColor: `${d.accent}55` }
-                        : { background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.10)' }}
-                    >
-                      <span className="text-sm flex-shrink-0">{d.icon}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold truncate" style={{ color: active ? d.accent : 'rgba(255,255,255,0.85)' }}>{d.shortLabel}</span>
-                      </span>
-                      {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: d.accent }} />}
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                onClick={() => setDomainPickerOpen(o => !o)}
+                className="w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors flex items-center gap-2"
+                style={{ background: `${getDomainMeta(s.activeDomain).accent}1A`, borderColor: `${getDomainMeta(s.activeDomain).accent}55` }}
+              >
+                <span className="text-sm flex-shrink-0">{getDomainMeta(s.activeDomain).icon}</span>
+                <span className="min-w-0 flex-1 text-xs font-semibold truncate" style={{ color: getDomainMeta(s.activeDomain).accent }}>
+                  {getDomainMeta(s.activeDomain).shortLabel}
+                </span>
+                <span className="text-white/52 text-xs flex-shrink-0">{domainPickerOpen ? '▾ Close' : '▸ Change'}</span>
+              </button>
               <div className="text-xs text-white/52 mt-1.5 leading-snug">{getDomainMeta(s.activeDomain).description}</div>
+
+              {domainPickerOpen && (
+                <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] p-2 max-h-72 overflow-y-auto space-y-2.5">
+                  {getDomainsByCategory().map(cat => (
+                    <div key={cat.id}>
+                      <div className="text-xs text-white/52 uppercase tracking-wide font-semibold mb-1 px-0.5">{cat.label}</div>
+                      <div className="space-y-1">
+                        {cat.domains.map(d => {
+                          const active = s.activeDomain === d.id;
+                          return (
+                            <button
+                              key={d.id}
+                              onClick={() => {
+                                if (!active) {
+                                  if (s.isDirty && !window.confirm(`Switch to ${d.label}? This clears the current in-progress build.`)) return;
+                                  s.setActiveDomain(d.id);
+                                }
+                                setDomainPickerOpen(false);
+                              }}
+                              className="w-full text-left rounded-md px-2 py-1.5 border transition-colors flex items-center gap-2"
+                              style={active
+                                ? { background: `${d.accent}1A`, borderColor: `${d.accent}55` }
+                                : { background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
+                            >
+                              <span className="text-sm flex-shrink-0">{d.icon}</span>
+                              <span className="min-w-0 flex-1 text-xs font-medium truncate" style={{ color: active ? d.accent : 'rgba(255,255,255,0.82)' }}>{d.shortLabel}</span>
+                              {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: d.accent }} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

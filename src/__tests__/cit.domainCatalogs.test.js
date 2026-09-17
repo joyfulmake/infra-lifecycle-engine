@@ -8,6 +8,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { DOMAINS } from '../domains/registry.js';
 import { NON_INFRA_CATALOGS } from '../domains/lookup.js';
+
+const NON_INFRA_COUNT = Object.keys(NON_INFRA_CATALOGS).length;
 import { applyDomain } from '../domains/applyDomain.js';
 import { getCurrentDomainId } from '../domains/currentDomain.js';
 import { ALL_INC, FIXES } from '../lib/incidents.js';
@@ -24,10 +26,20 @@ import { generateTaskPlan } from '../lib/smartScan.js';
 afterEach(() => { applyDomain('infra'); });
 
 describe('DOMAINS registry', () => {
-  it('lists infra plus exactly 4 new domains, each with 4 axis labels', () => {
+  it('lists infra plus every catalog in NON_INFRA_CATALOGS, each with 4 axis labels and a unique id/accent', () => {
     expect(DOMAINS.find(d => d.id === 'infra')).toBeTruthy();
-    expect(DOMAINS.length).toBe(5);
+    expect(DOMAINS.length).toBe(NON_INFRA_COUNT + 1);
     DOMAINS.forEach(d => expect(d.axisLabels.length).toBe(4));
+
+    const ids = DOMAINS.map(d => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const accents = DOMAINS.map(d => d.accent);
+    expect(new Set(accents).size).toBe(accents.length);
+
+    // Every non-infra catalog must have a matching registry entry (and vice versa)
+    Object.keys(NON_INFRA_CATALOGS).forEach(id => {
+      expect(DOMAINS.find(d => d.id === id), `registry missing entry for ${id}`).toBeTruthy();
+    });
   });
 });
 

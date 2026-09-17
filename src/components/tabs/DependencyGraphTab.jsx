@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore.js';
 import { buildProjectGraph } from '../../engine/projectGraph.js';
 import { detectCycles, findOrphanTasks, findUnlinkedRaidItems } from '../../engine/graphValidation.js';
 import { findOutOfOrderHandoffs } from '../../engine/functionTeamMatrix.js';
-import { computeTaskRWCB, computeRoleCapacityDrag, computeEVM, computePVI } from '../../engine/mathEngine.js';
+import { computeTaskRWCB, computeRoleCapacityDrag, computeEVM, computePVI, computeDeliveryConfidence, computeRoleDeliveryConfidence } from '../../engine/mathEngine.js';
 import { calcDates } from '../../lib/scheduling.js';
 import AgentInsights from '../AgentInsights.jsx';
 
@@ -41,9 +41,15 @@ function ProgressRing({ pct }) {
   );
 }
 
+const DC_BAND_COLOR = { green: '#22C55E', amber: '#D97706', red: '#DC2626', unassessed: '#CBD5E1' };
+const FEASIBILITY_OPTS = ['HIGH', 'MEDIUM', 'LOW'];
+const SKILLSET_OPTS = ['STRONG', 'ADEQUATE', 'GAP'];
+const SCOPE_OPTS = ['STABLE', 'MINOR_CHANGE', 'VOLATILE'];
+
 function TaskNode({ task, linkedRaid, flagged, buffer, progress, isOpen, onToggle, onProgressChange }) {
   const color = colorForRole(task.role);
   const pct = Math.max(0, Math.min(1, progress?.percentComplete || 0));
+  const dc = computeDeliveryConfidence(progress);
   return (
     <div
       className="rounded-lg border bg-white transition-all"
@@ -64,6 +70,13 @@ function TaskNode({ task, linkedRaid, flagged, buffer, progress, isOpen, onToggl
             )}
             {linkedRaid.length > 0 && (
               <span className="badge badge-red text-xs px-1.5" title={`${linkedRaid.length} linked RAID item(s)`}>{linkedRaid.length}</span>
+            )}
+            {dc.score != null && (
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{ background: DC_BAND_COLOR[dc.band] }}
+                title={`Delivery Confidence: ${dc.score}/100 (${dc.assessedFactorCount} factor${dc.assessedFactorCount > 1 ? 's' : ''} assessed)`}
+              />
             )}
             <ProgressRing pct={pct} />
           </div>
@@ -110,6 +123,60 @@ function TaskNode({ task, linkedRaid, flagged, buffer, progress, isOpen, onToggl
               className="flex-1 text-xs border border-slate-200 rounded px-1.5 py-0.5"
             />
           </div>
+
+          <div className="pt-2 mt-1 border-t border-slate-100" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-slate-600">Delivery Confidence</span>
+              {dc.score != null && (
+                <span className="text-xs font-bold" style={{ color: DC_BAND_COLOR[dc.band] }}>{dc.score}/100</span>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 w-24 flex-shrink-0">Resource avail.</label>
+                <input
+                  type="range" min="0" max="100" step="5"
+                  value={progress?.resourceAvailability ?? 100}
+                  onChange={e => onProgressChange({ resourceAvailability: Number(e.target.value) })}
+                  className="flex-1"
+                />
+                <span className="text-xs text-slate-500 w-8 flex-shrink-0">{progress?.resourceAvailability ?? '—'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 w-24 flex-shrink-0">Feasibility</label>
+                <select
+                  value={progress?.technicalFeasibility || ''}
+                  onChange={e => onProgressChange({ technicalFeasibility: e.target.value || null })}
+                  className="flex-1 text-xs border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700"
+                >
+                  <option value="">— not set —</option>
+                  {FEASIBILITY_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 w-24 flex-shrink-0">Skillset match</label>
+                <select
+                  value={progress?.skillsetMatch || ''}
+                  onChange={e => onProgressChange({ skillsetMatch: e.target.value || null })}
+                  className="flex-1 text-xs border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700"
+                >
+                  <option value="">— not set —</option>
+                  {SKILLSET_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 w-24 flex-shrink-0">Scope stability</label>
+                <select
+                  value={progress?.scopeStability || ''}
+                  onChange={e => onProgressChange({ scopeStability: e.target.value || null })}
+                  className="flex-1 text-xs border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700"
+                >
+                  <option value="">— not set —</option>
+                  {SCOPE_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -137,7 +204,7 @@ export default function DependencyGraphTab() {
   const s = useStore();
   const [openTaskId, setOpenTaskId] = useState(null);
 
-  const { graph, chains, flags, outOfOrder, cycles, plannedDates, evm, pvi, roleDrag, bufferByTask, totalBufferHours } = useMemo(() => {
+  const { graph, chains, flags, outOfOrder, cycles, plannedDates, evm, pvi, roleDrag, bufferByTask, totalBufferHours, roleDeliveryConfidence, avgDeliveryConfidence } = useMemo(() => {
     const { graph, chains } = buildProjectGraph(s);
     const cycles = detectCycles(graph);
     const orphanTasks = findOrphanTasks(graph);
@@ -171,7 +238,11 @@ export default function DependencyGraphTab() {
       totalBufferHours += b.capped;
     });
 
-    return { graph, chains, flags, outOfOrder, cycles, plannedDates, evm, pvi, roleDrag, bufferByTask, totalBufferHours };
+    const roleDeliveryConfidence = computeRoleDeliveryConfidence(allTaskNodes, s.taskProgress);
+    const dcScores = Object.values(roleDeliveryConfidence).map(r => r.score);
+    const avgDeliveryConfidence = dcScores.length ? Math.round(dcScores.reduce((a, b) => a + b, 0) / dcScores.length) : null;
+
+    return { graph, chains, flags, outOfOrder, cycles, plannedDates, evm, pvi, roleDrag, bufferByTask, totalBufferHours, roleDeliveryConfidence, avgDeliveryConfidence };
   }, [s.sysDesignData, s.sdAiTasks, s.selUUM, s.customUUM, s.selInc, s.customInc, s.selFix, s.customRaidEntries, s.ganttOverrides, s.ctx, s.cabApproved, s.rtmSigned, s.promoted, s.taskProgress, s.requirements.projectStartDate, s.requirements.hoursPerDay, s.changePeriods]);
 
   const visibleFlags = flags.filter(f => !s.dismissedGraphFlags.includes(f.id));
@@ -218,6 +289,11 @@ export default function DependencyGraphTab() {
         <StatTile label="Cost (CPI)" value={evm.cpi.toFixed(2)} accent={evm.cpi >= 1 ? '#22C55E' : evm.cpi >= 0.85 ? '#D97706' : '#DC2626'} />
         <StatTile label="Velocity" value={pvi.band.toUpperCase()} accent={pvi.band === 'green' ? '#22C55E' : pvi.band === 'amber' ? '#D97706' : '#DC2626'} />
         <StatTile label="Risk Buffer" value={`+${Math.round(totalBufferHours)}h`} accent={totalBufferHours > 0 ? '#D97706' : '#22C55E'} />
+        <StatTile
+          label="Delivery Confidence"
+          value={avgDeliveryConfidence != null ? `${avgDeliveryConfidence}/100` : '—'}
+          accent={avgDeliveryConfidence == null ? '#94A3B8' : avgDeliveryConfidence >= 80 ? '#22C55E' : avgDeliveryConfidence >= 55 ? '#D97706' : '#DC2626'}
+        />
         {Object.keys(roleDrag).length > 0 && (
           <div className="exec-kpi-tile flex-1 min-w-48">
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Team Capacity Drag</div>
@@ -229,6 +305,22 @@ export default function DependencyGraphTab() {
                     <div className="h-full rounded-full" style={{ width: `${(hrs / maxDrag) * 100}%`, backgroundColor: colorForRole(role) }} />
                   </div>
                   <span className="text-xs text-slate-400 w-6 flex-shrink-0 text-right">{Math.round(hrs)}h</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {Object.keys(roleDeliveryConfidence).length > 0 && (
+          <div className="exec-kpi-tile flex-1 min-w-48">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Delivery Confidence by Role</div>
+            <div className="space-y-1">
+              {Object.entries(roleDeliveryConfidence).sort((a, b) => a[1].score - b[1].score).slice(0, 4).map(([role, dc]) => (
+                <div key={role} className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 w-24 truncate flex-shrink-0">{role}</span>
+                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${dc.score}%`, backgroundColor: DC_BAND_COLOR[dc.band] }} />
+                  </div>
+                  <span className="text-xs text-slate-400 w-8 flex-shrink-0 text-right">{dc.score}</span>
                 </div>
               ))}
             </div>

@@ -4,6 +4,7 @@ import { ALL_UUM } from '../lib/uumItems.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { PLANS, promoDaysRemaining } from '../lib/auth.js';
 import { PLAN_BADGE } from './AuthModal.jsx';
+import { getDomainMeta } from '../domains/registry.js';
 
 function KpiTile({ label, value, sub, color }) {
   const valueColors = {
@@ -70,7 +71,7 @@ export default function ExecOverview() {
     return (
       <div className="min-h-[96px] h-auto flex flex-col min-[1160px]:flex-row items-center justify-between gap-3 bg-white border-b border-slate-200 px-4 min-[1160px]:px-6 py-3 min-[1160px]:py-0">
         <div className="text-center flex-1 min-w-0">
-          <div className="text-lg min-[1160px]:text-2xl font-bold text-slate-800 mb-1">Enterprise Infrastructure Lifecycle Engine</div>
+          <div className="text-lg min-[1160px]:text-2xl font-bold text-slate-800 mb-1">Enterprise {getDomainMeta(s.activeDomain).label} Platform</div>
           <div className="text-slate-500 text-xs min-[1160px]:text-sm">Build your platform topology in the left panel to begin</div>
           <div className="hidden min-[1160px]:flex gap-2 justify-center mt-3 flex-wrap">
             {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(label => (

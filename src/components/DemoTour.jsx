@@ -4,7 +4,7 @@ const SLIDES = [
   {
     icon: '⚙',
     title: 'OpsManifest',
-    body: 'One guided workflow for server provisioning: design, risk, approval, and sign-off — all in one place. Works alongside ServiceNow / Jira, not a replacement for them.',
+    body: 'One guided delivery workflow for any project — infra, apps, SAP, cloud migration, and more: design, risk, approval, and sign-off in one place. Works alongside ServiceNow / Jira, not a replacement for them.',
     step: 'Welcome',
     color: ['#0F1F35', '#1A2E4A'],
     accent: '#14B8A6',
