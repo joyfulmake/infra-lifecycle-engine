@@ -88,9 +88,25 @@ export default function ExecOverview() {
         <div className="text-center flex-1 min-w-0">
           <div className="text-lg min-[1160px]:text-2xl font-bold text-slate-800 mb-1">Where do you want to start?</div>
           <div className="text-slate-500 text-xs min-[1160px]:text-sm">Pick a domain and stack in the left panel — infra, apps, SAP, cloud, and 12 more — then build.</div>
-          <div className="hidden min-[1160px]:flex gap-2 justify-center mt-3 flex-wrap">
-            {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map(label => (
-              <span key={label} className="badge badge-slate text-xs px-3 py-1" style={{ border: '1px solid var(--app-accent-border)' }}>{label}</span>
+          {/* Connected pipeline — numbered + linked rather than a loose badge
+              cloud, so the guided workflow reads as one process end to end. */}
+          <div className="hidden min-[1160px]:flex items-center justify-center mt-3">
+            {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map((label, i, arr) => (
+              <div key={label} className="flex items-center">
+                <div
+                  className="flex items-center gap-1.5 rounded-full pl-1 pr-2.5 py-1"
+                  style={{ background: 'var(--app-accent-soft)', border: '1px solid var(--app-accent-border)' }}
+                >
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center text-white flex-shrink-0"
+                    style={{ background: 'var(--app-accent)', fontSize: '9.5px', fontWeight: 800 }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-xs font-medium text-slate-600 whitespace-nowrap">{label}</span>
+                </div>
+                {i < arr.length - 1 && <div className="w-3 h-px flex-shrink-0" style={{ background: 'var(--app-accent-border)' }} />}
+              </div>
             ))}
           </div>
         </div>
@@ -229,13 +245,20 @@ export default function ExecOverview() {
           ))}
         </div>
 
-        {/* Unsaved indicator */}
-        {s.isDirty && (
+        {/* Save/sync status — always shows the real current state (not just a
+            warning when something's wrong), so the dashboard reads as "live"
+            rather than silent between changes. */}
+        {s.isDirty ? (
           <div className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
             <span className="text-xs text-amber-500 font-medium">Unsaved</span>
           </div>
-        )}
+        ) : s.currentBuildId ? (
+          <div className="flex items-center gap-1">
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--color-success)' }} />
+            <span className="text-xs font-medium" style={{ color: 'var(--color-success)' }}>Saved</span>
+          </div>
+        ) : null}
 
         {/* User chip */}
         {authUser ? (
