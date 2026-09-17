@@ -9,7 +9,12 @@ import { calcDates } from '../../lib/scheduling.js';
 import { computeComplianceStatus } from '../../lib/complianceMatrix.js';
 import { getDomainMeta } from '../../domains/registry.js';
 
+// Bright shades for the dot + border accent (3:1 is enough there). The big
+// bold value text needs the darker, WCAG-AA-safe pair — the tinted card
+// background (RAG_BG) is close enough to white that the bright shade was
+// nearly unreadable, exactly the bug reported against these tiles.
 const RAG_COLOR = { green: '#22C55E', amber: '#D97706', red: '#DC2626', slate: '#94A3B8' };
+const RAG_TEXT_COLOR = { green: '#15803D', amber: '#B45309', red: '#B91C1C', slate: '#475569' };
 const RAG_BG = { green: '#F0FDF4', amber: '#FFFBEB', red: '#FEF2F2', slate: '#F8FAFC' };
 
 function RagTile({ label, band, value, detail }) {
@@ -19,7 +24,7 @@ function RagTile({ label, band, value, detail }) {
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: RAG_COLOR[band] }} />
       </div>
-      <div className="text-lg font-black" style={{ color: RAG_COLOR[band] }}>{value}</div>
+      <div className="text-lg font-black" style={{ color: RAG_TEXT_COLOR[band] }}>{value}</div>
       <div className="text-xs text-slate-500 mt-0.5">{detail}</div>
     </div>
   );

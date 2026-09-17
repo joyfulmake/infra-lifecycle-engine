@@ -686,11 +686,18 @@
    more domains/tabs are added, rather than accumulating one-off styles.
    ══════════════════════════════════════════════════════════════════════════════ */
 :root {
-  --color-success: #22C55E;
-  --color-warning: #D97706;
-  --color-danger: #DC2626;
-  --color-info: #3B82F6;
-  --color-neutral: #94A3B8;
+  /* Text-safe shades — WCAG AA requires 4.5:1 against the background these
+     render on (--color-surface, white by default). The brighter shades a
+     designer reaches for first (green-500 #22C55E ~2.2:1, slate-400
+     #94A3B8 ~2.5:1) look fine in a mockup and are close to unreadable as
+     small text on white — this bit us directly in StatTile value text. Use
+     these tokens for ANY text; a brighter shade is still fine for large
+     graphical elements (dots, border accents) where 3:1 is enough. */
+  --color-success: #15803D;
+  --color-warning: #B45309;
+  --color-danger: #B91C1C;
+  --color-info: #1D4ED8;
+  --color-neutral: #475569;
   --color-surface: #FFFFFF;
   --color-surface-alt: #F8FAFC;
   --color-border: #E2E8F0;

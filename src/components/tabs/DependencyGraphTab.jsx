@@ -42,7 +42,11 @@ function ProgressRing({ pct }) {
   );
 }
 
+// Bright shades for small graphical elements (dots, progress fill) where
+// 3:1 contrast is enough. Text uses the darker, WCAG-AA-safe pair below —
+// the same #22C55E-on-white mistake that hit StatTile also showed up here.
 const DC_BAND_COLOR = { green: '#22C55E', amber: '#D97706', red: '#DC2626', unassessed: '#CBD5E1' };
+const DC_BAND_TEXT_COLOR = { green: '#15803D', amber: '#B45309', red: '#B91C1C', unassessed: '#64748B' };
 const FEASIBILITY_OPTS = ['HIGH', 'MEDIUM', 'LOW'];
 const SKILLSET_OPTS = ['STRONG', 'ADEQUATE', 'GAP'];
 const SCOPE_OPTS = ['STABLE', 'MINOR_CHANGE', 'VOLATILE'];
@@ -129,7 +133,7 @@ function TaskNode({ task, linkedRaid, flagged, buffer, progress, isOpen, onToggl
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-slate-600">Delivery Confidence</span>
               {dc.score != null && (
-                <span className="text-xs font-bold" style={{ color: DC_BAND_COLOR[dc.band] }}>{dc.score}/100</span>
+                <span className="text-xs font-bold" style={{ color: DC_BAND_TEXT_COLOR[dc.band] }}>{dc.score}/100</span>
               )}
             </div>
             <div className="space-y-1.5">
@@ -273,19 +277,19 @@ export default function DependencyGraphTab() {
         <StatTile label="Chains" value={chains.length} />
         <StatTile label="Tasks" value={totalTasks} />
         <StatTile label="Links" value={totalLinks} hex="var(--app-accent)" />
-        <StatTile label="Cycles" value={cycles.length} hex={cycles.length ? '#DC2626' : '#22C55E'} />
-        <StatTile label="Needs Review" value={visibleFlags.length} hex={visibleFlags.length ? '#D97706' : '#22C55E'} />
+        <StatTile label="Cycles" value={cycles.length} tone={cycles.length ? 'danger' : 'success'} />
+        <StatTile label="Needs Review" value={visibleFlags.length} tone={visibleFlags.length ? 'warning' : 'success'} />
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
-        <StatTile label="Schedule (SPI)" value={evm.spi.toFixed(2)} hex={evm.spi >= 1 ? '#22C55E' : evm.spi >= 0.85 ? '#D97706' : '#DC2626'} />
-        <StatTile label="Cost (CPI)" value={evm.cpi.toFixed(2)} hex={evm.cpi >= 1 ? '#22C55E' : evm.cpi >= 0.85 ? '#D97706' : '#DC2626'} />
-        <StatTile label="Velocity" value={pvi.band.toUpperCase()} hex={pvi.band === 'green' ? '#22C55E' : pvi.band === 'amber' ? '#D97706' : '#DC2626'} />
-        <StatTile label="Risk Buffer" value={`+${Math.round(totalBufferHours)}h`} hex={totalBufferHours > 0 ? '#D97706' : '#22C55E'} />
+        <StatTile label="Schedule (SPI)" value={evm.spi.toFixed(2)} tone={evm.spi >= 1 ? 'success' : evm.spi >= 0.85 ? 'warning' : 'danger'} />
+        <StatTile label="Cost (CPI)" value={evm.cpi.toFixed(2)} tone={evm.cpi >= 1 ? 'success' : evm.cpi >= 0.85 ? 'warning' : 'danger'} />
+        <StatTile label="Velocity" value={pvi.band.toUpperCase()} tone={pvi.band === 'green' ? 'success' : pvi.band === 'amber' ? 'warning' : 'danger'} />
+        <StatTile label="Risk Buffer" value={`+${Math.round(totalBufferHours)}h`} tone={totalBufferHours > 0 ? 'warning' : 'success'} />
         <StatTile
           label="Delivery Confidence"
           value={avgDeliveryConfidence != null ? `${avgDeliveryConfidence}/100` : '—'}
-          hex={avgDeliveryConfidence == null ? '#94A3B8' : avgDeliveryConfidence >= 80 ? '#22C55E' : avgDeliveryConfidence >= 55 ? '#D97706' : '#DC2626'}
+          tone={avgDeliveryConfidence == null ? 'neutral' : avgDeliveryConfidence >= 80 ? 'success' : avgDeliveryConfidence >= 55 ? 'warning' : 'danger'}
         />
         {Object.keys(roleDrag).length > 0 && (
           <div className="exec-kpi-tile flex-1 min-w-48">
