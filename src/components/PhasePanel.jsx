@@ -862,11 +862,12 @@ export default function PhasePanel() {
   // 15 non-infra domains the way a hardcoded "HW/OS/DB/App" and "8 design
   // sections" would be.
   const axisLabels = getDomainMeta(s.activeDomain).axisLabels;
+  const isInfra = s.activeDomain === 'infra';
   const PHASE_HINTS = {
     phase1:      `Choose your PM domain, then select ${axisLabels.join(' / ')} and click Build Environment.`,
     scan:        'Click Run AI Smart Scan — no API key needed. Unlocks System Design.',
     design:      `Fill all ${DESIGN_SECTIONS.length} design sections with your team, then Generate Task Plan.`,
-    phase2:      'Select incidents and UUM items relevant to your change, then Inject.',
+    phase2:      isInfra ? 'Select incidents and UUM items relevant to your change, then Inject.' : 'Select known issues and scope items relevant to your change, then Inject.',
     cab:         'Set CAB Authorization to "Valid — Approved" before proceeding.',
     cabdeclined: 'Change DECLINED by CAB. Execute rollback plan, then resubmit with revised scope.',
     rtm:         'Open RTM tab → manually review each row → set status → Sign Off.',
@@ -883,15 +884,19 @@ export default function PhasePanel() {
       why: 'Everything downstream — the scan, design sections, and tasks — is generated to match your domain and this exact combination.',
     },
     scan: {
-      what: 'Run a free, local CVE/EOL scan against your stack — no API key needed.',
-      why: 'Pre-selects relevant incidents and tasks, and is the gate that unlocks System Design.',
+      what: isInfra
+        ? 'Run a free, local CVE/EOL scan against your stack — no API key needed.'
+        : 'Run a free, local scan of your build for known risks and gaps — no API key needed.',
+      why: 'Pre-selects relevant items and tasks, and is the gate that unlocks System Design.',
     },
     design: {
       what: `Fill in the ${DESIGN_SECTIONS.length} design sections with your team, then Generate Task Plan.`,
       why: 'Every field becomes a traceable requirement — RTM later verifies each one before sign-off.',
     },
     phase2: {
-      what: 'Select the specific incidents and UUM items that apply to this change, then Inject.',
+      what: isInfra
+        ? 'Select the specific incidents and UUM items that apply to this change, then Inject.'
+        : 'Select the specific known issues and scope items that apply to this change, then Inject.',
       why: 'Turns the generic plan into the actual task list for this build.',
     },
     cab: {
@@ -912,11 +917,18 @@ export default function PhasePanel() {
     },
   };
 
+  // Phase 1/2 labels and a few role subtitles below were written for infra
+  // ("Platform Topology", "Incidents + UUM", "Unix Admin") — every other
+  // domain reuses the exact same incidents/UUM data shape under the hood
+  // (see NON_INFRA_CATALOGS), but showing infra's own jargon regardless of
+  // domain undercuts the "adaptive, not infra-default" goal. Infra keeps its
+  // original precise wording unchanged (isInfra, declared above); every
+  // other domain gets the generic PM-neutral phrasing.
   const phases = [
-    { id: 'phase1', label: 'Phase 1 — Platform Topology', role: 'PM / All Teams', locked: false, active: s.isBuilt },
-    { id: 'scan',   label: 'AI Smart Scan', role: 'PM / SecOps', locked: !s.isBuilt, active: s.scanComplete },
-    { id: 'design', label: 'System Design Entry', role: 'All Function Admins', locked: !s.scanComplete, active: s.designApplied },
-    { id: 'phase2', label: 'Phase 2 — Incidents + UUM', role: 'PM / Unix Admin', locked: !s.isBuilt, active: s.phase2Active },
+    { id: 'phase1', label: isInfra ? 'Phase 1 — Platform Topology' : 'Phase 1 — Project Setup', role: 'PM / All Teams', locked: false, active: s.isBuilt },
+    { id: 'scan',   label: 'AI Smart Scan', role: isInfra ? 'PM / SecOps' : 'PM / Reviewer', locked: !s.isBuilt, active: s.scanComplete },
+    { id: 'design', label: 'System Design Entry', role: isInfra ? 'All Function Admins' : 'All Function Teams', locked: !s.scanComplete, active: s.designApplied },
+    { id: 'phase2', label: isInfra ? 'Phase 2 — Incidents + UUM' : 'Phase 2 — Change Scope', role: isInfra ? 'PM / Unix Admin' : 'PM / Function Teams', locked: !s.isBuilt, active: s.phase2Active },
     { id: 'cab',    label: 'CAB Gate', role: 'Change Manager', locked: !s.phase2Active, active: s.cabApproved },
     { id: 'rtm',    label: 'RTM Sign-Off', role: 'PM / QA Team', locked: !s.phase2Active, active: s.rtmSigned },
     { id: 'cutover',label: 'Production Cutover', role: 'All Teams', locked: !(s.cabApproved && s.rtmSigned), active: s.promoted },
@@ -1181,7 +1193,7 @@ export default function PhasePanel() {
 
         {/* Phase 1 */}
         <div ref={phase1SectionRef} className={`sidebar-section ${s.isBuilt ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'phase1' ? 'sidebar-section--flash' : ''}`}>
-          <div className="section-hdr">1 · Phase 1 — Platform Topology</div>
+          <div className="section-hdr">1 · {isInfra ? 'Phase 1 — Platform Topology' : 'Phase 1 — Project Setup'}</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'exec',    label: 'Exec Summary', check: () => true },
             ...(s.activeDomain === 'infra' ? [
@@ -1451,7 +1463,9 @@ export default function PhasePanel() {
           ) : !s.scanComplete ? (
             <div>
               <div className="text-xs text-white/82 mb-2 leading-relaxed">
-                Standalone scan — no API key required. Checks EOL status, known CVEs, and security posture for your stack.
+                {isInfra
+                  ? 'Standalone scan — no API key required. Checks EOL status, known CVEs, and security posture for your stack.'
+                  : 'Standalone scan — no API key required. Checks your build for known risks and gaps before you continue.'}
               </div>
               <button className="btn-primary" onClick={() => setShowScan(true)}>Run AI Smart Scan</button>
             </div>
@@ -1467,7 +1481,7 @@ export default function PhasePanel() {
           <div className="rounded-lg p-2.5 fade-in" style={{ background: 'rgba(30,58,138,0.75)', border: '1px solid #3b82f6' }}>
             <div className="text-xs font-bold mb-1" style={{ color: '#93c5fd' }}>AI Pre-Selected Items</div>
             <div className="text-xs leading-snug mb-2.5" style={{ color: '#e0f0ff' }}>
-              {aiSuggestBanner.inc.length} incident{aiSuggestBanner.inc.length !== 1 ? 's' : ''} + {aiSuggestBanner.uum.length} UUM item{aiSuggestBanner.uum.length !== 1 ? 's' : ''} matched to your stack. Review below and deselect any that don't apply.
+              {aiSuggestBanner.inc.length} {isInfra ? 'incident' : 'known issue'}{aiSuggestBanner.inc.length !== 1 ? 's' : ''} + {aiSuggestBanner.uum.length} {isInfra ? 'UUM item' : 'scope item'}{aiSuggestBanner.uum.length !== 1 ? 's' : ''} matched to your {isInfra ? 'stack' : 'build'}. Review below and deselect any that don't apply.
             </div>
             <button
               className="text-xs border rounded px-2 py-0.5 mr-2 transition-colors"
@@ -1488,7 +1502,7 @@ export default function PhasePanel() {
 
         {/* Phase 2 */}
         <div ref={phase2SectionRef} className={`sidebar-section ${!s.scanComplete ? 'sidebar-section--locked' : s.phase2Active ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'phase2' ? 'sidebar-section--flash' : ''}`}>
-          <div className="section-hdr">3 · Phase 2 — Incidents + UUM</div>
+          <div className="section-hdr">3 · {isInfra ? 'Phase 2 — Incidents + UUM' : 'Phase 2 — Change Scope'}</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'gantt',  label: 'Gantt',  check: s => s.designApplied },
             { id: 'raid',   label: 'RAID',   check: s => s.phase2Active },
@@ -1505,7 +1519,7 @@ export default function PhasePanel() {
               </div>
             )}
 
-            <div className="text-xs font-semibold text-white/85 mb-1">Select Incidents</div>
+            <div className="text-xs font-semibold text-white/85 mb-1">{isInfra ? 'Select Incidents' : 'Select Known Issues'}</div>
             <div className="text-xs text-white/75 mb-1.5">{s.selInc.length} selected</div>
             <ItemList items={ALL_INC} selected={s.selInc} onToggle={s.toggleInc} colorClass="bg-red-900/30 border-l-2 border-red-500" />
 
@@ -1630,13 +1644,13 @@ export default function PhasePanel() {
               </div>
             )}
 
-            <div className="text-xs font-semibold text-white/85 mt-4 mb-1">Schedule UUM Items</div>
+            <div className="text-xs font-semibold text-white/85 mt-4 mb-1">{isInfra ? 'Schedule UUM Items' : 'Select Scope Items'}</div>
             <div className="text-xs text-white/75 mb-1.5">{s.selUUM.length} selected</div>
 
             {/* Custom UUM entries display */}
             {(s.customUUM?.length > 0) && (
               <div className="mb-2">
-                <div className="text-xs text-white/82 mb-1">Custom UUM Entries ({s.customUUM.length})</div>
+                <div className="text-xs text-white/82 mb-1">{isInfra ? 'Custom UUM Entries' : 'Custom Scope Entries'} ({s.customUUM.length})</div>
                 {s.customUUM.map(cu => {
                   const sel = s.selUUM.includes(cu.id);
                   return (

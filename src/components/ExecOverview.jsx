@@ -37,6 +37,7 @@ function MilestoneDot({ label, done }) {
 export default function ExecOverview() {
   const s = useStore();
   const { authUser, openAuthModal } = useAuth();
+  const isInfra = s.activeDomain === 'infra';
 
   const activeInc = s.selInc.length;
   const uumCount = s.selUUM.length;
@@ -91,7 +92,7 @@ export default function ExecOverview() {
           {/* Connected pipeline — numbered + linked rather than a loose badge
               cloud, so the guided workflow reads as one process end to end. */}
           <div className="hidden min-[1160px]:flex items-center justify-center mt-3">
-            {['Phase 1: Provision', 'AI Smart Scan', 'System Design', 'Phase 2: Incidents + UUM', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map((label, i, arr) => (
+            {['Phase 1: Provision', 'AI Smart Scan', 'System Design', isInfra ? 'Phase 2: Incidents + UUM' : 'Phase 2: Change Scope', 'CAB Gate', 'RTM Sign-Off', 'Production Cutover', 'Excel Export'].map((label, i, arr) => (
               <div key={label} className="flex items-center">
                 <div
                   className="flex items-center gap-1.5 rounded-full pl-1 pr-2.5 py-1"
@@ -172,9 +173,9 @@ export default function ExecOverview() {
       {/* KPI Tiles */}
       <div className="grid grid-cols-2 min-[520px]:grid-cols-4 gap-2 min-[1160px]:gap-3 flex-1 min-w-0 relative">
         <KpiTile
-          label="Active Incidents"
+          label={isInfra ? 'Active Incidents' : 'Known Issues'}
           value={activeInc}
-          sub={activeInc > 0 ? (s.promoted ? 'All Resolved' : `${s.selFix.length} fixed in staging`) : 'No incidents'}
+          sub={activeInc > 0 ? (s.promoted ? 'All Resolved' : `${s.selFix.length} fixed in staging`) : (isInfra ? 'No incidents' : 'None found')}
           color={s.promoted ? 'green' : incSev}
         />
         {myRoleDrag ? (
@@ -186,7 +187,7 @@ export default function ExecOverview() {
           />
         ) : (
           <KpiTile
-            label="UUM Items"
+            label={isInfra ? 'UUM Items' : 'Scope Items'}
             value={uumCount}
             sub={uumCount > 0 ? (s.promoted ? 'Completed' : 'Scheduled') : 'None scheduled'}
             color={s.promoted ? 'green' : uumCount > 0 ? 'amber' : 'slate'}

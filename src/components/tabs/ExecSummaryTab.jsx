@@ -122,12 +122,13 @@ export default function ExecSummaryTab() {
 
   const incSev = s.selInc.length > 5 ? 'CRITICAL' : s.selInc.length > 2 ? 'HIGH' : s.selInc.length > 0 ? 'MEDIUM' : 'CLEAR';
   const incColor = incSev === 'CRITICAL' ? 'text-red-600' : incSev === 'HIGH' ? 'text-red-500' : incSev === 'MEDIUM' ? 'text-amber-600' : 'text-green-600';
+  const isInfra = s.activeDomain === 'infra';
 
   const milestones = [
-    { label: 'Phase 1 -- Platform Provisioned', done: s.isBuilt },
+    { label: isInfra ? 'Phase 1 -- Platform Provisioned' : 'Phase 1 -- Project Set Up', done: s.isBuilt },
     { label: 'AI Smart Scan Completed', done: s.scanComplete },
     { label: 'System Design Applied', done: s.designApplied },
-    { label: 'Incidents and UUM Injected', done: s.phase2Active },
+    { label: isInfra ? 'Incidents and UUM Injected' : 'Change Scope Injected', done: s.phase2Active },
     { label: 'CAB Authorization Obtained', done: s.cabApproved },
     { label: 'RTM Signed Off by QA', done: s.rtmSigned },
     { label: 'Production Cutover Executed', done: s.promoted },
@@ -204,7 +205,7 @@ export default function ExecSummaryTab() {
           <div className="grid grid-cols-2 gap-4">
             <div className="card p-4">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                Active Incidents <span className={['ml-1 font-bold', incColor].join(' ')}>({s.selInc.length} -- SEV: {incSev})</span>
+                {isInfra ? 'Active Incidents' : 'Known Issues'} <span className={['ml-1 font-bold', incColor].join(' ')}>({s.selInc.length} -- SEV: {incSev})</span>
               </div>
               {s.selInc.length === 0 ? (
                 <div className="text-xs text-slate-400">No incidents selected</div>
@@ -227,7 +228,7 @@ export default function ExecSummaryTab() {
             </div>
             <div className="card p-4">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                UUM Items ({s.selUUM.length})
+                {isInfra ? 'UUM Items' : 'Scope Items'} ({s.selUUM.length})
               </div>
               {s.selUUM.length === 0 ? (
                 <div className="text-xs text-slate-400">No UUM items scheduled</div>
@@ -266,8 +267,8 @@ export default function ExecSummaryTab() {
             <tbody>
               {s.isBuilt && (
                 <tr className="border-b border-slate-50">
-                  <td className="py-1.5 pr-4 font-medium text-slate-700">Platform Provisioning</td>
-                  <td className="py-1.5 pr-4 text-slate-500">Build {s.ctx.hw} / {s.ctx.os} platform topology</td>
+                  <td className="py-1.5 pr-4 font-medium text-slate-700">{isInfra ? 'Platform Provisioning' : 'Project Setup'}</td>
+                  <td className="py-1.5 pr-4 text-slate-500">Build {s.ctx.hw} / {s.ctx.os} {isInfra ? 'platform topology' : 'project scope'}</td>
                   <td className="py-1.5 pr-4"><span className="badge badge-blue">N/A</span></td>
                   <td className="py-1.5 text-green-600 font-semibold">DONE</td>
                 </tr>
@@ -294,7 +295,7 @@ export default function ExecSummaryTab() {
               ))}
               {!s.phase2Active && (
                 <tr>
-                  <td colSpan={4} className="py-3 text-slate-400 text-center">No incidents or UUM items yet -- inject in Phase 2</td>
+                  <td colSpan={4} className="py-3 text-slate-400 text-center">{isInfra ? 'No incidents or UUM items yet' : 'No known issues or scope items yet'} -- inject in Phase 2</td>
                 </tr>
               )}
             </tbody>
