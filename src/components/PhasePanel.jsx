@@ -826,10 +826,16 @@ export default function PhasePanel() {
     return 'export';
   })();
 
+  // Domain-aware — axisLabels and the design section count both come from
+  // whichever domain is active (DESIGN_SECTIONS.length reflects the live
+  // mutation from applyDomain.js), so this guidance is never wrong for the
+  // 15 non-infra domains the way a hardcoded "HW/OS/DB/App" and "8 design
+  // sections" would be.
+  const axisLabels = getDomainMeta(s.activeDomain).axisLabels;
   const PHASE_HINTS = {
-    phase1:      'Select HW / OS / DB / App stack and click Build Environment.',
+    phase1:      `Select ${axisLabels.join(' / ')} and click Build Environment.`,
     scan:        'Click Run AI Smart Scan — no API key needed. Unlocks System Design.',
-    design:      'Fill all 8 design sections with your team, then Generate Task Plan.',
+    design:      `Fill all ${DESIGN_SECTIONS.length} design sections with your team, then Generate Task Plan.`,
     phase2:      'Select incidents and UUM items relevant to your change, then Inject.',
     cab:         'Set CAB Authorization to "Valid — Approved" before proceeding.',
     cabdeclined: 'Change DECLINED by CAB. Execute rollback plan, then resubmit with revised scope.',
@@ -1074,7 +1080,16 @@ export default function PhasePanel() {
             {s.theme === 'dark' ? '☀' : '🌙'}
           </button>
         </div>
-        <div className="text-xs text-white/78 pl-4 leading-snug">{getDomainMeta(s.activeDomain).label}</div>
+        <div className="flex items-center gap-1.5 pl-4">
+          <span className="text-xs text-white/58">Guided delivery platform</span>
+          <span
+            className="inline-flex items-center gap-1 text-xs font-semibold rounded-full px-1.5 py-0.5 leading-tight"
+            style={{ background: `${getDomainMeta(s.activeDomain).accent}22`, color: getDomainMeta(s.activeDomain).accent }}
+            title="Current PM domain — change it below in Phase 1"
+          >
+            {getDomainMeta(s.activeDomain).icon} {getDomainMeta(s.activeDomain).shortLabel}
+          </span>
+        </div>
       </div>
 
       {/* Phase nav */}
