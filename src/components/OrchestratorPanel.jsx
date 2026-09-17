@@ -641,11 +641,11 @@ Rules:
         setThinking(false);
         const { reply, actions = [], suggestions = [] } = result;
         setMessages(m => [...m, { id: nextId(), role: 'orchestrator', text: reply, suggestions }]);
-        const immediate = actions.filter(a => !a.requiresConfirmation);
-        const needsConfirm = actions.filter(a => a.requiresConfirmation);
-        if (immediate.length > 0) applyActionsWithRefs(immediate);
-        if (needsConfirm.length > 0) {
-          setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: needsConfirm }]);
+        // Every action surfaced by the unsolicited opening assessment requires a
+        // click before it touches the build — nothing edits design fields or
+        // logs RAID/task entries on its own just because the panel was opened.
+        if (actions.length > 0) {
+          setMessages(m => [...m, { id: nextId(), role: 'confirm', actions: actions.map(a => ({ ...a, requiresConfirmation: true })) }]);
         }
       })
       .catch(() => {
@@ -947,15 +947,20 @@ Rules:
     }, 280);
   }, []);
 
-  // When docked, always open immediately — no button needed
+  // Docked mode activates only once the user actually expands the panel —
+  // OpsMentor should be available on request, not run its opening assessment
+  // (and any proactive edits) before anyone asked for it.
   useEffect(() => {
-    if (docked) { setOpen(true); setPanelVisible(true); }
+    if (docked && !collapsed) { setOpen(true); setPanelVisible(true); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docked]);
+  }, [docked, collapsed]);
 
-  // Open when ExecOverview "OpsMentor" button is clicked (floating mode)
+  // Open when the ExecOverview/command-palette "OpsMentor" trigger fires —
+  // also un-collapses the docked strip so the assessment isn't running behind
+  // a collapsed panel the user can't see.
   useEffect(() => {
     const handler = () => {
+      setCollapsed(false);
       setOpen(true);
       setPanelVisible(true);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -965,19 +970,9 @@ Rules:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Open after tour dismisses
-  useEffect(() => {
-    const handler = () => {
-      setTimeout(() => {
-        setOpen(true);
-        setPanelVisible(true);
-        setTimeout(() => inputRef.current?.focus(), 150);
-      }, 500);
-    };
-    window.addEventListener('opsmanifest-tour-dismissed', handler);
-    return () => window.removeEventListener('opsmanifest-tour-dismissed', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Note: OpsMentor deliberately does NOT auto-open when the first-visit tour
+  // dismisses — it should be there when asked for, not pop itself open right
+  // after onboarding.
 
   // Field change tracking — refs only, no chat echo
   const prevCtx = useRef({ hw: undefined, os: undefined, db: undefined, app: undefined });
@@ -1636,17 +1631,19 @@ Rules:
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  // Collapsed docked mode — thin vertical strip
+  // Collapsed docked mode — thin vertical strip. Stays quiet (no auto-chat, no
+  // auto-applied changes) until the user opens it — the dot only turns amber
+  // when there's an actual warning worth checking, never just to draw attention.
   if (docked && collapsed) {
     return (
       <div
         onClick={() => setCollapsed(false)}
         className="flex flex-col items-center justify-center h-full cursor-pointer select-none"
         style={{ width: 36, borderLeft: '1px solid rgba(13,148,136,0.18)', background: 'linear-gradient(180deg, #0f172a 0%, #0d4f4f 100%)' }}
-        title="Expand OpsMentor"
+        title={hasAlerts ? 'OpsMentor — something to check' : 'Ask OpsMentor about your build'}
       >
         <div className="flex flex-col items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+          <div className={`w-2 h-2 rounded-full ${hasAlerts ? 'bg-amber-400 animate-pulse' : 'bg-teal-400/70'}`} />
           <div className="text-white font-bold" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 11, letterSpacing: 2 }}>
             OpsMentor
           </div>

@@ -338,10 +338,11 @@ function SuggestInput({ fieldId, value, onChange, placeholder, type = 'text', cl
   );
 }
 
-function PhasePill({ label, role, locked, active, isCurrent, onClick }) {
+function PhasePill({ label, role, locked, active, isCurrent, onClick, tooltip }) {
   return (
     <button
       onClick={locked ? undefined : onClick}
+      title={tooltip}
       className={[
         'w-full text-left px-3 py-2 rounded-md flex items-center gap-2 mb-0.5 transition-all duration-150',
         isCurrent
@@ -349,7 +350,7 @@ function PhasePill({ label, role, locked, active, isCurrent, onClick }) {
           : active
             ? 'hover:bg-white/8'
             : 'hover:bg-white/8',
-        locked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+        locked ? 'opacity-40 cursor-help' : 'cursor-pointer',
       ].join(' ')}
     >
       {locked && LOCK_ICON}
@@ -751,7 +752,33 @@ export default function PhasePanel() {
   const s = useStore();
   const { authUser, setAuthUser, openAuthModal } = useAuth();
   const [showScan, setShowScan] = useState(false);
-  const [activePhase, setActivePhase] = useState(null);
+  const [flashSection, setFlashSection] = useState(null);
+  const phase1SectionRef = useRef(null);
+  const scanSectionRef = useRef(null);
+  const phase2SectionRef = useRef(null);
+  const cabSectionRef = useRef(null);
+  const rtmSectionRef = useRef(null);
+  const cutoverSectionRef = useRef(null);
+  const exportSectionRef = useRef(null);
+  const stepSectionRefs = {
+    phase1: phase1SectionRef, scan: scanSectionRef, phase2: phase2SectionRef,
+    cab: cabSectionRef, rtm: rtmSectionRef, cutover: cutoverSectionRef, export: exportSectionRef,
+  };
+  // Clicking a step in the top mini-nav jumps to its detail card below (or, for
+  // System Design — which lives in its own tab, not a sidebar card — switches
+  // tabs directly). A brief ring highlight confirms the click did something,
+  // since scrollIntoView alone can be easy to miss on a short sidebar.
+  function goToStep(id) {
+    if (id === 'design') {
+      s.setActiveTab('design');
+      return;
+    }
+    const ref = stepSectionRefs[id];
+    if (!ref?.current) return;
+    ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setFlashSection(id);
+    setTimeout(() => setFlashSection(f => (f === id ? null : f)), 1100);
+  }
   const [hwCustom, setHwCustom] = useState('');
   const [osCustom, setOsCustom] = useState('');
   const [dbCustom, setDbCustom] = useState('');
@@ -844,6 +871,44 @@ export default function PhasePanel() {
     export:      'Download the full Excel workbook (up to 17 sheets) for stakeholder review.',
   };
 
+  // Tooltip copy for the top mini-nav — what each step does and why it matters,
+  // independent of which step is currently active (PHASE_HINTS above only
+  // covers the current one). Shown via native title attr on hover.
+  const STEP_INFO = {
+    phase1: {
+      what: `Choose ${axisLabels.join(' / ')} for this project and lock in scope.`,
+      why: 'Everything downstream — the scan, design sections, and tasks — is generated from this exact combination.',
+    },
+    scan: {
+      what: 'Run a free, local CVE/EOL scan against your stack — no API key needed.',
+      why: 'Pre-selects relevant incidents and tasks, and is the gate that unlocks System Design.',
+    },
+    design: {
+      what: `Fill in the ${DESIGN_SECTIONS.length} design sections with your team, then Generate Task Plan.`,
+      why: 'Every field becomes a traceable requirement — RTM later verifies each one before sign-off.',
+    },
+    phase2: {
+      what: 'Select the specific incidents and UUM items that apply to this change, then Inject.',
+      why: 'Turns the generic plan into the actual task list for this build.',
+    },
+    cab: {
+      what: 'Get Change Advisory Board approval before anything touches production.',
+      why: 'A hard gate — a declined change gets a rollback plan instead of proceeding.',
+    },
+    rtm: {
+      what: 'Review every requirement in the RTM tab, mark PASS / FAIL / N/A, then sign off.',
+      why: 'This is the audit trail proving what was actually verified before go-live.',
+    },
+    cutover: {
+      what: 'Execute the production go-live.',
+      why: 'Only unlocks once CAB has approved and RTM is signed — both gates must be green.',
+    },
+    export: {
+      what: 'Download the full Excel workbook for stakeholder review.',
+      why: "Available any time after build — doesn't require finishing the workflow.",
+    },
+  };
+
   const phases = [
     { id: 'phase1', label: 'Phase 1 — Platform Topology', role: 'PM / All Teams', locked: false, active: s.isBuilt },
     { id: 'scan',   label: 'AI Smart Scan', role: 'PM / SecOps', locked: !s.isBuilt, active: s.scanComplete },
@@ -876,7 +941,6 @@ export default function PhasePanel() {
     }
     const updated = incrementBuildCount(authUser);
     if (updated) setAuthUser(updated);
-    setActivePhase('phase1');
     s.setActiveTab('exec');
   }
 
@@ -1097,7 +1161,8 @@ export default function PhasePanel() {
         {phases.map(p => (
           <PhasePill key={p.id} label={p.label} role={p.role} locked={p.locked} active={p.active}
             isCurrent={p.id === currentPhaseId}
-            onClick={() => setActivePhase(activePhase === p.id ? null : p.id)} />
+            tooltip={STEP_INFO[p.id] ? `${STEP_INFO[p.id].what}\n\nWhy: ${STEP_INFO[p.id].why}` : undefined}
+            onClick={() => goToStep(p.id)} />
         ))}
       </div>
 
@@ -1111,7 +1176,7 @@ export default function PhasePanel() {
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
 
         {/* Phase 1 */}
-        <div className={`sidebar-section ${s.isBuilt ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+        <div ref={phase1SectionRef} className={`sidebar-section ${s.isBuilt ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'phase1' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">1 · Phase 1 — Platform Topology</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'exec',    label: 'Exec Summary', check: () => true },
@@ -1369,7 +1434,7 @@ export default function PhasePanel() {
         </div>
 
         {/* AI Scan */}
-        <div className={`sidebar-section ${!s.isBuilt ? 'sidebar-section--locked' : s.scanComplete ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+        <div ref={scanSectionRef} className={`sidebar-section ${!s.isBuilt ? 'sidebar-section--locked' : s.scanComplete ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'scan' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">2 · AI Smart Scan</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'design', label: 'System Design', check: s => s.scanComplete },
@@ -1415,7 +1480,7 @@ export default function PhasePanel() {
         )}
 
         {/* Phase 2 */}
-        <div className={`sidebar-section ${!s.scanComplete ? 'sidebar-section--locked' : s.phase2Active ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+        <div ref={phase2SectionRef} className={`sidebar-section ${!s.scanComplete ? 'sidebar-section--locked' : s.phase2Active ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'phase2' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">3 · Phase 2 — Incidents + UUM</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'gantt',  label: 'Gantt',  check: s => s.designApplied },
@@ -1790,7 +1855,7 @@ export default function PhasePanel() {
         </div>
 
         {/* CAB Gate */}
-        <div className={`sidebar-section ${!s.phase2Active ? 'sidebar-section--locked' : (s.cabApproved || s.cabDeclined) ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+        <div ref={cabSectionRef} className={`sidebar-section ${!s.phase2Active ? 'sidebar-section--locked' : (s.cabApproved || s.cabDeclined) ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'cab' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">4 · CAB Gate</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'gantt', label: 'Review Gantt', check: s => s.phase2Active },
@@ -1866,7 +1931,7 @@ export default function PhasePanel() {
         </div>
 
         {/* RTM Sign-Off */}
-        <div className={`sidebar-section ${!s.phase2Active ? 'sidebar-section--locked' : s.rtmSigned ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+        <div ref={rtmSectionRef} className={`sidebar-section ${!s.phase2Active ? 'sidebar-section--locked' : s.rtmSigned ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'rtm' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">5 · RTM Sign-Off</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'rtm',     label: 'RTM Sign-Off', check: s => s.phase2Active },
@@ -1914,7 +1979,7 @@ export default function PhasePanel() {
         </div>
 
         {/* Cutover */}
-        <div className={`sidebar-section ${!(s.cabApproved && s.rtmSigned) ? 'sidebar-section--locked' : s.promoted ? 'sidebar-section--done' : 'sidebar-section--live'}`}>
+        <div ref={cutoverSectionRef} className={`sidebar-section ${!(s.cabApproved && s.rtmSigned) ? 'sidebar-section--locked' : s.promoted ? 'sidebar-section--done' : 'sidebar-section--live'} ${flashSection === 'cutover' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">6 · Production Cutover</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'closure', label: 'Closure Checklist', check: s => s.rtmSigned },
@@ -2120,7 +2185,7 @@ export default function PhasePanel() {
         </div>
 
         {/* Export */}
-        <div className={`sidebar-section pb-4 ${!s.isBuilt ? 'sidebar-section--locked' : 'sidebar-section--unlocked'}`}>
+        <div ref={exportSectionRef} className={`sidebar-section pb-4 ${!s.isBuilt ? 'sidebar-section--locked' : 'sidebar-section--unlocked'} ${flashSection === 'export' ? 'sidebar-section--flash' : ''}`}>
           <div className="section-hdr">7 · Export</div>
           {!s.isBuilt ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1">{LOCK_ICON} Build environment first</div>

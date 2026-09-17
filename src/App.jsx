@@ -18,10 +18,11 @@ export default function App() {
   const { showAuthModal, setShowAuthModal, authModalReason } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mentorOpen, setMentorOpen] = useState(false);
-  // Collapse-to-strip is a desktop-docked convenience (user-toggled via the
-  // panel's own Collapse button). The mobile/tablet overlay always opens
-  // full-width, so it never starts pre-collapsed regardless of viewport.
-  const [mentorCollapsed, setMentorCollapsed] = useState(false);
+  // OpsMentor starts collapsed to a quiet strip — available on request rather
+  // than opening itself with an unsolicited assessment. The mobile/tablet
+  // overlay always forces it open full-width when the user taps the OpsMentor
+  // button (see onClick below), regardless of this desktop default.
+  const [mentorCollapsed, setMentorCollapsed] = useState(true);
   const ctx = useStore(s => s.ctx);
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function App() {
           <span className="mobile-topbar-title">OpsManifest</span>
           <button
             aria-label="Open OpsMentor"
-            onClick={() => setMentorOpen(true)}
+            onClick={() => { setMentorCollapsed(false); setMentorOpen(true); }}
             className="mobile-topbar-btn mobile-topbar-btn--accent"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

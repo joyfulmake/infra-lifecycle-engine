@@ -229,6 +229,10 @@
   background: rgba(255,255,255,0.035);
   border-color: rgba(255,255,255,0.09);
 }
+/* Brief highlight when a step is jumped to via the top mini-nav — confirms the click did something */
+.sidebar-section--flash {
+  box-shadow: 0 0 0 2px rgba(45,212,191,0.55), 0 2px 14px rgba(0,0,0,0.28);
+}
 
 /* ── Light theme: text overrides (grouped by Tailwind opacity digit) ─────────── */
 [data-theme="light"] .sidebar-root [class*="text-white/8"],

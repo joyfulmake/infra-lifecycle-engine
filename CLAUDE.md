@@ -186,11 +186,19 @@ Exported constants: `DESIGN_SECTIONS`, `FIELD_LABELS`, `HW_OPTIONS`, `OS_OPTIONS
 - Loading a build warns "Unsaved changes will be lost" if `isDirty` is true
 - All tab changes (incidents, design fields, RTM rows, Gantt overrides, closure, CAB, etc.) feed into `isDirty` automatically via the store
 
-## Store submission (Microsoft Store + Meta Quest)
+## Store submission (Microsoft Store + Meta Quest) and other launch channels
 
-Full step-by-step guide: **`STORE_SUBMISSION_GUIDE.md`** in this repo root.
+Full step-by-step guide: **`submission.md`** in this repo root (renamed from `STORE_SUBMISSION_GUIDE.md` — now covers Microsoft Store, Meta Quest, G2, Product Hunt, Reddit, AlternativeTo, and Microsoft AppSource). Listing copy (descriptions, taglines) lives in **`roadmap.md`** — not to be confused with `PRODUCT_ROADMAP.md` (feature roadmap) or `DOMAIN_EXPANSION_ROADMAP.md` (multi-domain vision).
 
-**Current status:** v3.1.0.0 submitted 2026-07-02 — Iron-clad approach: the MSIX workflow now replaces the entire `index.html` with a purpose-built 900-byte minimal version generated from scratch (extracts Vite-hashed CSS/JS asset paths, writes fresh HTML with only charset, viewport, error handlers, theme loader, Segoe UI override, CSS link, title, root div, JS module). Eliminates splash div, 12s fallback timer, all icon/manifest/PWA links, apple-mobile meta, theme-color meta, skip-link, HTML comments. Pre-flight audit expanded to 11 checks — CHECK 11 verifies no CSS4 `@media` range queries remain (converted to classic `min-width`/`max-width` syntax by strip step). Previous v3.0.0.0 submitted 2026-07-01 — Added proactive CSS stripping of `transition:`, `backdrop-filter:`, `:where()` unwrap, `@media` range query conversion; stripped `apple-mobile-web-app-*` and `theme-color` meta from MSIX HTML; pre-flight audit expanded to 10 checks. Previous v2.9.0.0 submitted 2026-06-30 — Root cause of 26100.3194 crash: `@keyframes splash-pulse` in the inline `<style>` block of `index.html` was crashing WebView2 at CSS parse time.
+**Current status (2026-07-02): architecture pivot — MSIX generation moved to PWABuilder.com, `.github/workflows/build-msix.yml` is DEPRECATED.**
+
+v3.1.0.0 failed certification 2026-07-02 — crash at launch, HP Spectre x360 / HP 17-bs011dx, OS build 22631.3296 (Windows 11 22H2/23H2 — older than every prior crash build: 26100.3194, 26200.8116, 26200.8655). This was the 20th consecutive version (v1.0.0.0 → v3.1.0.0) to crash at launch on some device with `Error Message: N/A`, each time on a different OS build, each "fixed" by stripping one more CSS/HTML feature suspected of crashing WebView2 natively.
+
+**Actual root cause found:** the hand-authored `AppxManifest.xml` in `build-msix.yml` never used WebView2. It declared `<Application Id="App" StartPage="index.html">` with no `Executable`/`EntryPoint`/`uap10:HostId` — per Microsoft's docs, a bare `StartPage` attribute is the legacy "JavaScript UWP app" model (WinJS/`wwahost.exe`-era), a different and effectively unmaintained rendering path that predates WebView2 and was never migrated to Chromium the way the Edge browser was. Which exact build of that legacy renderer runs is tied to the Windows OS build itself, not an independently-updatable Evergreen runtime — explaining why every crash report named a different OS build with `Error: N/A` (a native parser crash, not a WebView2 bug) and why 20 rounds of CSS/HTML stripping never converged: each "fix" narrowed the crash surface for one specific legacy-renderer build, and a different Windows build with different legacy-renderer bugs failed next.
+
+**Fix:** stop hand-authoring the legacy-model manifest. MSIX is now generated via **pwabuilder.com**, which uses PWABuilder's "Hosted App Model" backed by real Chromium Edge — same official Microsoft tool this project already uses for the Meta Quest submission. Full steps in `submission.md` Part 1. The old `build-msix.yml` GitHub Actions workflow is kept in the repo for reference only — **do not run it**; it will keep producing the crash-prone legacy-model package. Do not resume the CSS/HTML-stripping whack-a-mole pattern on that workflow — the problem was never in the CSS.
+
+Prior versions (v1.0.0.0 through v3.1.0.0) each patched one crash vector under the WebView2 hypothesis, which turned out to be incorrect. Kept below for the record of what was tried and why each theory seemed plausible at the time, but do not use as a basis for future fixes to the legacy workflow — go straight to PWABuilder instead.
 
 **Version history:**
 - v1.0.0.0 — initial submission; failed (crash at launch, Windows 11 24H2)
@@ -251,7 +259,7 @@ After approval, follow Part 5 of the guide (post-certification steps).
 2. Note the Store URL (`apps.microsoft.com/store/detail/...`) and replace the placeholder above
 3. Add Microsoft Store badge link near the "About this tool" link in the sidebar footer
 4. Update `public/slides.html` last slide with the Store URL — then `git push origin main`
-5. See `STORE_SUBMISSION_GUIDE.md` Part 5 for full detail
+5. See `submission.md` Part 5 for full detail
 
 **Meta Quest steps:**
 1. pwabuilder.com → enter `https://opsmanifest.pages.dev` → "Package for Store" → Meta Quest
@@ -282,9 +290,11 @@ Two AI layers — both use the CF Worker proxy pattern to keep API keys out of t
 
 ### OpsMentor — LLM-powered advisor (via Groq + `workers/ai-worker.js`)
 
-OpsMentor is the app's embedded AI agent. Key behavioral contract:
-- **Opening assessment**: when opened on any build with data, calls `/orchestrator-chat` with a special `INITIAL_ASSESSMENT` prompt. Treats all entered data as approved. Surfaces only non-obvious risks, EOL windows, or gaps. Never narrates what the user already did.
-- **Proactive actions**: the opening LLM response includes `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, and `SET_DESIGN_FIELD` actions without the user asking. These are applied immediately (no confirmation needed).
+OpsMentor is the app's embedded AI agent, deliberately optional rather than attention-seeking. Key behavioral contract:
+- **Collapsed by default**: `mentorCollapsed` (App.jsx) starts `true` — OpsMentor renders as a quiet 36px strip until the user expands it. The strip's dot is teal/idle normally and only turns amber when `hasAlerts` is genuinely true (a real coherence warning), never just to draw attention. On mobile, the topbar "Open OpsMentor" button force-expands it (`setMentorCollapsed(false)`) since the drawer must never open at strip width.
+- **Opening assessment fires only once expanded**: the `open` internal state (which drives the `INITIAL_ASSESSMENT` call) is gated on `docked && !collapsed` — nothing calls the LLM or reads build state until the user actually opens the panel. Treats all entered data as approved; surfaces only non-obvious risks, EOL windows, or gaps; never narrates what the user already did.
+- **No unsolicited action application**: every action returned by the opening assessment (`ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, `SET_DESIGN_FIELD`, etc.) is forced through the confirm bubble (`requiresConfirmation: true` is set unconditionally in that `.then()` handler) regardless of what the worker returned — OpsMentor proposes, the user clicks to accept. This applies ONLY to the opening assessment; actions taken during an explicit back-and-forth chat still follow the normal per-action-type confirmation rules below.
+- **No auto-open after the tour**: `DemoTour` still dispatches `opsmanifest-tour-dismissed` but nothing listens for it anymore — OpsMentor does not pop itself open post-onboarding. It still opens on explicit triggers: the ExecOverview "OpsMentor" pill, the command palette action, and the mobile topbar button (all dispatch/handle `opsmanifest-orchestrator-open`, which also un-collapses the docked strip).
 - **Blank builds only**: static warm welcome + hardware chips shown when truly nothing is entered.
 - **Voice**: Azure Neural TTS (Jenny Neural, free tier) is the ONLY voice. No Web Speech fallback. Uses Web Audio API (`AudioContext.decodeAudioData` + `BufferSourceNode`) — avoids CSP `blob:` media restrictions. `unlockAudio()` creates and resumes a shared `AudioContext` in the gesture handler (gesture context required). SpeechRecognition is paused during TTS playback to prevent acoustic feedback. TTS dedup: same excerpt skipped within 8s. Voice input dedup: same transcript skipped within 3s. Worker: `/cartesia-tts` endpoint tries Azure first, then Cartesia, then ElevenLabs.
 - **System Design from Phase 1**: when design is empty but stack is known, the opening assessment suggests specific `SET_DESIGN_FIELD` values derived from the hw/os/db/app configuration.
@@ -327,7 +337,7 @@ curl -X PUT "https://api.cloudflare.com/client/v4/accounts/254fa20341a7b0c164581
 
 **Past build lessons**: `buildPastBuildsSummary(builds, currentBuildId, ctx)` in `OrchestratorPanel.jsx` — scores past saved builds by stack similarity (hw/os/db/app match), takes top 3, extracts RAID entries. Passed to `buildStateContext(s, authUser, pastSummary)` as third param and included in the worker system prompt under "PAST BUILDS" section. Enables LLM to naturally reference "In your previous Oracle 19c build, X happened — watch for that here."
 
-**Action confirmation rules**: `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, `SET_DESIGN_FIELD`, `NAVIGATE_TAB` require no confirmation. `APPLY_DESIGN`, `INJECT_PHASE2`, `SUBMIT_CAB`, `SIGN_RTM`, `PROMOTE`, `UNLOCK_FOR_REVISION`, `RESUBMIT_CAB`, `ADD_INCIDENT`, `ADD_UUM_ITEM` always require confirmation.
+**Action confirmation rules**: `ADD_RAID_ENTRY`, `ADD_CUSTOM_TASK`, `SET_DESIGN_FIELD`, `NAVIGATE_TAB` require no confirmation when they result from an explicit user chat message. `APPLY_DESIGN`, `INJECT_PHASE2`, `SUBMIT_CAB`, `SIGN_RTM`, `PROMOTE`, `UNLOCK_FOR_REVISION`, `RESUBMIT_CAB`, `ADD_INCIDENT`, `ADD_UUM_ITEM` always require confirmation. Exception: the unsolicited `INITIAL_ASSESSMENT` opening reply forces confirmation on every action type it returns, including the normally-immediate ones — see the OpsMentor contract above.
 
 **Direct tab navigation**: OpsMentor understands "open gantt", "go to RTM", "show me system design", "take me to closure" etc. Detects 10 tabs (gantt/rtm/design/exec/raid/matrix/closure/diagram/roles/cmdb) from natural language — fires `NAVIGATE_TAB` immediately, no confirmation.
 
