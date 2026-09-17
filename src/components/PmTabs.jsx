@@ -29,6 +29,11 @@ export const TABS = [
     label: 'Infra Diagram',
     unlocked: s => s.isBuilt,
     lockMsg: 'Build environment first',
+    // Topology layers (Hardware/OS/Storage/Network...) and CMDB below are
+    // built around infra's own design-section fields (unix.cpu, web.ssl_protocols,
+    // db.buf_pool, etc.) which don't exist in the other 15 domains' catalogs —
+    // hidden rather than shown broken/empty until they're made domain-generic.
+    hidden: s => s.activeDomain !== 'infra',
   },
   {
     id: 'cmdb',
@@ -36,6 +41,7 @@ export const TABS = [
     unlocked: s => s.isBuilt,
     lockMsg: 'Build environment first',
     proBadge: true,
+    hidden: s => s.activeDomain !== 'infra',
   },
   {
     id: 'design',
@@ -191,7 +197,7 @@ export default function PmTabs() {
 
       {/* Tab bar */}
       <div className="flex items-end gap-1 px-3 min-[1160px]:px-6 pt-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-auto">
-        {TABS.map(tab => {
+        {TABS.filter(tab => !tab.hidden || !tab.hidden(s)).map(tab => {
           const unlocked = isTabUnlocked(tab);
           const isActive = activeTab === tab.id;
           const isNext = !isActive && unlocked && tab.id === nextTabId;

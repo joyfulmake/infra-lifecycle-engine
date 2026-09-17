@@ -1183,8 +1183,10 @@ export default function PhasePanel() {
           <div className="section-hdr">1 · Phase 1 — Platform Topology</div>
           <PhaseTabChips s={s} tabs={[
             { id: 'exec',    label: 'Exec Summary', check: () => true },
-            { id: 'diagram', label: 'Infra Diagram', check: s => s.isBuilt },
-            { id: 'cmdb',    label: 'CMDB',          check: s => s.isBuilt },
+            ...(s.activeDomain === 'infra' ? [
+              { id: 'diagram', label: 'Infra Diagram', check: s => s.isBuilt },
+              { id: 'cmdb',    label: 'CMDB',          check: s => s.isBuilt },
+            ] : []),
             { id: 'roles',   label: 'Roles',         check: s => s.isBuilt },
           ]} />
 

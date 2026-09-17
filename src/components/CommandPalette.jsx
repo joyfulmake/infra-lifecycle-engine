@@ -12,7 +12,7 @@ import { DOMAINS } from '../domains/registry.js';
 function buildCommands(s) {
   const cmds = [];
 
-  TABS.forEach(tab => {
+  TABS.filter(tab => !tab.hidden || !tab.hidden(s)).forEach(tab => {
     const unlocked = s.unlockedForRevision || tab.unlocked(s);
     cmds.push({
       id: `tab-${tab.id}`,
