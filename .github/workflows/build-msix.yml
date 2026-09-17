@@ -1,4 +1,21 @@
-name: Build MSIX for Microsoft Store
+# ⚠ DEPRECATED (2026-07-02) — DO NOT RUN.
+#
+# This workflow hand-authors an AppxManifest.xml using a bare `StartPage="index.html"`
+# Application element (no Executable/EntryPoint/uap10:HostId). That declaration is the
+# legacy "JavaScript UWP app" model (WinJS/wwahost.exe-era) — NOT WebView2. It is a
+# different, effectively unmaintained rendering path that predates WebView2 and was
+# never migrated to Chromium. Which exact build of that legacy renderer runs is tied to
+# the Windows OS build itself, which is why 20 submissions (v1.0.0.0 -> v3.1.0.0) each
+# crashed at launch with `Error: N/A` on a different device/OS build, "fixed" by
+# stripping one more CSS/HTML feature each time, and never converged.
+#
+# MSIX generation has moved to pwabuilder.com (PWABuilder's Hosted App Model, backed by
+# real Chromium Edge). See STORE_SUBMISSION_GUIDE.md Part 1 and CLAUDE.md "Store
+# submission" section for the full root-cause writeup and the new build steps.
+#
+# Kept here for historical reference only.
+
+name: "[DEPRECATED — use pwabuilder.com] Build MSIX for Microsoft Store"
 
 on:
   workflow_dispatch:
