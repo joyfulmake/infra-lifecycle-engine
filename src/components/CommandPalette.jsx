@@ -30,7 +30,7 @@ function buildCommands(s) {
       cmds.push({
         id: `domain-${d.id}`,
         group: 'Switch Domain',
-        label: `${d.icon} ${d.label}`,
+        label: d.label,
         meta: d.category,
         run: () => {
           if (s.isDirty && !window.confirm(`Switch to ${d.label}? This clears the current in-progress build.`)) return;

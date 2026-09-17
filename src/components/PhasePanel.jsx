@@ -1154,7 +1154,8 @@ export default function PhasePanel() {
             style={{ background: `${getDomainMeta(s.activeDomain).accent}22`, color: getDomainMeta(s.activeDomain).accent }}
             title="Current PM domain — change it below in Phase 1"
           >
-            {getDomainMeta(s.activeDomain).icon} {getDomainMeta(s.activeDomain).shortLabel}
+            {(() => { const Icon = getDomainMeta(s.activeDomain).icon; return <Icon className="w-3 h-3" />; })()}
+            {getDomainMeta(s.activeDomain).shortLabel}
           </span>
         </div>
       </div>
@@ -1243,7 +1244,7 @@ export default function PhasePanel() {
                 className="w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors flex items-center gap-2"
                 style={{ background: `${getDomainMeta(s.activeDomain).accent}1A`, borderColor: `${getDomainMeta(s.activeDomain).accent}55` }}
               >
-                <span className="text-sm flex-shrink-0">{getDomainMeta(s.activeDomain).icon}</span>
+                {(() => { const Icon = getDomainMeta(s.activeDomain).icon; return <Icon className="w-4 h-4 flex-shrink-0" style={{ color: getDomainMeta(s.activeDomain).accent }} />; })()}
                 <span className="min-w-0 flex-1 text-xs font-semibold truncate" style={{ color: getDomainMeta(s.activeDomain).accent }}>
                   {getDomainMeta(s.activeDomain).shortLabel}
                 </span>
@@ -1259,6 +1260,7 @@ export default function PhasePanel() {
                       <div className="space-y-1">
                         {cat.domains.map(d => {
                           const active = s.activeDomain === d.id;
+                          const Icon = d.icon;
                           return (
                             <button
                               key={d.id}
@@ -1274,7 +1276,7 @@ export default function PhasePanel() {
                                 ? { background: `${d.accent}1A`, borderColor: `${d.accent}55` }
                                 : { background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
                             >
-                              <span className="text-sm flex-shrink-0">{d.icon}</span>
+                              <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? d.accent : 'rgba(255,255,255,0.62)' }} />
                               <span className="min-w-0 flex-1 text-xs font-medium truncate" style={{ color: active ? d.accent : 'rgba(255,255,255,0.82)' }}>{d.shortLabel}</span>
                               {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: d.accent }} />}
                             </button>
