@@ -804,6 +804,12 @@ export default function PhasePanel() {
   // explicit thing a user does, not a silently pre-selected "Infra" chip
   // they have to notice and click "Change" to override.
   const [domainPickerOpen, setDomainPickerOpen] = useState(true);
+  // Tracks whether the user has actually clicked a domain yet. store.activeDomain
+  // defaults to 'infra' (a required internal default — the whole app assumes a
+  // valid domain id), but that's an implementation detail, not a real choice.
+  // Until this is true, the header pill and the picker's "current selection"
+  // highlight stay neutral instead of presenting 'infra' as if already chosen.
+  const [domainConfirmed, setDomainConfirmed] = useState(false);
   const [hwSel, setHwSel] = useState('');
   const [osSel, setOsSel] = useState('');
   const [dbSel, setDbSel] = useState('');
@@ -958,6 +964,12 @@ export default function PhasePanel() {
     const db = dbCustom || (dbSel !== '' && dbSel !== '__custom' ? dbSel : dbCustom);
     const app = appCustom || (appSel !== '' && appSel !== '__custom' ? appSel : appCustom);
     if (!hw || !os || !db || !app) return;
+    // Domain defaults to 'infra' internally (see domainConfirmed state above)
+    // but that's never meant to be a silent choice — confirm before building
+    // on it if the user never actually opened/clicked the PM Domain picker.
+    if (!domainConfirmed && !window.confirm(
+      `No PM domain was explicitly chosen — build this as "${getDomainMeta(s.activeDomain).label}"? Click Cancel to go back and pick a domain first.`
+    )) return;
     // Only block signed-in users who've hit their plan's build limit
     if (authUser && buildLimitReached(authUser)) {
       openAuthModal('build_limit');
@@ -1180,14 +1192,20 @@ export default function PhasePanel() {
         </div>
         <div className="flex items-center gap-1.5 pl-4">
           <span className="text-xs text-white/58">Guided delivery platform</span>
-          <span
-            className="inline-flex items-center gap-1 text-xs font-semibold rounded-full px-1.5 py-0.5 leading-tight"
-            style={{ background: `${getDomainMeta(s.activeDomain).accent}22`, color: getDomainMeta(s.activeDomain).accent }}
-            title="Current PM domain — change it below in Phase 1"
-          >
-            {(() => { const Icon = getDomainMeta(s.activeDomain).icon; return <Icon className="w-3 h-3" />; })()}
-            {getDomainMeta(s.activeDomain).shortLabel}
-          </span>
+          {domainConfirmed || s.isBuilt ? (
+            <span
+              className="inline-flex items-center gap-1 text-xs font-semibold rounded-full px-1.5 py-0.5 leading-tight"
+              style={{ background: `${getDomainMeta(s.activeDomain).accent}22`, color: getDomainMeta(s.activeDomain).accent }}
+              title="Current PM domain — change it below in Phase 1"
+            >
+              {(() => { const Icon = getDomainMeta(s.activeDomain).icon; return <Icon className="w-3 h-3" />; })()}
+              {getDomainMeta(s.activeDomain).shortLabel}
+            </span>
+          ) : (
+            <span className="text-xs text-white/52 italic" title="No domain chosen yet — pick one in Phase 1 below">
+              Choose your PM domain ↓
+            </span>
+          )}
         </div>
       </div>
 
@@ -1229,19 +1247,27 @@ export default function PhasePanel() {
               categories don't clutter the sidebar — expand to browse/switch. */}
           {!s.isBuilt && (
             <div className="mb-3">
-              <label className="text-xs font-medium text-white/82 block mb-1.5">PM Domain</label>
-              <button
-                onClick={() => setDomainPickerOpen(o => !o)}
-                className="w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors flex items-center gap-2"
-                style={{ background: `${getDomainMeta(s.activeDomain).accent}1A`, borderColor: `${getDomainMeta(s.activeDomain).accent}55` }}
-              >
-                {(() => { const Icon = getDomainMeta(s.activeDomain).icon; return <Icon className="w-4 h-4 flex-shrink-0" style={{ color: getDomainMeta(s.activeDomain).accent }} />; })()}
-                <span className="min-w-0 flex-1 text-xs font-semibold truncate" style={{ color: getDomainMeta(s.activeDomain).accent }}>
-                  {getDomainMeta(s.activeDomain).shortLabel}
-                </span>
-                <span className="text-white/52 text-xs flex-shrink-0">{domainPickerOpen ? '▾ Close' : '▸ Change'}</span>
-              </button>
-              <div className="text-xs text-white/52 mt-1.5 leading-snug">{getDomainMeta(s.activeDomain).description}</div>
+              <label className="text-xs font-medium text-white/82 block mb-1.5">
+                PM Domain {!domainConfirmed && <span className="text-amber-300 font-normal">— choose one to continue</span>}
+              </label>
+              {domainConfirmed ? (
+                <>
+                  <button
+                    onClick={() => setDomainPickerOpen(o => !o)}
+                    className="w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors flex items-center gap-2"
+                    style={{ background: `${getDomainMeta(s.activeDomain).accent}1A`, borderColor: `${getDomainMeta(s.activeDomain).accent}55` }}
+                  >
+                    {(() => { const Icon = getDomainMeta(s.activeDomain).icon; return <Icon className="w-4 h-4 flex-shrink-0" style={{ color: getDomainMeta(s.activeDomain).accent }} />; })()}
+                    <span className="min-w-0 flex-1 text-xs font-semibold truncate" style={{ color: getDomainMeta(s.activeDomain).accent }}>
+                      {getDomainMeta(s.activeDomain).shortLabel}
+                    </span>
+                    <span className="text-white/52 text-xs flex-shrink-0">{domainPickerOpen ? '▾ Close' : '▸ Change'}</span>
+                  </button>
+                  <div className="text-xs text-white/52 mt-1.5 leading-snug">{getDomainMeta(s.activeDomain).description}</div>
+                </>
+              ) : (
+                <div className="text-xs text-white/52 leading-snug">Pick the domain that matches this project — it shapes every field, tab, and catalog below.</div>
+              )}
 
               {domainPickerOpen && (
                 <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] p-2 max-h-72 overflow-y-auto space-y-2.5">
@@ -1250,16 +1276,18 @@ export default function PhasePanel() {
                       <div className="text-xs text-white/52 uppercase tracking-wide font-semibold mb-1 px-0.5">{cat.label}</div>
                       <div className="space-y-1">
                         {cat.domains.map(d => {
-                          const active = s.activeDomain === d.id;
+                          const isCurrent = s.activeDomain === d.id;
+                          const active = domainConfirmed && isCurrent;
                           const Icon = d.icon;
                           return (
                             <button
                               key={d.id}
                               onClick={() => {
-                                if (!active) {
+                                if (!isCurrent) {
                                   if (s.isDirty && !window.confirm(`Switch to ${d.label}? This clears the current in-progress build.`)) return;
                                   s.setActiveDomain(d.id);
                                 }
+                                setDomainConfirmed(true);
                                 setDomainPickerOpen(false);
                               }}
                               className="w-full text-left rounded-md px-2 py-1.5 border transition-colors flex items-center gap-2"
