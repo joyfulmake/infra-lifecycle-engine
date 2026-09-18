@@ -2260,7 +2260,7 @@ export default function PhasePanel() {
           {!s.isBuilt ? (
             <div className="text-xs text-white/40 flex items-center gap-2 py-1">{LOCK_ICON} Build environment first</div>
           ) : (
-            <button className="btn-green" onClick={handleExport}>Export to Excel (up to 17 Sheets)</button>
+            <button className="btn-green" onClick={handleExport}>Export to Excel (up to 18 Sheets)</button>
           )}
         </div>
       </div>

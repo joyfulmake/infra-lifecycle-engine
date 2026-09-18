@@ -118,10 +118,15 @@ export default function DeployTab() {
   const [addEnv,   setAddEnv]   = useState('');
 
   // Seed the 5 universal stages once, the first time this tab is opened on a
-  // build with none yet. Safe to check deployStages.length at render time —
-  // this only fires on mount, and re-running it is a no-op once non-empty.
+  // build with none yet. Reads useStore.getState() directly rather than the
+  // closed-over `deployStages` — React's dev-mode StrictMode double-invokes
+  // effects on mount (mount -> cleanup -> remount), and a closed-over prop
+  // value is stale across that remount (still the initial-render empty
+  // array on both invocations), which duplicated the seed. The Zustand
+  // store itself is a live, global singleton, not per-component state, so
+  // reading it fresh here always reflects the first invocation's writes.
   useEffect(() => {
-    if (deployStages.length === 0) {
+    if (useStore.getState().deployStages.length === 0) {
       const now = new Date().toISOString();
       DEFAULT_STAGES.forEach(({ stage, label }) => {
         store.addDeployStage({
