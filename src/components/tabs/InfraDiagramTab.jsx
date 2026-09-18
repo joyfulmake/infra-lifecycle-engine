@@ -4,6 +4,7 @@ import { ALL_INC } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { buildStructuralMap, buildFunctionalFlow, buildCompatibilityMatrix, buildRuleBasedMissionIntel } from '../../lib/infraMap.js';
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
+import AgentInsights from '../AgentInsights.jsx';
 import { analyzeMissionContext } from '../../lib/groq.js';
 
 // ─── Progressive LayerBox ─────────────────────────────────────────────────────
@@ -491,6 +492,8 @@ export default function InfraDiagramTab() {
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+
+      <AgentInsights tab="diagram" />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-3">

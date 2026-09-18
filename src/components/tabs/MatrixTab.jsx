@@ -8,6 +8,7 @@ import { buildDesignTasks } from '../../lib/designTasks.js';
 import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
 import { enrichTaskWithGroq, friendlyGroqError } from '../../lib/groq.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 // ── Layer definitions (bottom of stack → top) ────────────────────────────────
 
@@ -387,6 +388,10 @@ export default function MatrixTab() {
             <div>Click any task card to inspect</div>
             <div>7-point FSM metadata</div>
           </div>
+        </div>
+
+        <div className="px-4 pt-2">
+          <AgentInsights tab="matrix" />
         </div>
 
         <MatrixStats layerMap={layerMap} />

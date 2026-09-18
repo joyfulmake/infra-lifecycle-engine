@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore.js';
 import { computeAllRisks, riskScore, riskLabel } from '../../lib/riskEngine.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 const SEV_STYLE = {
   CRITICAL: { bar: 'bg-red-500',    badge: 'bg-red-100 text-red-700 border-red-200',    border: 'border-l-red-500',    dot: 'bg-red-500'    },
@@ -200,6 +201,8 @@ export default function RiskTrackerTab() {
 
   return (
     <div className="p-4 space-y-5">
+      <AgentInsights tab="risks" />
+
       {/* Header */}
       <div className="flex items-start gap-5">
         <ScoreDial score={score} label={rl} />

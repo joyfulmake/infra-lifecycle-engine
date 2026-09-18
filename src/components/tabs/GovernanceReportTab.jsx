@@ -4,6 +4,7 @@ import { verifyAuditChain } from '../../lib/auditChain.js';
 import { computeAllRisks, riskScore, riskLabel } from '../../lib/riskEngine.js';
 import { buildProjectGraph } from '../../engine/projectGraph.js';
 import { detectCycles, findUnlinkedRaidItems } from '../../engine/graphValidation.js';
+import AgentInsights from '../AgentInsights.jsx';
 import { computeTaskRWCB, computeEVM, computePVI, computeRoleDeliveryConfidence, computeRiskAdjustedCostExposure } from '../../engine/mathEngine.js';
 import { calcDates } from '../../lib/scheduling.js';
 import { computeComplianceStatus } from '../../lib/complianceMatrix.js';
@@ -130,6 +131,8 @@ export default function GovernanceReportTab() {
         </div>
       </div>
       <div className="text-xs text-slate-400 mb-4">Live status against this project's own constraints — schedule, cost, risk, capacity, and compliance — recomputed from current data every time you open this tab, not a cached snapshot.</div>
+
+      <AgentInsights tab="governance" />
 
       {/* RAG summary */}
       <div className="grid grid-cols-2 min-[900px]:grid-cols-5 gap-2.5 mb-4">

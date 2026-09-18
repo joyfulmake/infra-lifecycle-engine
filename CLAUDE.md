@@ -84,7 +84,7 @@ src/
       RaidTab.jsx         — RAID log (Risks, Assumptions, Issues, Decisions)
       ClosureTab.jsx      — post-go-live closure checklist & notes
       RolesTab.jsx        — 20-role RACI table; editable by PM/backup (Pro+); view-only for all plans
-    AgentInsights.jsx   — compact cross-tab advisory panel; takes `tab` prop; reads `coherenceAlerts` from store; collapses to single-line strip, expands to full list; blue = info, amber = warn; rendered at top of ExecSummary, SystemDesign, RTM, Closure, Roles tabs
+    AgentInsights.jsx   — compact cross-tab advisory panel; takes `tab` prop; reads `coherenceAlerts` from store; renders null if no alert targets that tab (safe to mount anywhere); collapses to single-line strip, expands to full list; blue = info, amber = warn; rendered at top of every tab (2026-09-18: rolled out app-wide — was previously only on ExecSummary/SystemDesign/RTM/Closure/Roles/RAID/Dependency Graph; now also Gantt, Matrix, Vulnerabilities, Risk Tracker, Cost, Governance Report, Infra Diagram)
   lib/
     incidents.js          — incident catalog
     uumItems.js           — UUM (Unix/User/Middleware) catalog

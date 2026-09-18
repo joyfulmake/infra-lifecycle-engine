@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../store/useStore.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 const SEV_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 const STATUS_OPTS = ['ACTIVE', 'PARKED', 'WORKAROUND', 'FIXED', 'ACCEPTED_RISK'];
@@ -184,6 +185,8 @@ export default function VulnTab() {
 
   return (
     <div className="p-4 space-y-4">
+      <AgentInsights tab="vuln" />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

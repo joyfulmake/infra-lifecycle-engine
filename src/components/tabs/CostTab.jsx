@@ -4,6 +4,7 @@ import { buildDesignTasks } from '../../lib/designTasks.js';
 import { getRealTasks } from '../../lib/realTasks.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { buildProjectGraph } from '../../engine/projectGraph.js';
+import AgentInsights from '../AgentInsights.jsx';
 import { computeTaskRWCB, computeRiskAdjustedCostExposure } from '../../engine/mathEngine.js';
 import StatTile from '../ui/StatTile.jsx';
 
@@ -182,6 +183,8 @@ export default function CostTab() {
 
   return (
     <div className="p-4 space-y-5">
+      <AgentInsights tab="cost" />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

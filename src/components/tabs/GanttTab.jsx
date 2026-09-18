@@ -11,6 +11,7 @@ import { enrichTask, FSM_STATE_STYLE } from '../../lib/taskMetadata.js';
 import { GROQ_CONFIGURED } from '../../lib/groqConfig.js';
 import { enrichTaskWithGroq, friendlyGroqError } from '../../lib/groq.js';
 import { BUFFER, taskKey, addWorkingHours, fmtDate, isWeekend, calcDates, computeCPM } from '../../lib/scheduling.js';
+import AgentInsights from '../AgentInsights.jsx';
 
 const TEAM_COLORS = {
   'NetAdmin': 'badge-blue', 'NetAdmin + WebAdmin': 'badge-blue',
@@ -711,6 +712,8 @@ export default function GanttTab() {
 
   return (
     <div className="p-4 h-full overflow-y-auto fade-in">
+
+      <AgentInsights tab="gantt" />
 
       {/* Stale tasks banner */}
       {s.tasksStaleReason && (
