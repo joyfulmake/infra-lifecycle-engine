@@ -14,11 +14,11 @@ export const PLANS = {
       '2 builds per year (browser storage)',
       'Full build workflow — all 7 phases',
       'Save & load builds locally',
-      'Excel export — core 13 sheets',
+      'Excel export — core 15 sheets',
       'AI Smart Scan (no API key)',
       'CAB + RTM + Closure workflow',
     ],
-    gated: ['Full 16-sheet Excel export', 'Tech review locking', 'Team collaboration'],
+    gated: ['Full 18-sheet Excel export', 'Tech review locking', 'Team collaboration'],
   },
   professional: {
     id: 'professional',
@@ -31,7 +31,7 @@ export const PLANS = {
     description: '15 builds per year — full exports, advanced workflows for power users',
     features: [
       '15 builds per year',
-      'Full 16-sheet Excel export incl. Gantt Timeline, System Design, and Closure Summary',
+      'Full 18-sheet Excel export incl. Gantt Timeline, System Design, and Closure Summary',
       'Tech review locking workflow',
       'Role-based design editing (PM / Admin)',
       'Build versioning',

@@ -184,6 +184,7 @@ export function exportExcel(state) {
     customInc = [], customUUM = [],
     customMentorTasks = [], customRaidEntries = [],
     vulnRegistry = [], stakeholderDiscussions = [], actionAuditLog = [],
+    deployStages = [], servicesRegistry = [],
     rtmRows = {}, liveEolData = {}, activeDomain = 'infra',
     isBuilt = true, phase2Active = false,
     cabDeclined = false, rtmStale = false,
@@ -931,6 +932,62 @@ export function exportExcel(state) {
     XLSX.utils.book_append_sheet(wb, ws, 'Vulnerability Registry');
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 15: Deploy Pipeline
+  // ══════════════════════════════════════════════════════════════════════════
+  if (deployStages.length > 0) {
+    const rows = [
+      [c('Deploy Pipeline', ST.H1), '', '', '', '', ''],
+      [c('Stage', ST.H2), c('Environment', ST.H2), c('Status', ST.H2), c('Owner', ST.H2), c('Notes', ST.H2), c('Blocked / Failure Reason', ST.H2)],
+    ];
+    deployStages.forEach((d, i) => {
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      const statStyle = d.status === 'PASSED' ? ST.PASS : (d.status === 'BLOCKED' || d.status === 'FAILED') ? ST.FAIL : ST.AMBER_V;
+      rows.push([
+        c(d.label || d.stage || '', bg),
+        c(d.env || '—', ctd(bg)),
+        c((d.status || 'PENDING').replace('_', ' '), ctd(statStyle)),
+        c(d.owner || '—', ctd(bg)),
+        c(d.notes || '—', bg),
+        c(d.blockedReason || '—', bg),
+      ]);
+    });
+    const ws = buildSheet(rows);
+    ws['!cols'] = [{ width: 28 }, { width: 16 }, { width: 14 }, { width: 20 }, { width: 45 }, { width: 45 }];
+    applyRowHeights(ws);
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Deploy Pipeline');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 16: Services Register
+  // ══════════════════════════════════════════════════════════════════════════
+  if (servicesRegistry.length > 0) {
+    const rows = [
+      [c('Services & Dependency Register', ST.H1), '', '', '', '', '', ''],
+      [c('Name', ST.H2), c('Provider', ST.H2), c('Type', ST.H2), c('Criticality', ST.H2), c('Owner', ST.H2), c('Renewal Date', ST.H2), c('Status', ST.H2)],
+    ];
+    servicesRegistry.forEach((v, i) => {
+      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
+      const critStyle = v.criticality === 'CRITICAL' ? ST.FAIL : v.criticality === 'HIGH' ? ST.AMBER_V : bg;
+      const statStyle = v.status === 'ACTIVE' ? ST.PASS : v.status === 'AT_RISK' ? ST.FAIL : ST.AMBER_V;
+      rows.push([
+        c(v.name || '', bg),
+        c(v.provider || '—', bg),
+        c(v.serviceType || 'Other', ctd(bg)),
+        c(v.criticality || 'MEDIUM', ctd(critStyle)),
+        c(v.owner || '—', ctd(bg)),
+        c(v.renewalDate || '—', ctd(bg)),
+        c((v.status || 'ACTIVE').replace('_', ' '), ctd(statStyle)),
+      ]);
+    });
+    const ws = buildSheet(rows);
+    ws['!cols'] = [{ width: 30 }, { width: 22 }, { width: 12 }, { width: 14 }, { width: 20 }, { width: 16 }, { width: 14 }];
+    applyRowHeights(ws);
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Services Register');
+  }
+
   // Action audit log (if non-empty)
   if (actionAuditLog.length > 0) {
     const rows = [
@@ -956,7 +1013,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 15: Closure Summary
+  // SHEET 17: Closure Summary
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 6 }, { width: 95 }, { width: 22 }]);

@@ -16,6 +16,8 @@ import GovernanceReportTab from './tabs/GovernanceReportTab.jsx';
 import VulnTab from './tabs/VulnTab.jsx';
 import RiskTrackerTab from './tabs/RiskTrackerTab.jsx';
 import CostTab from './tabs/CostTab.jsx';
+import DeployTab from './tabs/DeployTab.jsx';
+import ServicesTab from './tabs/ServicesTab.jsx';
 
 export const TABS = [
   {
@@ -110,6 +112,23 @@ export const TABS = [
     // No staleDot — cost tab is always neutral unless over budget
   },
   {
+    id: 'deploy',
+    label: 'Deploy',
+    unlocked: s => s.isBuilt,
+    lockMsg: 'Build environment first',
+    staleDot: s => (s.deployStages || []).some(d => d.status === 'BLOCKED' || d.status === 'FAILED'),
+  },
+  {
+    id: 'services',
+    label: 'Services',
+    unlocked: () => true,
+    staleDot: s => (s.servicesRegistry || []).some(v => {
+      if (v.status === 'AT_RISK') return true;
+      if (v.status !== 'ACTIVE' || !v.renewalDate) return false;
+      return (new Date(v.renewalDate) - Date.now()) / 86400000 < 90;
+    }),
+  },
+  {
     id: 'governance',
     label: 'Governance Report',
     unlocked: s => s.isBuilt,
@@ -132,6 +151,8 @@ function TabContent({ activeTab }) {
     case 'vuln':   return <VulnTab />;
     case 'risks':  return <RiskTrackerTab />;
     case 'cost':   return <CostTab />;
+    case 'deploy': return <DeployTab />;
+    case 'services': return <ServicesTab />;
     case 'governance': return <GovernanceReportTab />;
     default: return <ExecSummaryTab />;
   }

@@ -120,7 +120,7 @@ Key features:
 • RAID log (Risks, Assumptions, Issues, Decisions)
 • Role-based access (PM, backup PM, QA Lead)
 • Cloud sync via Firebase (Pro plan)
-• Excel export across 13 sheets
+• Excel export across 15 sheets
 
 Not a CMDB or replacement for ServiceNow/Jira/Confluence — a structured pre-work guide that makes those systems more accurate.
 ```

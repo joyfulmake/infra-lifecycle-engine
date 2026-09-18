@@ -136,6 +136,19 @@ export const useStore = create((set, get) => ({
   // status: ACTIVE | PARKED | WORKAROUND | FIXED | ACCEPTED_RISK
   vulnRegistry: [],
 
+  // Deploy tab — build/test/release pipeline stages, generic across all domains
+  // (SAP transports, Salesforce package deploys, CI/CD, EHR release windows, ...)
+  // [{ id, stage, label, status, owner, env, notes, addedAt, updatedAt, blockedReason }]
+  // status: PENDING | IN_PROGRESS | BLOCKED | PASSED | FAILED
+  deployStages: [],
+
+  // Services tab — vendor/dependency register, generic across all domains
+  // [{ id, name, provider, serviceType, criticality, owner, description, renewalDate, slaTarget, status, addedAt, updatedAt }]
+  // serviceType: IaaS | PaaS | SaaS | FaaS | CaaS | Other
+  // criticality: CRITICAL | HIGH | MEDIUM | LOW
+  // status: ACTIVE | AT_RISK | RETIRED
+  servicesRegistry: [],
+
   // Risk tracker acknowledgments: { [riskId]: { status, notes, acknowledgedAt } }
   // Keyed by computed risk id. Not all live risks will have an entry (default is 'open').
   riskAcknowledgments: {},
@@ -250,6 +263,7 @@ export const useStore = create((set, get) => ({
       sdAiTasks: [], customInc: [], customUUM: [],
       customMentorTasks: [], customRaidEntries: [], customSectionTasks: {},
       vulnRegistry: [], stakeholderDiscussions: [], actionAuditLog: [], riskAcknowledgments: {},
+      deployStages: [], servicesRegistry: [],
       sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
       lockedDesignFields: {}, isDirty: false, currentBuildId: null,
       unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
@@ -264,6 +278,7 @@ export const useStore = create((set, get) => ({
     ctx, selInc: [], selUUM: [], selFix: [], sdAiTasks: [], customInc: [], customUUM: [],
     customMentorTasks: [], customRaidEntries: [], customSectionTasks: {},
     vulnRegistry: [], stakeholderDiscussions: [], actionAuditLog: [], riskAcknowledgments: {},
+    deployStages: [], servicesRegistry: [],
     sysDesignData: initDesignData(), scanResults: [], activeTab: 'exec',
     lockedDesignFields: {}, isDirty: true, currentBuildId: null,
     unlockedForRevision: false, tasksStaleReason: null, rtmStale: false, roleAssignments: {},
@@ -329,6 +344,22 @@ export const useStore = create((set, get) => ({
     isDirty: true,
   })),
   removeVuln: (id) => set(s => ({ vulnRegistry: (s.vulnRegistry || []).filter(v => v.id !== id), isDirty: true })),
+
+  // Deploy pipeline stage actions
+  addDeployStage: (stage) => set(s => ({ deployStages: [...(s.deployStages || []), stage], isDirty: true })),
+  updateDeployStage: (id, patch) => set(s => ({
+    deployStages: (s.deployStages || []).map(d => d.id === id ? { ...d, ...patch, updatedAt: new Date().toISOString() } : d),
+    isDirty: true,
+  })),
+  removeDeployStage: (id) => set(s => ({ deployStages: (s.deployStages || []).filter(d => d.id !== id), isDirty: true })),
+
+  // Services (vendor/dependency) registry actions
+  addService: (svc) => set(s => ({ servicesRegistry: [...(s.servicesRegistry || []), svc], isDirty: true })),
+  updateService: (id, patch) => set(s => ({
+    servicesRegistry: (s.servicesRegistry || []).map(v => v.id === id ? { ...v, ...patch, updatedAt: new Date().toISOString() } : v),
+    isDirty: true,
+  })),
+  removeService: (id) => set(s => ({ servicesRegistry: (s.servicesRegistry || []).filter(v => v.id !== id), isDirty: true })),
 
   // Stakeholder discussion actions
   addStakeholderDiscussion: (entry) => set(s => ({ stakeholderDiscussions: [...(s.stakeholderDiscussions || []), entry], isDirty: true })),
@@ -510,6 +541,8 @@ export const useStore = create((set, get) => ({
     rtmStale: b.rtmStale ?? false,
     roleAssignments: b.roleAssignments ?? {},
     vulnRegistry: b.vulnRegistry ?? [],
+    deployStages: b.deployStages ?? [],
+    servicesRegistry: b.servicesRegistry ?? [],
     stakeholderDiscussions: b.stakeholderDiscussions ?? [],
     actionAuditLog: b.actionAuditLog ?? [],
     dismissedGraphFlags: b.dismissedGraphFlags ?? [],

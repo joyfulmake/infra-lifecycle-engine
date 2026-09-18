@@ -1066,6 +1066,7 @@ export default function PhasePanel() {
         customMentorTasks: s.customMentorTasks || [],
         customRaidEntries: s.customRaidEntries || [],
         vulnRegistry: s.vulnRegistry || [],
+        deployStages: s.deployStages || [], servicesRegistry: s.servicesRegistry || [],
         stakeholderDiscussions: s.stakeholderDiscussions || [],
         actionAuditLog: s.actionAuditLog || [],
         rtmRows: s.rtmRows, liveEolData: s.liveEolData,

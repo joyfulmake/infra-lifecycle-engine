@@ -1,6 +1,7 @@
 import { ALL_INC } from './incidents.js';
 import { ALL_UUM } from './uumItems.js';
 import { checkCompatibility, checkCompatibilityForText } from './compatibilityRules.js';
+import { DESIGN_SECTIONS } from '../store/useStore.js';
 
 function hasLayer(code, layer, customInc) {
   const inc = ALL_INC.find(i => i.code === code) || (customInc || []).find(c => c.code === code);
@@ -34,6 +35,9 @@ export function runCoherenceChecks(state) {
     requirements = {},
     rtmRows = {},
     roleAssignments = {},
+    activeDomain = 'infra',
+    deployStages = [],
+    servicesRegistry = [],
     // Sign-off flow fields
     promoted = false,
     cabApproved = false,
@@ -166,9 +170,16 @@ export function runCoherenceChecks(state) {
     }
   }
 
-  // 9. Critical roles not assigned
+  // 9. Critical roles not assigned. 'Unix Admin'/'DB Admin'/'SecOps' were
+  // hardcoded regardless of domain — every non-infra domain's RolesTab uses
+  // buildGenericRoles(DESIGN_SECTIONS) instead (different owner names per
+  // domain, e.g. 'EHR Analyst', 'SAP Basis'), so this check always nagged
+  // about three roles that domain would never assign. Derive the same three
+  // "critical" slots from the active domain's own section owners.
   if (phase2Active) {
-    const CRITICAL = ['Unix Admin', 'DB Admin', 'SecOps'];
+    const CRITICAL = activeDomain === 'infra'
+      ? ['Unix Admin', 'DB Admin', 'SecOps']
+      : DESIGN_SECTIONS.slice(0, 3).map(sec => sec.owner).filter(Boolean);
     const missing = CRITICAL.filter(role => !roleAssignments[role]?.email?.trim());
     if (missing.length > 0) {
       alerts.push({
@@ -371,6 +382,46 @@ export function runCoherenceChecks(state) {
           });
         }
       }
+    }
+  }
+
+  // 16. Deploy pipeline stage blocked or failed
+  {
+    const blocked = deployStages.filter(d => d.status === 'BLOCKED' || d.status === 'FAILED');
+    if (blocked.length > 0) {
+      alerts.push({
+        id: 'deploy_stage_blocked',
+        severity: 'warn',
+        tabs: ['deploy', 'exec'],
+        message: `${blocked.length} deploy stage(s) blocked or failed: ${blocked.map(d => d.label).slice(0, 2).join(', ')}${blocked.length > 2 ? ` +${blocked.length - 2} more` : ''}.`,
+        action: 'Deploy tab → resolve blocked/failed stages',
+      });
+    }
+  }
+
+  // 17. Service/vendor contract renewing soon or at risk
+  {
+    const now = Date.now();
+    const atRisk = servicesRegistry.filter(v => v.status === 'AT_RISK');
+    const renewingSoon = servicesRegistry.filter(v =>
+      v.status === 'ACTIVE' && v.renewalDate && (new Date(v.renewalDate) - now) / 86400000 < 90
+    );
+    if (atRisk.length > 0) {
+      alerts.push({
+        id: 'service_at_risk',
+        severity: 'warn',
+        tabs: ['services', 'exec'],
+        message: `${atRisk.length} service(s) flagged AT RISK: ${atRisk.map(v => v.name).slice(0, 2).join(', ')}${atRisk.length > 2 ? ` +${atRisk.length - 2} more` : ''}.`,
+        action: 'Services tab → review vendor/contract status',
+      });
+    } else if (renewingSoon.length > 0) {
+      alerts.push({
+        id: 'service_renewal_soon',
+        severity: 'info',
+        tabs: ['services'],
+        message: `${renewingSoon.length} service(s) renewing within 90 days: ${renewingSoon.map(v => v.name).slice(0, 2).join(', ')}${renewingSoon.length > 2 ? ` +${renewingSoon.length - 2} more` : ''}.`,
+        action: 'Services tab → confirm renewal or plan migration',
+      });
     }
   }
 

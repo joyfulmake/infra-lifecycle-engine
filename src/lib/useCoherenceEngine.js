@@ -22,6 +22,9 @@ export function useCoherenceEngine() {
   const roleAssignments = useStore(s => s.roleAssignments);
   const liveEolData = useStore(s => s.liveEolData);
   const customUUM   = useStore(s => s.customUUM);
+  const activeDomain = useStore(s => s.activeDomain);
+  const deployStages = useStore(s => s.deployStages);
+  const servicesRegistry = useStore(s => s.servicesRegistry);
   const setCoherenceAlerts = useStore(s => s.setCoherenceAlerts);
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export function useCoherenceEngine() {
       isBuilt, designApplied, phase2Active, rtmSigned,
       promoted, cabApproved, rtmStale, tasksStaleReason,
       selInc, selUUM, customInc, customUUM, sysDesignData, requirements, rtmRows, roleAssignments,
-      liveEolData,
+      liveEolData, activeDomain, deployStages, servicesRegistry,
     };
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
@@ -41,5 +44,5 @@ export function useCoherenceEngine() {
     }, 600);
     return () => clearTimeout(timerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBuilt, designApplied, phase2Active, rtmSigned, promoted, cabApproved, rtmStale, tasksStaleReason, selInc, selUUM, customInc, customUUM, sysDesignData, requirements, rtmRows, roleAssignments, liveEolData]);
+  }, [isBuilt, designApplied, phase2Active, rtmSigned, promoted, cabApproved, rtmStale, tasksStaleReason, selInc, selUUM, customInc, customUUM, sysDesignData, requirements, rtmRows, roleAssignments, liveEolData, activeDomain, deployStages, servicesRegistry]);
 }
