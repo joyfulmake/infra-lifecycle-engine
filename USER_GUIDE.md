@@ -31,7 +31,7 @@ Nothing is pre-selected — you have to actually choose, because this choice cha
 
 ---
 
-## Step 1 — Project Setup *(sidebar: "Phase 1")*
+## Step 1 — Project Setup *(the onboarding screens right after you pick a domain)*
 
 Fill in your project's four stack fields (whatever your domain calls them) plus the basics: project name, environment type (Production/UAT/DR/Dev/SIT), go-live date, SLA target, project start date, hours-per-day for scheduling. Click **Build Environment**.
 

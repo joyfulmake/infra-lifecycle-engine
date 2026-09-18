@@ -39,15 +39,23 @@ Think of a project as having two questions at every stage:
 
 OpsManifest walks through both, in order, without letting you skip steps. This is the same shape for every domain — only the vocabulary changes (infra's "Hardware/OS/Database/Application" becomes SAP's "Product/Release/Deployment Model/Module Scope", Healthcare's "Care Setting/EHR Platform/Regulatory Region/Channel", and so on for the other 13 domains).
 
+Before any of that, a full-screen onboarding wizard (added 2026-09-18,
+replacing what used to be a cramped section inside the sidebar) walks
+through the domain choice and initial scope in three short screens —
+domain (with a "continue a saved build instead" escape hatch for
+returning users), stack/scope, review — before the app itself, sidebar,
+16-tab bar and all, ever appears. See `OnboardingWizard` in
+`PhasePanel.jsx` and the `!s.isBuilt` branch in `App.jsx`.
+
 ```
-Step 0: Which kind of project is this?
+Step 0: Which kind of project is this?  (wizard screen 1)
   → Pick one of 16 PM domains (infra, cloud migration, SAP, Salesforce,
     Healthcare, Retail, ...) — nothing is pre-selected as a default
   → Every field, tab, and catalog below now speaks that domain's language
 
-Phase 1: What are we building?
-  → Pick the domain's own 4 stack/scope fields
-  → The tool now knows your project
+Phase 1: What are we building?  (wizard screens 2-3)
+  → Pick the domain's own 4 stack/scope fields, review, then Build
+  → The tool now knows your project — the normal sidebar+tabs app appears
 
 AI Smart Scan
   → Rule-based scan (no API key) against a built-in CVE/EOL/security-gap catalog
@@ -306,8 +314,8 @@ What happens from the moment you open the tool to the moment you export a comple
 ### UI Components
 | Component | Role |
 |---|---|
-| `App.jsx` | Root layout: PhasePanel sidebar + ExecOverview + PmTabs; 1160px desktop/drawer breakpoint |
-| `PhasePanel.jsx` | Left sidebar: domain picker (first choice, no default shown), phase controls, save/load, export |
+| `App.jsx` | Root layout: before a build exists, renders only `PhasePanel`'s onboarding wizard full-viewport; once built, the normal PhasePanel sidebar + ExecOverview + PmTabs three-pane layout (1160px desktop/drawer breakpoint) |
+| `PhasePanel.jsx` | Before a build: `OnboardingWizard` (domain → stack/scope → review, full screen, own theme toggle). After: left sidebar — phase controls, save/load, export; the domain picker is still reachable here too (Phase 1 section's "▸ Change" link), unchanged from before the wizard existed |
 | `ExecOverview.jsx` | Top strip: KPI tiles, milestones, unsaved indicator |
 | `PmTabs.jsx` | Tab bar + `getNextTabId()` for "Next" workflow badge; mounts the coherence hook |
 | `AgentInsights.jsx` | Advisory strip mounted at the top of every tab; reads `coherenceAlerts` |
