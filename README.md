@@ -1,27 +1,28 @@
 # OpsManifest
-### Infrastructure Lifecycle Engine
+### Guided Delivery Platform — 16 PM Domains
 
 > *Not a CMDB. Not a ticketing system. The structured pre-work that makes both of those accurate.*
 
-A React SPA that walks infrastructure PMs through the full server provisioning lifecycle — from hardware selection to CAB approval to project closure. Built for teams who know that the real problem isn't tracking infrastructure; it's the 40 decisions made before anything gets tracked.
+A React SPA that walks project delivery teams through a full change lifecycle — from initial stack/scope selection to CAB approval to project closure. Started as an infrastructure-only tool; now covers 16 PM domains (infra, cloud migration, DevOps, cybersecurity, SAP, Salesforce, Oracle EBS, Dynamics 365, BFSI, Healthcare, Manufacturing, Telecom, Retail, App Dev, and more) with the same guided workflow underneath, each speaking that domain's own vocabulary.
 
 **Live →** https://opsmanifest.pages.dev
+**Full walkthrough with security details →** [`USER_GUIDE.md`](./USER_GUIDE.md)
 
 ---
 
 ## What it does
 
-Every server provisioning project has the same shape: requirements → design → procurement → config → handoff → closure. OpsManifest makes that shape explicit, enforces the right questions at each stage, and produces audit-ready outputs for ServiceNow, Jira, or CAB.
+Every one of the 16 domains has the same shape: pick your domain → set up scope → design → triage known risks → CAB approval → schedule → sign-off → closure. OpsManifest makes that shape explicit, enforces the right questions at each stage, and produces audit-ready outputs for ServiceNow, Jira, or CAB — see [`USER_GUIDE.md`](./USER_GUIDE.md) for the full step-by-step with what you gain at each stage.
 
 ```
-Project created → Stage-by-stage workflow
+Pick a PM domain → Stage-by-stage workflow (same shape, every domain)
      │
-     ├─ Hardware & OS selection      → validated against EOL calendar
-     ├─ System design                → architecture decisions recorded
-     ├─ Incident triage              → runbooks linked, escalation paths set
-     ├─ CAB approval                 → structured change record generated
-     ├─ RTM sign-off                 → requirements traced to deliverables
-     └─ Project closure              → handoff doc generated
+     ├─ Stack / scope selection       → validated against EOL calendar
+     ├─ System design                → architecture decisions recorded, role-locked
+     ├─ Known issue / change triage   → tasks generated, escalation paths set
+     ├─ CAB approval                  → structured change record generated
+     ├─ RTM sign-off                  → requirements traced to deliverables
+     └─ Project closure               → handoff doc generated
 ```
 
 ---

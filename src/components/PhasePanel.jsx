@@ -895,7 +895,7 @@ export default function PhasePanel() {
     cabdeclined: 'Change DECLINED by CAB. Execute rollback plan, then resubmit with revised scope.',
     rtm:         'Open RTM tab → manually review each row → set status → Sign Off.',
     cutover:     'All gates green — execute Production Cutover to go live.',
-    export:      'Download the full Excel workbook (up to 17 sheets) for stakeholder review.',
+    export:      'Download the full Excel workbook (up to 18 sheets) for stakeholder review.',
   };
 
   // Tooltip copy for the top mini-nav — what each step does and why it matters,

@@ -135,7 +135,7 @@ Honest audit as of 2026-06-21. Based on actual code, not marketing copy.
 
 | Item | Status | Notes |
 |---|---|---|
-| endoflife.date live API | `[DONE]` | CMDB tab, stack live check |
+| endoflife.date live API | `[DONE]` | Build-phase live search + UUM search (dedicated CMDB tab removed 2026-09-17 — see CLAUDE.md) |
 | Groq LLM via CF Worker | `[DONE]` | `workers/ai-worker.js` |
 | Azure TTS / Cartesia / ElevenLabs via Worker | `[DONE]` | TTS queue in OrchestratorPanel |
 | Firebase Firestore | `[DONE]` | Cloud sync |
