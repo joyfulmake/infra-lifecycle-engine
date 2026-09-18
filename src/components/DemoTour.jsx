@@ -4,19 +4,19 @@ const SLIDES = [
   {
     icon: '⚙',
     title: 'OpsManifest',
-    body: 'One guided delivery workflow for any project — infra, apps, SAP, cloud migration, and more: design, risk, approval, and sign-off in one place. Works alongside ServiceNow / Jira, not a replacement for them.',
+    body: 'One guided delivery workflow across 16 PM domains — infra, SAP, cloud migration, Healthcare, Salesforce, and more: design, risk, approval, and sign-off in one place. Works alongside ServiceNow / Jira, not a replacement for them.',
     step: 'Welcome',
     color: ['#0F1F35', '#1A2E4A'],
     accent: '#14B8A6',
   },
   {
     icon: '🖥',
-    title: '1. Build Your Stack',
-    body: 'Pick hardware, OS, database, and app tier in the sidebar, then hit Build. An instant AI scan checks it against live CVE and end-of-life data.',
+    title: '1. Pick Your Domain, Build Your Stack',
+    body: 'Choose the domain that matches your project — every field, catalog, and screen adapts to speak its language. Fill in your stack/scope and hit Build. An instant AI scan checks it against live CVE and end-of-life data.',
     step: 'Navigate',
     color: ['#0F1F35', '#1E3A5F'],
     accent: '#3B82F6',
-    hint: 'Sidebar → Hardware / OS / DB / App',
+    hint: 'Opening screen → choose a domain → fill in your stack',
   },
   {
     icon: '📐',
@@ -48,12 +48,13 @@ const SLIDES = [
   {
     icon: '🏆',
     title: 'Built to Outclass Enterprise PPM',
-    body: 'Five things ServiceNow, Clarity, Planview, Jira Align, and MS Project don’t do out of the box:',
+    body: 'Six things ServiceNow, Clarity, Planview, Jira Align, and MS Project don’t do out of the box:',
     step: 'Why OpsManifest',
     color: ['#0F1F35', '#1A0F2E'],
     accent: '#F59E0B',
     bullets: [
       'Live CVE/EOL scan gates your design — before you build, not after',
+      'Built-in AI advisor grounded in your actual build, not a generic chatbot',
       'Every task auto-links to its real risks, with live schedule & cost health',
       'CAB approval and RTM sign-off are native, not a workflow you configure',
       'Country + industry auto-surface the compliance obligations that apply',
