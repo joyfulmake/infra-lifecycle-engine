@@ -327,6 +327,17 @@ curl -X PUT "https://api.cloudflare.com/client/v4/accounts/254fa20341a7b0c164581
   -d '{"name":"GROQ_API_KEY","text":"gsk_...","type":"secret_text"}'
 ```
 
+**Redeploying `workers/ai-worker.js`** (2026-09-18): this repo has no `wrangler.toml` of its own, and `wrangler deploy` walks UP the directory tree looking for one — on this machine that finds an unrelated sibling project's `wrangler.toml` one level up (`~/dev-workspace/wrangler.toml`, a Pages project named `learners-envy`), and fails with `"It looks like you've run a Workers-specific command in a Pages project."`. Fix: write a throwaway config with an **absolute** `main` path and pass it explicitly, so wrangler never searches upward:
+```bash
+cat > /tmp/ai-worker-wrangler.toml <<'EOF'
+name = "opsmanifest-ai"
+main = "/home/kali/dev-workspace/infr-lifecycle-engine-main/workers/ai-worker.js"
+compatibility_date = "2026-06-15"
+EOF
+npx wrangler deploy --config /tmp/ai-worker-wrangler.toml
+```
+A "You are about to publish a Workers Service that was last updated via the script API" warning is expected and harmless (refers to the GROQ_API_KEY secret set via the REST API above) — deploying doesn't touch secrets; confirm with `curl https://opsmanifest-ai.<subdomain>.workers.dev/health` afterward.
+
 **Suggestion chips**: LLM response includes `suggestions: string[]` (2-3 short follow-up questions, max 8 words). Rendered as clickable chips below each orchestrator message bubble. Click sends the question immediately as a user message (via `handleSend(overrideText)` — bypasses the input state). Only included for informational/knowledge responses, not for workflow action responses. `nextPrompt` field is deprecated — worker Rule 8 omits it; OrchestratorPanel no longer concatenates it into replyText.
 
 **Field interview escape hatch** (`isCommandMessage` in `OrchestratorPanel.jsx`): The guided field interview intercepts user input when `awaitingFieldRef.current` is set. `isCommandMessage(tl)` determines whether the message should escape to the LLM instead. It checks: (1) message contains '?' — always escapes; (2) message starts with an interrogative word — always escapes; (3) message token or bigram matches COMMAND_TOKENS set; (4) message starts with a prefix in COMMAND_PREFIXES and is >10 chars. Never add field values to COMMAND_TOKENS — they must remain as hardware/OS/DB/App values. Only add command verbs and topic words.
