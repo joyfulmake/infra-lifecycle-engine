@@ -36,7 +36,8 @@ function isCommandMessage(tl) {
   if (COMMAND_PREFIXES.has(words[0]) && tl.length > 10) return true;
   return false;
 }
-import { useStore } from '../store/useStore.js';
+import { useStore, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS } from '../store/useStore.js';
+import { getDomainMeta } from '../domains/registry.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { useBuildsDb } from '../lib/useBuildsDb.js';
 import { generateScript, getWorkflowChecklist } from '../lib/orchestratorScripts.js';
@@ -244,6 +245,7 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
   const { builds } = useBuildsDb(authUser);
 
   const s = {
+    activeDomain:        store.activeDomain,
     isBuilt:             store.isBuilt,
     scanComplete:        store.scanComplete,
     designApplied:       store.designApplied,
@@ -935,9 +937,12 @@ Rules:
     nudgeSentRef.current = true; // suppress nudge once typing starts
     const val = e.target.value;
     setInput(val);
-    // Live scan: debounce to avoid scanning on every keystroke
+    // Live scan: debounce to avoid scanning on every keystroke. Infra-only —
+    // its EOL/compat patterns (RHEL, CentOS, Oracle DB, WebSphere, ...) are
+    // infra product names and would be noise (or outright wrong) for the
+    // other 15 domains.
     clearTimeout(liveHintTimerRef.current);
-    if (val.length < 4) { setLiveHints(null); return; }
+    if (val.length < 4 || sRef.current?.activeDomain !== 'infra') { setLiveHints(null); return; }
     liveHintTimerRef.current = setTimeout(() => {
       try {
         const hints = scanInputLive(val, sRef.current?.ctx);
@@ -1284,20 +1289,31 @@ Rules:
   // Field interview order — projectStartDate comes before goLiveDate
   const FIELD_ORDER = ['hw', 'os', 'db', 'app', 'projectName', 'envType', 'projectStartDate', 'goLiveDate', 'sla'];
 
+  // hw/os/db/app chips, questions, and placeholders are all driven by the active
+  // PM domain's own axis labels and live catalog options (HW_OPTIONS etc. are
+  // mutated in place per domain by applyDomain() — see domains/applyDomain.js),
+  // so a non-infra domain (SAP, Salesforce, Healthcare, ...) never sees infra
+  // hardware/OS/DB product names or "hardware platform" language. FIELD_CTX_MAP
+  // below is the one exception — it stays hardcoded to the infra words on
+  // purpose, see the comment there.
+  const domainMeta = getDomainMeta(store.activeDomain);
+  const [axisHw, axisOs, axisDb, axisApp] = domainMeta.axisLabels;
+  const axisOptsMap = { hw: HW_OPTIONS, os: OS_OPTIONS, db: DB_OPTIONS, app: APP_OPTIONS };
+
   // Clickable chip options for each field — user picks instead of typing
   const FIELD_CHIPS = {
-    hw:      ['Dell PowerEdge R750', 'HPE ProLiant DL380', 'IBM Power9', 'Cisco UCS B-Series', 'Supermicro SuperServer'],
-    os:      ['RHEL 9.2', 'RHEL 8.6', 'Ubuntu 22.04 LTS', 'Windows Server 2022', 'AIX 7.2', 'Oracle Linux 8'],
-    db:      ['Oracle 19c', 'PostgreSQL 15', 'MySQL 8.0', 'SQL Server 2022', 'MongoDB 6', 'MariaDB 10.11'],
-    app:     ['WebSphere 9.0', 'JBoss EAP 7.4', 'Apache Tomcat 10', 'nginx 1.24', 'WebLogic 14c', 'IIS 10'],
+    hw:      axisOptsMap.hw.slice(0, 6),
+    os:      axisOptsMap.os.slice(0, 6),
+    db:      axisOptsMap.db.slice(0, 6),
+    app:     axisOptsMap.app.slice(0, 6),
     envType: ['Production', 'UAT', 'DR', 'Dev', 'SIT'],
     sla:     ['Tier 1 (99.99%)', 'Tier 2 (99.9%)', 'Tier 3 (99.5%)'],
   };
   const FIELD_QUESTIONS = {
-    hw:               'Which hardware platform?',
-    os:               'Which operating system?',
-    db:               'Which database engine?',
-    app:              'Which application or middleware?',
+    hw:               `Which ${axisHw}?`,
+    os:               `Which ${axisOs}?`,
+    db:               `Which ${axisDb}?`,
+    app:              `Which ${axisApp}?`,
     projectName:      'What should we call this project? (type a name and press Enter)',
     envType:          'What environment type — Production, UAT, DR, Dev, or SIT?',
     projectStartDate: 'When does the project start? (type a date e.g. 2026-09-01 or use the sidebar date picker)',
@@ -1307,18 +1323,30 @@ Rules:
   // Editable placeholder text shown in the input when the agent is awaiting a specific field.
   // User sees a pre-filled suggestion they can modify or replace entirely before sending.
   const FIELD_PLACEHOLDERS = {
-    hw:               'e.g. Dell PowerEdge R750, HPE ProLiant DL380, IBM Power9',
-    os:               'e.g. RHEL 8.6, Ubuntu 22.04 LTS, Windows Server 2022, AIX 7.2',
-    db:               'e.g. Oracle 19c, PostgreSQL 15, MySQL 8.0, SQL Server 2022',
-    app:              'e.g. WebSphere 9.0, JBoss EAP 7.4, Apache Tomcat 10, nginx',
+    hw:               `e.g. ${axisOptsMap.hw.slice(0, 3).join(', ')}`,
+    os:               `e.g. ${axisOptsMap.os.slice(0, 4).join(', ')}`,
+    db:               `e.g. ${axisOptsMap.db.slice(0, 4).join(', ')}`,
+    app:              `e.g. ${axisOptsMap.app.slice(0, 4).join(', ')}`,
     projectName:      'e.g. Q3 Server Migration — Oracle to PostgreSQL',
     envType:          'e.g. Production',
     projectStartDate: 'e.g. 2026-09-01 or "in 2 weeks" or "next Monday"',
     goLiveDate:       'e.g. 2026-11-30 or "Q4 2026" or "in 3 months"',
     sla:              'e.g. Tier 1 (99.99%)',
   };
+  // Internal parser trigger words only — never shown to the user (see the
+  // "never echo what user typed" synthetic-text path below). These stay the
+  // literal infra words on purpose: ctx.hw/os/db/app are the same state keys
+  // in every domain, and orchestratorChat.js's parseSetField() regex only
+  // recognizes "hardware is X" / "OS is X" / "database is X" / "application is
+  // X" — swapping in a domain's display label here would silently break field
+  // setting for every non-infra domain instead of just mislabeling it.
   const FIELD_CTX_MAP = {
     hw: 'hardware', os: 'OS', db: 'database', app: 'application',
+  };
+  // Chip-header display label — domain axis label for hw/os/db/app, plain
+  // English for the rest.
+  const FIELD_DISPLAY_LABEL = {
+    hw: axisHw, os: axisOs, db: axisDb, app: axisApp, envType: 'environment', sla: 'SLA tier',
   };
   const FIELD_REQ_MAP = {
     projectName: 'project name', envType: 'environment',
@@ -1828,7 +1856,7 @@ Rules:
             <div className="px-3 py-2.5 border-t border-teal-100 flex-shrink-0 bg-teal-50/60">
               <div className="text-xs text-teal-700 mb-2 font-semibold uppercase tracking-wide flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-500 flex-shrink-0" />
-                Select {chipsField === 'envType' ? 'environment' : chipsField.toUpperCase()} — or type your own below
+                Select {FIELD_DISPLAY_LABEL[chipsField] || chipsField} — or type your own below
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {FIELD_CHIPS[chipsField].map(v => (
