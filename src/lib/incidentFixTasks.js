@@ -7,8 +7,45 @@ export function getIncidentFixTasks(inc, ctx) {
     const catalog = getNonInfraCatalog(domainId);
     const tasks = catalog?.incidentFixTasks?.[inc.code];
     if (tasks) return tasks.slice();
+    // inc.code has no static catalog entry — a CUSTOM incident (dynamically
+    // generated id, never in a pre-authored catalog). Same bug as
+    // getRealTasks in realTasks.js: this used to fall through to
+    // getIncidentFixTasksInfra() below, which is all hardware console /
+    // Unix / DB-specific steps, for every domain.
+    return getIncidentFixTasksGenericFallback(inc, catalog);
   }
   return getIncidentFixTasksInfra(inc, ctx);
+}
+
+function getIncidentFixTasksGenericFallback(inc, catalog) {
+  const sections = catalog?.designSections || [];
+  const layerKey = (inc.layers && inc.layers[0]);
+  const section = sections.find(sec => sec.key === layerKey) || sections[0];
+  const owner = section?.owner || 'PM';
+  const title = inc.short || inc.txt || 'incident';
+  const tasks = [];
+  const T2 = (role, name, dep, validate) => tasks.push({ role, name, dep: dep || '', validate: validate || '' });
+  T2('Change Manager',
+    'Open incident bridge — assign owner, scribe, and comms lead',
+    'Incident detected by monitoring or user report',
+    'Bridge open; roles assigned; stakeholder comms started; ticket raised');
+  T2(owner,
+    `Confirm scope of "${title}" — identify affected area and impact`,
+    'Incident bridge open',
+    'Scope confirmed; severity validated against SLA');
+  T2(owner,
+    `Apply fix for "${title}"`,
+    'Scope confirmed; fix approach agreed',
+    'Fix applied; service restored');
+  T2('QA Eng',
+    `Validate fix for "${title}" and confirm no regression`,
+    'Fix applied',
+    'Validation passed; monitoring confirms stable state');
+  T2('Change Manager',
+    'Close incident — record root cause and lessons learned',
+    'Validation passed',
+    'Incident closed; RCA documented; change record updated if applicable');
+  return tasks;
 }
 
 function getIncidentFixTasksInfra(inc, ctx) {

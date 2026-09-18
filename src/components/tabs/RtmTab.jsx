@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useStore } from '../../store/useStore.js';
+import { useStore, DESIGN_SECTIONS } from '../../store/useStore.js';
 import { useAuth } from '../../lib/AuthContext.jsx';
 import { ALL_INC, FIXES } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { isQATeamLead, getUserRolesForBuild } from '../../lib/roleAccess.js';
+import { getRtmBaseRows } from '../../lib/rtmBaseRows.js';
 import AgentInsights from '../AgentInsights.jsx';
 
 // Resolve any incident code — checks catalog first, then customInc
@@ -14,21 +15,6 @@ function resolveInc(code, customInc) {
 function resolveUUM(code, customUUM) {
   return ALL_UUM.find(u => u.code === code) || (customUUM || []).find(u => u.id === code) || null;
 }
-
-const RTM_BASE = [
-  { id: 'R01', req: 'Platform provisioned per approved topology', test: 'Physical/VM inventory matches CMDB', method: 'Config review + CMDB diff', owner: 'Unix Admin' },
-  { id: 'R02', req: 'OS patched to approved baseline', test: 'OS version + patch level verified', method: 'rpm -qa / dpkg -l / oslevel', owner: 'Unix Admin' },
-  { id: 'R03', req: 'Network connectivity validated end-to-end', test: 'All VLANs, firewall rules, load balancer paths tested', method: 'ping + traceroute + port scan', owner: 'NetAdmin' },
-  { id: 'R04', req: 'Storage mounts verified with correct permissions', test: 'All filesystems mounted, correct mode and owner', method: 'df -h + ls -la + mount', owner: 'StorageAdmin' },
-  { id: 'R05', req: 'Backup policy configured and first backup verified', test: 'Backup job ran, restore tested on sample file', method: 'Backup tool log review + restore drill', owner: 'BackupAdmin' },
-  { id: 'R06', req: 'Database engine running and accepting connections', test: 'Listener/service up, health query returns', method: 'tnsping / psql / mysql ping', owner: 'DBA' },
-  { id: 'R07', req: 'Application deployed and health endpoint returns 200', test: 'Health URL responds within SLA threshold', method: 'curl health endpoint', owner: 'AppAdmin' },
-  { id: 'R08', req: 'Security hardening applied per compliance framework', test: 'CIS benchmark scan passes >= 90%', method: 'Lynis / OpenSCAP scan', owner: 'SecOps' },
-  { id: 'R09', req: 'Monitoring and alerting configured', test: 'All critical alerts fire on test event', method: 'Alert test via monitoring console', owner: 'Unix Admin' },
-  { id: 'R10', req: 'CAB change record approved and linked', test: 'CAB approval documented with reference number', method: 'ITSM tool record review', owner: 'Change Manager' },
-  { id: 'R11', req: 'Rollback plan documented and rehearsed', test: 'Rollback executed successfully in staging', method: 'Rollback drill documented', owner: 'SysAdmin Lead' },
-  { id: 'R12', req: 'DR test completed and RTO/RPO targets met', test: 'Failover to DR site completed within RTO', method: 'DR drill with timing log', owner: 'Unix Admin' },
-];
 
 function StatusBadge({ status }) {
   const cfg = {
@@ -95,8 +81,9 @@ export default function RtmTab() {
   }
 
   // Build full RTM rows — all default to PENDING, user must explicitly set each one
+  const baseRows = getRtmBaseRows(s.activeDomain, DESIGN_SECTIONS);
   const rows = [
-    ...RTM_BASE.map(r => ({
+    ...baseRows.map(r => ({
       ...r,
       status: s.rtmRows?.[r.id] || 'PENDING',
     })),

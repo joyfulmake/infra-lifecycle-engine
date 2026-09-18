@@ -1057,6 +1057,7 @@ export default function PhasePanel() {
         _exportExcel = mod.exportExcel;
       }
       _exportExcel({
+        activeDomain: s.activeDomain,
         ctx: s.ctx, selInc: s.selInc, selUUM: s.selUUM, selFix: s.selFix,
         promoted: s.promoted, cabApproved: s.cabApproved, rtmSigned: s.rtmSigned,
         sysDesignData: s.sysDesignData, sdAiTasks: s.sdAiTasks,

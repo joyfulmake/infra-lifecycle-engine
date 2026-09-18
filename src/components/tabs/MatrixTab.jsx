@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useStore } from '../../store/useStore.js';
+import { useStore, DESIGN_SECTIONS } from '../../store/useStore.js';
 import { ALL_INC } from '../../lib/incidents.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { getRealTasks } from '../../lib/realTasks.js';
@@ -12,7 +12,7 @@ import AgentInsights from '../AgentInsights.jsx';
 
 // ── Layer definitions (bottom of stack → top) ────────────────────────────────
 
-const LAYERS = [
+const INFRA_LAYERS = [
   {
     id: 'storage',
     label: 'Storage / Backup',
@@ -87,8 +87,65 @@ const LAYERS = [
   },
 ];
 
-const ROLE_LAYER = {};
-LAYERS.forEach(layer => layer.roles.forEach(r => { ROLE_LAYER[r] = layer.id; }));
+const LAYER_PALETTE = [
+  { bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-100', card: 'bg-slate-700 border-slate-600 hover:bg-slate-600', dot: 'bg-slate-400' },
+  { bg: 'bg-teal-900', border: 'border-teal-700', text: 'text-teal-100', card: 'bg-teal-800 border-teal-700 hover:bg-teal-700', dot: 'bg-teal-400' },
+  { bg: 'bg-blue-900', border: 'border-blue-700', text: 'text-blue-100', card: 'bg-blue-800 border-blue-700 hover:bg-blue-700', dot: 'bg-blue-400' },
+  { bg: 'bg-amber-900', border: 'border-amber-700', text: 'text-amber-100', card: 'bg-amber-800 border-amber-700 hover:bg-amber-700', dot: 'bg-amber-400' },
+  { bg: 'bg-green-900', border: 'border-green-700', text: 'text-green-100', card: 'bg-green-800 border-green-700 hover:bg-green-700', dot: 'bg-green-400' },
+  { bg: 'bg-purple-900', border: 'border-purple-700', text: 'text-purple-100', card: 'bg-purple-800 border-purple-700 hover:bg-purple-700', dot: 'bg-purple-400' },
+  { bg: 'bg-pink-900', border: 'border-pink-700', text: 'text-pink-100', card: 'bg-pink-800 border-pink-700 hover:bg-pink-700', dot: 'bg-pink-400' },
+  { bg: 'bg-indigo-900', border: 'border-indigo-700', text: 'text-indigo-100', card: 'bg-indigo-800 border-indigo-700 hover:bg-indigo-700', dot: 'bg-indigo-400' },
+];
+
+// The fixed 8 infra swimlanes (Storage, OS/Kernel, Network, Database Engine,
+// Application, Web/HTTP, Validation, Governance) were shown regardless of
+// domain, with a role→layer map built from infra role names only. Every
+// non-infra task's role (SAP Basis, EHR Analyst, Cloud Architect, ...) never
+// matched, so getLayerId() fell back to dumping EVERY task into the single
+// "Governance" lane — not just mislabeled, but functionally collapsed to one
+// bucket. Derive one swimlane per design section (same owner-per-section
+// pattern as buildGenericRoles/buildGenericRtmRows/buildGenericRollbackSteps)
+// plus fixed Validation and Governance lanes at the end.
+function buildGenericLayers(designSections) {
+  const sections = designSections || [];
+  const sectionLayers = sections.map((sec, i) => ({
+    id: sec.key,
+    label: sec.label,
+    icon: '▦',
+    color: LAYER_PALETTE[i % LAYER_PALETTE.length],
+    roles: [sec.owner].filter(Boolean),
+    hwDim: sec.label,
+    desc: `${sec.label} configuration, implementation, and validation`,
+  }));
+  return [
+    ...sectionLayers,
+    {
+      id: 'validation',
+      label: 'Validation / QA',
+      icon: '✓',
+      color: LAYER_PALETTE[sections.length % LAYER_PALETTE.length],
+      roles: ['QA Eng', 'QA Team Lead'],
+      hwDim: 'Cross-function validation',
+      desc: 'Acceptance testing · Regression testing · Sign-off validation',
+    },
+    {
+      id: 'governance',
+      label: 'Governance / Approval',
+      icon: '✦',
+      color: LAYER_PALETTE[(sections.length + 1) % LAYER_PALETTE.length],
+      roles: ['PM', 'Change Manager'],
+      hwDim: 'Governance (non-technical)',
+      desc: 'Approval · Change record · Risk assessment · Sign-off · Closure',
+    },
+  ];
+}
+
+function buildRoleLayerMap(layers) {
+  const map = {};
+  layers.forEach(layer => layer.roles.forEach(r => { map[r] = layer.id; }));
+  return map;
+}
 
 // ── Task collector ────────────────────────────────────────────────────────────
 
@@ -130,9 +187,9 @@ function collectAllTasks(selInc, selUUM, designApplied, sysDesignData, ctx, cust
   return out;
 }
 
-function getLayerId(task) {
+function getLayerId(task, roleLayerMap, layers) {
   const role = task.team || task.role || '';
-  return ROLE_LAYER[role] || 'governance';
+  return roleLayerMap[role] || layers[layers.length - 1].id;
 }
 
 // ── FSM Detail side panel ─────────────────────────────────────────────────────
@@ -320,7 +377,7 @@ function LayerRow({ layer, items, selected, onSelect, isLast }) {
 
 // ── Summary statistics row ────────────────────────────────────────────────────
 
-function MatrixStats({ layerMap }) {
+function MatrixStats({ layerMap, layers }) {
   const total = Object.values(layerMap).reduce((n, a) => n + a.length, 0);
   const covered = Object.values(layerMap).filter(a => a.length > 0).length;
   const topLayer = Object.entries(layerMap).sort((a, b) => b[1].length - a[1].length)[0];
@@ -333,13 +390,13 @@ function MatrixStats({ layerMap }) {
       </div>
       <div className="flex items-center gap-1.5">
         <span className="text-slate-400">Layers touched:</span>
-        <span className="font-bold text-slate-200">{covered} / {LAYERS.length}</span>
+        <span className="font-bold text-slate-200">{covered} / {layers.length}</span>
       </div>
       {topLayer && topLayer[1].length > 0 && (
         <div className="flex items-center gap-1.5">
           <span className="text-slate-400">Heaviest layer:</span>
           <span className="font-bold text-teal-400">
-            {LAYERS.find(l => l.id === topLayer[0])?.label} ({topLayer[1].length})
+            {layers.find(l => l.id === topLayer[0])?.label} ({topLayer[1].length})
           </span>
         </div>
       )}
@@ -357,6 +414,9 @@ export default function MatrixTab() {
   const s = useStore();
   const [selected, setSelected] = useState(null);
 
+  const LAYERS = s.activeDomain === 'infra' ? INFRA_LAYERS : buildGenericLayers(DESIGN_SECTIONS);
+  const ROLE_LAYER = buildRoleLayerMap(LAYERS);
+
   const allItems = useMemo(
     () => collectAllTasks(s.selInc, s.selUUM, s.designApplied, s.sysDesignData, s.ctx, s.customInc, s.customUUM),
     [s.selInc, s.selUUM, s.designApplied, s.sysDesignData, s.ctx, s.customInc, s.customUUM]
@@ -366,11 +426,12 @@ export default function MatrixTab() {
     const map = {};
     LAYERS.forEach(l => { map[l.id] = []; });
     allItems.forEach(item => {
-      const lid = getLayerId(item.task);
+      const lid = getLayerId(item.task, ROLE_LAYER, LAYERS);
       if (map[lid]) map[lid].push(item);
     });
     return map;
-  }, [allItems]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allItems, s.activeDomain]);
 
   return (
     <div className="flex h-full overflow-hidden bg-slate-950">
@@ -394,7 +455,7 @@ export default function MatrixTab() {
           <AgentInsights tab="matrix" />
         </div>
 
-        <MatrixStats layerMap={layerMap} />
+        <MatrixStats layerMap={layerMap} layers={LAYERS} />
 
         {/* Column headers */}
         <div className="flex border-b border-slate-700 bg-slate-900 flex-shrink-0 text-xs">

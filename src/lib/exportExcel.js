@@ -6,6 +6,7 @@ import { getIncidentFixTasks } from './incidentFixTasks.js';
 import { buildDesignTasks } from './designTasks.js';
 import { DESIGN_SECTIONS, FIELD_LABELS } from '../store/useStore.js';
 import { buildStructuralMap, buildFunctionalFlow, buildRuleBasedMissionIntel } from './infraMap.js';
+import { getRtmBaseRows } from './rtmBaseRows.js';
 
 // ── Colour palette ─────────────────────────────────────────────────────────
 const C = {
@@ -183,7 +184,7 @@ export function exportExcel(state) {
     customInc = [], customUUM = [],
     customMentorTasks = [], customRaidEntries = [],
     vulnRegistry = [], stakeholderDiscussions = [], actionAuditLog = [],
-    rtmRows = {}, liveEolData = {},
+    rtmRows = {}, liveEolData = {}, activeDomain = 'infra',
     isBuilt = true, phase2Active = false,
     cabDeclined = false, rtmStale = false,
     selRegions,
@@ -507,18 +508,13 @@ export function exportExcel(state) {
     sb.row(['', '', '', '']);
     sb.row([c('RTM ID', ST.H2), c('Requirement / Verification Check', ST.H2), c('Test Method', ST.H2), c('Status', ST.H2)]);
 
-    const baseChecks = [
-      ['RTM-REQ-001', 'Infrastructure hardware topology and firmware alignment verified', 'Physical/VM inventory matches CMDB', rtmSigned ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-002', 'OS kernel, middleware, and runtime compatibility confirmed', 'rpm -qa / dpkg -l / oslevel', rtmSigned ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-003', 'Incident runbook fix sequences tested in isolated staging sandbox', 'Post-fix smoke test + QA sign-off', rtmSigned ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-004', 'Storage, DR replication, and backup integrity checks passed', 'Backup restore drill + DR failover test', rtmSigned ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-005', 'Security compliance baseline and CVE patch level cleared by SecOps', 'Lynis / OpenSCAP scan ≥ 90%', rtmSigned ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-006', 'Network connectivity, VLANs, and load balancer paths validated', 'ping + traceroute + port scan all paths', rtmSigned ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-007', 'CAB change record approved and linked in ITSM', 'ITSM record review + CAB minutes', cabApproved ? 'VERIFIED' : 'PENDING'],
-      ['RTM-REQ-008', 'Rollback plan documented, rehearsed, and approved', 'Rollback drill log + approval', rtmSigned ? 'VERIFIED' : 'PENDING'],
-    ];
-    baseChecks.forEach(([id, req, method, status], i) => {
-      sb.row([c(id, ST.BOLD_L), c(req, i % 2 === 0 ? ST.BODY : ST.BODY_A), c(method, i % 2 === 0 ? ST.BODY : ST.BODY_A), c(status, statusStyle(status))]);
+    // Same base rows as the live RTM tab (see rtmBaseRows.js) — infra's own
+    // 12-row set, or one row per design section for the other 15 domains —
+    // and each row's REAL status from rtmRows, not a blanket rtmSigned flag.
+    const baseRows = getRtmBaseRows(activeDomain, DESIGN_SECTIONS);
+    baseRows.forEach((row, i) => {
+      const status = rtmRows[row.id] || 'PENDING';
+      sb.row([c(row.id, ST.BOLD_L), c(row.req, i % 2 === 0 ? ST.BODY : ST.BODY_A), c(row.method, i % 2 === 0 ? ST.BODY : ST.BODY_A), c(status, statusStyle(status))]);
     });
 
     sb.row(['', '', '', '']);

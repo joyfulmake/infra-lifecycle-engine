@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { useStore } from '../../store/useStore.js';
+import { useStore, DESIGN_SECTIONS } from '../../store/useStore.js';
 import { ALL_UUM } from '../../lib/uumItems.js';
 import { ALL_INC } from '../../lib/incidents.js';
 import { getRealTasks } from '../../lib/realTasks.js';
@@ -31,6 +31,41 @@ const TEAM_BAR_COLOR = {
   'SecOps': '#EF4444', 'QA Team': '#22C55E',
   'Change Manager': '#64748B', 'SysAdmin Lead': '#64748B',
 };
+
+const INFRA_ROLLBACK_STEPS = [
+  { id: 'RB01', role: 'Change Manager', task: 'Notify all stakeholders of CAB decline and rollback trigger', hours: 1 },
+  { id: 'RB02', role: 'Unix Admin', task: 'Snapshot environment state before rollback begins', hours: 1 },
+  { id: 'RB03', role: 'AppAdmin', task: 'Revert application to last known-good version', hours: 2 },
+  { id: 'RB04', role: 'DBA', task: 'Revert DB schema changes; validate data integrity', hours: 3 },
+  { id: 'RB05', role: 'Unix Admin', task: 'Restore OS / kernel config from pre-change snapshot', hours: 2 },
+  { id: 'RB06', role: 'NetAdmin', task: 'Re-validate network, firewall, load balancer', hours: 1 },
+  { id: 'RB07', role: 'QA Team', task: 'Full service health smoke test suite post-rollback', hours: 2 },
+  { id: 'RB08', role: 'Change Manager', task: 'File post-change incident report; lessons learned', hours: 1 },
+];
+
+// Was hardcoded regardless of domain — every non-infra domain's CAB-decline
+// rollback plan showed "Revert DB schema changes" / "Restore OS / kernel
+// config" / "Re-validate network, firewall, load balancer". Derive the
+// revert steps from the active domain's own design sections + owners
+// instead (same pattern as buildGenericRoles in RolesTab.jsx and
+// buildGenericRtmRows in rtmBaseRows.js), keeping the universal
+// notify/snapshot/validate/report bookends.
+function buildGenericRollbackSteps(designSections) {
+  const sections = (designSections || []).slice(0, 4);
+  const middle = sections.map((sec, i) => ({
+    id: `RB${String(i + 2).padStart(2, '0')}`,
+    role: sec.owner || 'PM',
+    task: `Revert ${sec.label} changes; validate against pre-change state`,
+    hours: 2,
+  }));
+  const n = middle.length;
+  return [
+    { id: 'RB01', role: 'Change Manager', task: 'Notify all stakeholders of CAB decline and rollback trigger', hours: 1 },
+    ...middle,
+    { id: `RB${String(n + 2).padStart(2, '0')}`, role: 'QA Eng', task: 'Full acceptance/regression test suite post-rollback', hours: 2 },
+    { id: `RB${String(n + 3).padStart(2, '0')}`, role: 'Change Manager', task: 'File post-change incident report; lessons learned', hours: 1 },
+  ];
+}
 
 const PERIOD_TYPE = {
   freeze:  { label: 'Change Freeze', color: 'bg-red-50 border-red-300 text-red-700',  badge: 'badge-red' },
@@ -904,26 +939,20 @@ export default function GanttTab() {
       </div>
 
       {/* Rollback plan */}
-      {s.cabDeclined && (
+      {s.cabDeclined && (() => {
+        const rollbackSteps = s.activeDomain === 'infra' ? INFRA_ROLLBACK_STEPS : buildGenericRollbackSteps(DESIGN_SECTIONS);
+        const totalHours = rollbackSteps.reduce((n, step) => n + step.hours, 0);
+        return (
         <div className="card overflow-hidden mb-4 border-l-4 border-red-500">
           <div className="bg-red-50 px-4 py-2 border-b border-red-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-bold text-red-700 text-xs uppercase tracking-wide">Rollback Plan — CAB Declined</span>
               <span className="badge badge-red text-xs">MANDATORY</span>
             </div>
-            <span className="text-xs text-red-600">~16h estimated</span>
+            <span className="text-xs text-red-600">~{totalHours}h estimated</span>
           </div>
           <div className="divide-y divide-red-50">
-            {[
-              { id: 'RB01', role: 'Change Manager', task: 'Notify all stakeholders of CAB decline and rollback trigger', hours: 1 },
-              { id: 'RB02', role: 'Unix Admin', task: 'Snapshot environment state before rollback begins', hours: 1 },
-              { id: 'RB03', role: 'AppAdmin', task: 'Revert application to last known-good version', hours: 2 },
-              { id: 'RB04', role: 'DBA', task: 'Revert DB schema changes; validate data integrity', hours: 3 },
-              { id: 'RB05', role: 'Unix Admin', task: 'Restore OS / kernel config from pre-change snapshot', hours: 2 },
-              { id: 'RB06', role: 'NetAdmin', task: 'Re-validate network, firewall, load balancer', hours: 1 },
-              { id: 'RB07', role: 'QA Team', task: 'Full service health smoke test suite post-rollback', hours: 2 },
-              { id: 'RB08', role: 'Change Manager', task: 'File post-change incident report; lessons learned', hours: 1 },
-            ].map(step => (
+            {rollbackSteps.map(step => (
               <div key={step.id} className="flex items-center gap-2 px-3 py-2 hover:bg-red-50/40">
                 <div className="text-xs text-red-400 font-mono w-7">{step.id}</div>
                 <span className={`badge text-xs ${TEAM_COLORS[step.role] || 'badge-slate'}`}>{step.role}</span>
@@ -936,7 +965,8 @@ export default function GanttTab() {
             <div className="text-xs text-red-700 font-medium">After rollback: revise scope, update RTM, resubmit to CAB.</div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

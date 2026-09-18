@@ -106,8 +106,30 @@ export function getRealTasks(uum, ctx) {
     const catalog = getNonInfraCatalog(domainId);
     const tasks = catalog?.uumTasks?.[uum.code];
     if (tasks) return tasks.slice();
+    // uum.code has no static catalog entry — this is a CUSTOM UUM item (its
+    // id is generated at add-time, e.g. `custom_uum_<timestamp>`, and can
+    // never appear in a pre-authored catalog). This used to silently fall
+    // through to getRealTasksInfra() below, which generates Oracle Data
+    // Pump/RMAN branches and Unix/DB/App Admin roles for every domain —
+    // exactly wrong for a custom item added in, say, a Healthcare or SAP
+    // build. Generic, domain-owner-correct fallback instead.
+    return getRealTasksGenericFallback(uum, catalog);
   }
   return getRealTasksInfra(uum, ctx);
+}
+
+function getRealTasksGenericFallback(uum, catalog) {
+  const sections = catalog?.designSections || [];
+  const layerKey = (uum.layers && uum.layers[0]) || uum.layer;
+  const section = sections.find(sec => sec.key === layerKey) || sections[0];
+  const owner = section?.owner || 'PM';
+  const title = uum.short || uum.txt || 'change item';
+  const typeLabel = (uum.type || 'update').replace(/^./, ch => ch.toUpperCase());
+  return [
+    T(owner, `${typeLabel}: ${title} — plan and confirm requirements`, 'Requirement approved and scoped', 'Plan reviewed and signed off', '', 2),
+    T(owner, `${typeLabel}: ${title} — implement`, 'Plan approved', `${title} implemented per design`, '', 4),
+    T('QA Eng', `Validate ${title} against acceptance criteria`, 'Implementation complete', 'Validation checklist passed; no regressions found', '', 1),
+  ];
 }
 
 function getRealTasksInfra(uum, ctx) {

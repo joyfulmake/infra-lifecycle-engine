@@ -8,7 +8,7 @@ const CLOSURE_CHECKLIST = [
   { id: 'C02', label: 'All UUM change items completed and documented', dep: 'promoted' },
   { id: 'C03', label: 'RTM signed off by QA Lead', dep: 'rtmSigned' },
   { id: 'C04', label: 'CAB change record closed in ITSM tool', dep: 'cabApproved' },
-  { id: 'C05', label: 'CMDB updated to reflect new production state', dep: null },
+  { id: 'C05', label: 'Configuration/asset records updated to reflect new production state', dep: null },
   { id: 'C06', label: 'Post-implementation review (PIR) scheduled', dep: null },
   { id: 'C07', label: 'Lessons learned documented and shared', dep: null },
   { id: 'C08', label: 'Knowledge base articles updated', dep: null },
