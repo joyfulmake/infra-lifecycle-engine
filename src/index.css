@@ -295,24 +295,53 @@
 [data-theme="light"] .sidebar-root [class*="border-green-8"] { border-color: #86EFAC !important; }
 
 [data-theme="light"] .sidebar-root [class*="bg-amber-900"] { background-color: #FEF3C7 !important; }
-[data-theme="light"] .sidebar-root [class*="text-amber-2"]  { color: #92400E !important; }
+/* 2026-09-18: was just "text-amber-2" — every warning/stale/unsaved banner in
+   the sidebar actually uses amber-300/400/500 (chosen because they read well
+   on the permanent navy card backgrounds elsewhere in the same banners), none
+   of which were covered, so "PM Domain — choose one to continue", the CAB
+   rollback plan, the Revision Mode banner, RTM/Gantt stale banners, and the
+   Unsaved-changes indicator all rendered as pale yellow-on-white in light
+   theme. Cover the full pale range (200-599) in one rule instead of patching
+   one shade at a time — that whack-a-mole pattern is what caused this. */
+[data-theme="light"] .sidebar-root [class*="text-amber-2"],
+[data-theme="light"] .sidebar-root [class*="text-amber-3"],
+[data-theme="light"] .sidebar-root [class*="text-amber-4"],
+[data-theme="light"] .sidebar-root [class*="text-amber-5"] { color: #92400E !important; }
 [data-theme="light"] .sidebar-root [class*="border-amber-5"],
 [data-theme="light"] .sidebar-root [class*="border-amber-6"],
 [data-theme="light"] .sidebar-root [class*="border-amber-7"] { border-color: #FCD34D !important; }
 
 [data-theme="light"] .sidebar-root [class*="bg-red-900"]  { background-color: #FEE2E2 !important; }
-[data-theme="light"] .sidebar-root [class*="text-red-2"]  { color: #991B1B !important; }
+/* Same fix as amber above — red-300/400 (Rollback Plan, CAB declined, RTM
+   FAIL/BLOCKED banners, region pills) were uncovered. */
+[data-theme="light"] .sidebar-root [class*="text-red-2"],
+[data-theme="light"] .sidebar-root [class*="text-red-3"],
+[data-theme="light"] .sidebar-root [class*="text-red-4"]  { color: #991B1B !important; }
 [data-theme="light"] .sidebar-root [class*="border-red-5"] { border-color: #FCA5A5 !important; }
 [data-theme="light"] .sidebar-root [class*="border-red-6"] { border-color: #F87171 !important; }
 
-/* Pale accent shades (teal/sky/indigo) tuned for the navy sidebar read as
-   near-invisible on the white one — same class of bug as the green/amber/red
-   overrides above, just for the app's own accent palette. */
+/* Pale accent shades (teal/sky/indigo/blue) tuned for the navy sidebar read
+   as near-invisible on the white one — same class of bug as the green/amber/
+   red overrides above, just for the app's own accent palette. */
 [data-theme="light"] .sidebar-root [class*="text-teal-2"],
 [data-theme="light"] .sidebar-root [class*="text-teal-3"] { color: #0F766E !important; }
 [data-theme="light"] .sidebar-root [class*="text-teal-4"] { color: #0D9488 !important; }
 [data-theme="light"] .sidebar-root [class*="text-sky-4"]  { color: #0369A1 !important; }
 [data-theme="light"] .sidebar-root [class*="text-indigo-2"] { color: #4338CA !important; }
+[data-theme="light"] .sidebar-root [class*="text-blue-3"],
+[data-theme="light"] .sidebar-root [class*="text-blue-4"] { color: #1D4ED8 !important; }
+
+/* Live-EOL / live-search badges (FilteredSuggestInput) render inside a
+   portal to document.body via createPortal — outside .sidebar-root and
+   .main-root entirely, so neither override system above reaches them.
+   .suggest-dropdown defaults to a white background and only gets a dark
+   background under [data-theme="dark"]; the badge text (EOL/EOS Soon/Live
+   status) uses pale red-400/amber-400/green-400/slate-400 tuned for that
+   dark case, which is unreadable on the default white one. */
+[data-theme="light"] .suggest-item [class*="text-red-4"]   { color: #991B1B !important; }
+[data-theme="light"] .suggest-item [class*="text-amber-4"] { color: #92400E !important; }
+[data-theme="light"] .suggest-item [class*="text-green-4"] { color: #15803D !important; }
+[data-theme="light"] .suggest-item [class*="text-slate-4"] { color: #64748B !important; }
 
 /* ── Light theme: scrollbar ──────────────────────────────────────────────────── */
 [data-theme="light"] .sidebar-root::-webkit-scrollbar-thumb { background: #CBD5E1 !important; }
@@ -492,6 +521,24 @@
 [data-theme="dark"] .main-root [class~="border-red-200"]   { border-color: #7F1D1D !important; }
 [data-theme="dark"] .main-root [class~="border-red-300"]   { border-color: #991B1B !important; }
 [data-theme="dark"] .main-root [class~="border-teal-200"]  { border-color: #134E4A !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Light theme — main area pale-text fixes
+   Target: .main-root (the right panel wrapper)
+   Unlike the dark-mode block above (which retrofits classes authored for a
+   white canvas so they also work on navy), this fixes the opposite mistake:
+   a handful of status/accent classes across RtmTab, GanttTab, SystemDesignTab,
+   AgentInsights, ExecOverview and CompatWarning use pale shades (blue-400/500,
+   red-400/500, amber-500, slate-400) that were chosen because they read fine
+   against dark surfaces — leaving them under-contrast (as low as ~2.3:1,
+   below the 4.5:1 AA minimum) against the white default here. 2026-09-18.
+   ══════════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .main-root [class*="text-blue-4"],
+[data-theme="light"] .main-root [class*="text-blue-5"]  { color: #1D4ED8 !important; }
+[data-theme="light"] .main-root [class*="text-red-4"],
+[data-theme="light"] .main-root [class*="text-red-5"]   { color: #B91C1C !important; }
+[data-theme="light"] .main-root [class*="text-amber-5"] { color: #B45309 !important; }
+[data-theme="light"] .main-root [class*="text-slate-4"] { color: #64748B !important; }
 
 /* Select dropdowns — style option elements directly so popup is always readable.
    color-scheme:dark causes white-on-white on Windows (OS-rendered popup ignores it).

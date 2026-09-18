@@ -543,7 +543,7 @@ export default function AuthModal({ reason = 'signup', onClose }) {
                   {!FIREBASE_CONFIGURED && isPro && (
                     <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                       Cloud sync not yet configured — builds are saved locally in this browser.
-                      <span className="block mt-0.5 text-amber-500">Firebase setup instructions are in CLAUDE.md.</span>
+                      <span className="block mt-0.5 text-amber-700">Firebase setup instructions are in CLAUDE.md.</span>
                     </div>
                   )}
 
