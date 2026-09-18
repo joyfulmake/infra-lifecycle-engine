@@ -1243,7 +1243,7 @@ export default function PhasePanel() {
               This is the first choice in Phase 1 (not Requirements/Stack) because every
               other field below — requirement labels, HW/OS/DB/App axis labels, catalog
               content, tabs, roles — is derived from whichever domain is active. Collapsed
-              to a single "current domain" row by default so 16 domains across 5
+              to a single "current domain" row by default so 16 domains across 4
               categories don't clutter the sidebar — expand to browse/switch. */}
           {!s.isBuilt && (
             <div className="mb-3">

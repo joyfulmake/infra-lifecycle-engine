@@ -15,6 +15,13 @@
 //
 // `category` groups domains for the PhasePanel selector so it stays simple
 // to navigate at 16 domains instead of one flat list — see CATEGORIES below.
+// infra used to have a category of its own ('core') — a leftover from this
+// app having started as an infra-only tool, not a real distinction: in an
+// actual enterprise, infra is a substrate underneath a project (every one of
+// these 16 domains sits on some infra), not itself the thing a project is
+// "centered" on. It's grouped with the other horizontals (DevOps, Cloud
+// Migration, Cybersecurity, ...) now, and no category implies primacy —
+// whichever domain the user picks is that project's core.
 //
 // `icon` is a lucide-react component (not a string) — every consumer renders
 // it as `<Icon .../>`, never interpolates it into text. lucide-react was
@@ -28,7 +35,6 @@ import {
 } from 'lucide-react';
 
 export const CATEGORIES = [
-  { id: 'core', label: 'Core' },
   { id: 'horizontal', label: 'Horizontals' },
   { id: 'enterprise', label: 'Enterprise Apps' },
   { id: 'industry', label: 'Industries' },
@@ -42,7 +48,7 @@ export const DOMAINS = [
     shortLabel: 'Infra',
     icon: Server,
     accent: '#0D9488',
-    category: 'core',
+    category: 'horizontal',
     description: 'Server/platform lifecycle — hardware through app tier, CAB/RTM governed.',
     axisLabels: ['Hardware', 'OS', 'Database', 'Application'],
   },
