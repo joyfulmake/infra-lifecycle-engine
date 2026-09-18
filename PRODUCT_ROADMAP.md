@@ -76,21 +76,29 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 
 ### CMDB & EOL Intelligence
 
+**The dedicated CMDB tab (CM-01 through CM-06 below) was removed on 2026-09-17** — a
+standalone live-EOL config-item register was scope creep against the product's own
+positioning ("not a CMDB, ITSM, or replacement for ServiceNow/Jira/Confluence") and,
+being built on infra-only design fields, had zero value in the other 15 non-infra
+domains. `eolApi.js` itself and the live EOL keyword search (CM-02, CM-07) live on —
+they now back the build-phase live search and UUM ItemList search instead of a
+dedicated tab. See `CLAUDE.md`'s "endoflife.date Live API" section for current detail.
+
 | Requirement | Description | Status | Version |
 |---|---|---|---|
-| CM-01 | Live EOL data from endoflife.date API (stack components) | SHIPPED | v1.1.0.0 |
-| CM-02 | Live keyword search (500+ products) | SHIPPED | v1.1.0.0 |
-| CM-03 | UUM Keyword Matcher (score catalog by free-text) | SHIPPED | v1.1.0.0 |
-| CM-04 | EOL columns: EOS / EOL / EOSL / Security-Only / LTS / Next Milestone | SHIPPED | v1.1.0.0 |
-| CM-05 | All Cycles accordion per component | SHIPPED | v1.1.0.0 |
-| CM-06 | Coherence alert when live API confirms EOL stack | SHIPPED | v1.1.0.0 |
+| CM-01 | Live EOL data from endoflife.date API (stack components) | REMOVED (2026-09-17) | v1.1.0.0 |
+| CM-02 | Live keyword search (500+ products) | SHIPPED — now backs build-phase search, not CMDB tab | v1.1.0.0 |
+| CM-03 | UUM Keyword Matcher (score catalog by free-text) | REMOVED (2026-09-17) | v1.1.0.0 |
+| CM-04 | EOL columns: EOS / EOL / EOSL / Security-Only / LTS / Next Milestone | REMOVED (2026-09-17) | v1.1.0.0 |
+| CM-05 | All Cycles accordion per component | REMOVED (2026-09-17) | v1.1.0.0 |
+| CM-06 | Coherence alert when live API confirms EOL stack | REMOVED (2026-09-17) | v1.1.0.0 |
 | CM-07 | EOL badge in UUM ItemList search results | SHIPPED | v1.1.0.0 |
 
 ### AI & Coherence
 
 | Requirement | Description | Status | Version |
 |---|---|---|---|
-| AI-01 | Cross-tab coherence engine (12 rule-based checks) | SHIPPED | v1.1.0.0 |
+| AI-01 | Cross-tab coherence engine (20+ rule-based checks) | SHIPPED | v1.1.0.0 |
 | AI-02 | AgentInsights advisory panels per tab | SHIPPED | v1.1.0.0 |
 | AI-03 | Groq AI task enrichment via CF Worker proxy | SHIPPED | v1.1.0.0 |
 | AI-04 | Groq UUM search (AI-generated ops from free text) | SHIPPED | v1.1.0.0 |
@@ -101,11 +109,13 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 
 | Requirement | Description | Status | Version |
 |---|---|---|---|
-| OT-01 | Universal Cross-Stack Dependency Matrix (8 swimlanes) | SHIPPED | v1.1.0.0 |
+| OT-01 | Universal Cross-Stack Dependency Matrix (domain-derived swimlanes — 8 for infra, one per design section for the other 15 domains) | SHIPPED | v1.1.0.0 |
 | OT-02 | RAID log (Risks, Assumptions, Issues, Decisions) | SHIPPED | v1.0.0.0 |
-| OT-03 | Infra Topology Diagram (layered SVG) | SHIPPED | v1.1.0.0 |
+| OT-03 | Infra Topology Diagram (layered SVG, infra domain only) | SHIPPED | v1.1.0.0 |
 | OT-04 | 20-role RACI table (email-gated edit, Pro+) | SHIPPED | v1.1.0.0 |
 | OT-05 | Executive Summary with KPI tiles + milestones | SHIPPED | v1.0.0.0 |
+| OT-06 | Deploy tab — build/test/release pipeline tracking, cross-domain | SHIPPED | 2026-09-18 |
+| OT-07 | Services tab — vendor/dependency register, cross-domain | SHIPPED | 2026-09-18 |
 
 ### Auth & Plans
 
@@ -122,7 +132,7 @@ Status: `SHIPPED` | `PARTIAL` | `PLANNED` | `BACKLOG`
 
 | Requirement | Description | Status | Version |
 |---|---|---|---|
-| EX-01 | 14-sheet styled Excel export (xlsx-js-style) | SHIPPED | v1.0.0.0 |
+| EX-01 | 18-sheet styled Excel export (xlsx-js-style) | SHIPPED | v1.0.0.0 |
 | EX-02 | Presentation deck (slides.html, 10 slides) | SHIPPED | v1.1.0.0 |
 | EX-03 | DemoTour onboarding popup (first visit) | SHIPPED | v1.1.0.0 |
 | EX-04 | Mission Intel export sheet (signals, RTM status, architecture layers, ASCII maps) + custom UUM rows on UUM sheet | SHIPPED | v1.5.0.0 |

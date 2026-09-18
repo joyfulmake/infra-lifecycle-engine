@@ -60,6 +60,13 @@
     opacity: 0; pointer-events: none;
     transform: translateX(48px);
     transition: opacity 0.5s cubic-bezier(.4,0,.2,1), transform 0.5s cubic-bezier(.4,0,.2,1);
+    /* Content-heavy slides (the 10-row comparison table + 4 stat cards) are
+       taller than the viewport on common 768px-tall laptop screens (e.g.
+       1366x768) — with body{overflow:hidden} above, that content was
+       simply invisible/inaccessible, not just needing a scroll gesture.
+       Scoped to the slide itself so it never affects the deck's own
+       fullscreen feel on displays tall enough to need it. */
+    overflow-y: auto;
   }
   .slide.active { opacity: 1; pointer-events: all; transform: translateX(0); }
   .slide.exit   { opacity: 0; transform: translateX(-48px); }
@@ -237,47 +244,64 @@
   .ver-strip .ver-label { font-size: 22px; font-weight: 700; letter-spacing: 0.07em; color: var(--teal2); margin-bottom: 12px; }
 
   /* ── Comparison table ── */
-  .comp-table { border-collapse: collapse; width: 100%; }
-  .comp-table th, .comp-table td { padding: 11px 16px; }
+  /* table-layout:fixed makes the declared .ct-feat/.ct-om widths below
+     actually stick — without it, a table auto-sizes columns to fit their
+     content, and nowrap feature text (e.g. "Domain-specific lifecycle
+     phase gates") forced the feature column wide enough to push the last
+     1-2 competitor columns off the right edge entirely. */
+  .comp-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  .comp-table th, .comp-table td { padding: 9px 10px; }
   .ct-feat {
     background: rgba(255,255,255,0.06); color: #94A3B8;
-    font-size: 17px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
-    text-align: left; width: 220px; white-space: nowrap;
+    font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
+    text-align: left; width: 190px; white-space: nowrap;
   }
   .ct-om {
     background: rgba(20,184,166,0.14); border-left: 3px solid #14B8A6;
-    color: #2DD4BF; font-size: 17px; text-transform: uppercase;
-    letter-spacing: 0.06em; font-weight: 700; text-align: center; width: 130px;
+    color: #2DD4BF; font-size: 15px; text-transform: uppercase;
+    letter-spacing: 0.05em; font-weight: 700; text-align: center; width: 105px;
   }
   .ct-tool {
     background: rgba(255,255,255,0.035); color: #64748B;
-    font-size: 16px; text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 14px; text-transform: uppercase; letter-spacing: 0.03em;
     font-weight: 600; text-align: center;
   }
   .ct-feat-cell {
     background: rgba(255,255,255,0.025); border-top: 1px solid rgba(255,255,255,0.05);
-    color: #DDE6F0; font-weight: 500; font-size: 19px; white-space: nowrap;
+    color: #DDE6F0; font-weight: 500; font-size: 16px; line-height: 1.3;
   }
   .ct-yes {
-    color: #2DD4BF; font-weight: 800; font-size: 19px; text-align: center;
+    color: #2DD4BF; font-weight: 800; font-size: 16px; text-align: center;
     background: rgba(20,184,166,0.07); border-top: 1px solid rgba(255,255,255,0.05);
     border-left: 2px solid rgba(20,184,166,0.25);
   }
   .ct-no {
-    color: #F87171; font-weight: 700; font-size: 19px; text-align: center;
+    color: #F87171; font-weight: 700; font-size: 16px; text-align: center;
     background: rgba(239,68,68,0.04); border-top: 1px solid rgba(255,255,255,0.05);
   }
   .ct-partial {
-    color: #FCD34D; font-weight: 600; font-size: 17px; text-align: center;
+    color: #FCD34D; font-weight: 600; font-size: 14px; text-align: center;
     background: rgba(245,158,11,0.04); border-top: 1px solid rgba(255,255,255,0.05);
   }
   .ct-expensive {
-    color: #FCD34D; font-weight: 600; font-size: 17px; text-align: center;
+    color: #FCD34D; font-weight: 600; font-size: 14px; text-align: center;
     background: rgba(245,158,11,0.04); border-top: 1px solid rgba(255,255,255,0.05);
   }
   .comp-wrap {
-    max-width: 1040px; width: 100%; overflow-x: auto;
+    /* Was 1040px, fixed-width columns for 6 competitor/tool columns didn't
+       fit — Confluence and Monday.com were clipped off the right edge with
+       no visible scroll affordance, looking broken rather than scrollable.
+       Widened alongside smaller column widths/padding/font-size above so
+       all 6 columns fit without relying on horizontal scroll at all. */
+    max-width: 1180px; width: 100%; overflow-x: auto;
     border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
+    /* flex-shrink:0 — .slide is a column flex container, and an element
+       with any non-visible overflow gets an automatic minimum size of 0
+       per spec, so without this the flexbox algorithm was free to squash
+       this element (and the table inside it) down to a sliver on short
+       viewports instead of shrinking something else / scrolling the slide
+       — only 2 of 10 rows were ever visible on a 768px-tall laptop screen. */
+    flex-shrink: 0;
   }
 
 </style>
@@ -381,8 +405,8 @@
           <div class="feat"><div class="feat-dot"></div><span>240-field System Design auto-filled from stack selection — locked after tech review</span></div>
           <div class="feat"><div class="feat-dot"></div><span>Gantt with Critical Path, 30% buffer, change-period blocks, and per-task FSM detail</span></div>
           <div class="feat"><div class="feat-dot"></div><span>CAB decline → Revision Mode → unlock every tab → resubmit or PM Quick Change</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Up to 17-sheet styled Excel: Design · RAID · RTM · Gantt · Mission Intel · ASCII maps</span></div>
-          <div class="feat"><div class="feat-dot"></div><span>Coherence engine: 14 cross-tab checks run offline — alerts surface in every relevant tab</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Up to 18-sheet styled Excel: Design · RAID · RTM · Gantt · Mission Intel · ASCII maps</span></div>
+          <div class="feat"><div class="feat-dot"></div><span>Coherence engine: 20+ cross-tab checks run offline — alerts surface in every relevant tab</span></div>
           <div class="feat"><div class="feat-dot"></div><span>Sign-off guards: stale-Gantt warnings before RTM, rollback guidance after go-live</span></div>
         </div>
       </div>
@@ -568,7 +592,7 @@
           <tr>
             <th class="ct-feat">Feature</th>
             <th class="ct-om">OpsManifest</th>
-            <th class="ct-tool">MS Planner</th>
+            <th class="ct-tool">MS Project</th>
             <th class="ct-tool">JIRA</th>
             <th class="ct-tool">ServiceNow</th>
             <th class="ct-tool">Confluence</th>
@@ -577,7 +601,7 @@
         </thead>
         <tbody>
           <tr>
-            <td class="ct-feat-cell">Infra lifecycle phase gates</td>
+            <td class="ct-feat-cell">Domain-specific lifecycle phase gates</td>
             <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
             <td class="ct-partial">Partial</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
           </tr>
@@ -598,17 +622,17 @@
           </tr>
           <tr>
             <td class="ct-feat-cell">AI coherence engine (cross-tab)</td>
-            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+            <td class="ct-yes">✓</td><td class="ct-partial">Partial</td><td class="ct-no">✗</td>
             <td class="ct-partial">Partial</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
           </tr>
           <tr>
             <td class="ct-feat-cell">RAID log integrated</td>
-            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
+            <td class="ct-yes">✓</td><td class="ct-partial">Partial</td><td class="ct-partial">Partial</td>
             <td class="ct-partial">Partial</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
           </tr>
           <tr>
-            <td class="ct-feat-cell">Up to 17-sheet Excel export</td>
-            <td class="ct-yes">✓</td><td class="ct-no">✗</td><td class="ct-no">✗</td>
+            <td class="ct-feat-cell">Up to 18-sheet Excel export</td>
+            <td class="ct-yes">✓</td><td class="ct-partial">Partial</td><td class="ct-no">✗</td>
             <td class="ct-expensive">Expensive</td><td class="ct-no">✗</td><td class="ct-partial">Partial</td>
           </tr>
           <tr>
@@ -630,7 +654,7 @@
       </table>
     </div>
 
-    <div style="display:flex;gap:14px;margin-top:16px;flex-wrap:wrap;justify-content:center;">
+    <div style="display:flex;gap:14px;margin-top:16px;flex-wrap:wrap;justify-content:center;flex-shrink:0;">
       <div style="background:rgba(196,181,253,0.12);border:1px solid rgba(139,92,246,0.3);border-radius:14px;padding:14px 22px;text-align:center;min-width:210px;">
         <div style="font-size:32px;font-weight:800;color:#C4B5FD;line-height:1.1;">16</div>
         <div style="font-size:18px;color:#94A3B8;margin-top:5px;line-height:1.45;">PM domains, one platform<br>vs one-size-fits-all elsewhere</div>

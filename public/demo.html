@@ -91,6 +91,7 @@ body::after{
   text-transform:uppercase;padding:2px 8px;border-radius:100px;vertical-align:middle;margin-left:4px}
 .tag-pro{background:rgba(245,158,11,.14);color:#f59e0b;border:1px solid rgba(245,158,11,.28)}
 .tag-ent{background:rgba(59,130,246,.14);color:#60a5fa;border:1px solid rgba(59,130,246,.28)}
+.tag-team{background:rgba(45,212,191,.14);color:#2dd4bf;border:1px solid rgba(45,212,191,.28)}
 
 /* ── CTA ── */
 .cta-link{display:inline-flex;align-items:center;gap:10px;margin-top:10px;
@@ -268,7 +269,7 @@ body::after{
       <div class="stats">
         <div class="stat"><div class="stat-val">40+</div><div class="stat-lbl">Vendor compat rules</div></div>
         <div class="stat"><div class="stat-val">60+</div><div class="stat-lbl">EOL products tracked live</div></div>
-        <div class="stat"><div class="stat-val">14</div><div class="stat-lbl">Cross-tab coherence checks</div></div>
+        <div class="stat"><div class="stat-val">20+</div><div class="stat-lbl">Cross-tab coherence checks</div></div>
       </div>
     </div>
 
@@ -353,7 +354,7 @@ body::after{
           <div class="comp-tool">Microsoft Project</div>
           <div class="comp-role">Schedule &amp; Portfolio Planning</div>
           <div class="comp-latest">Resource planning, portfolio visibility. <strong>Copilot for Project:</strong> natural language scheduling, risk summaries.</div>
-          <div class="comp-bridge">OpsManifest generates the infra-specific Gantt with critical-path logic  -  Project surfaces it to the portfolio layer.</div>
+          <div class="comp-bridge">OpsManifest generates the domain-specific Gantt with critical-path logic  -  Project surfaces it to the portfolio layer.</div>
         </div>
 
         <div class="comp-card">
@@ -369,7 +370,7 @@ body::after{
           <div class="comp-tool">Monday.com</div>
           <div class="comp-role">Visual Work Management</div>
           <div class="comp-latest">Cross-department dashboards, 200+ integrations. <strong>Monday AI:</strong> automated task generation, board dependency mapping.</div>
-          <div class="comp-bridge">OpsManifest delivers the infra methodology depth; Monday.com surfaces it to the wider business stakeholder group.</div>
+          <div class="comp-bridge">OpsManifest delivers the domain methodology depth  -  across 16 PM domains, not just infra; Monday.com surfaces it to the wider business stakeholder group.</div>
         </div>
 
         <div class="comp-card ai-card">
@@ -377,7 +378,7 @@ body::after{
           <div class="comp-tool">AI Assistants &amp; Copilot</div>
           <div class="comp-role">General-Purpose Intelligence</div>
           <div class="comp-latest">Jira AI, Now Assist, Copilot, Monday AI  -  all answer questions in context. None know your build state, RAID log, or live EOL windows.</div>
-          <div class="comp-bridge">OpsMentor reads your actual project  -  14 coherence checks, 600+ incident codes, live EOL API  -  and acts inside your build. Not a chat layer. Embedded delivery intelligence.</div>
+          <div class="comp-bridge">OpsMentor reads your actual project  -  20+ coherence checks, 380+ incident &amp; change codes across all 16 domains, live EOL API  -  and acts inside your build. Not a chat layer. Embedded delivery intelligence.</div>
         </div>
 
       </div>
@@ -431,28 +432,36 @@ body::after{
 
     <!-- 10: Pro and Enterprise Roadmap -->
     <div class="scene" data-scene="10">
-      <div class="kicker">What's Coming  -  Pro and Enterprise</div>
+      <div class="kicker">What's Coming  -  Team and Enterprise</div>
       <h1 class="scene-heading">Your team works from one source of truth  -  anywhere, on any device.</h1>
+      <p class="scene-sub">Start free as a guest, upgrade to Professional as you build more, and grow into Team or Enterprise as more people need to work from the same build.</p>
       <div class="features">
+        <div class="feature">
+          <div class="feature-icon">&#x1F3E2;</div>
+          <div class="feature-text">
+            <h4>Shared Build Library <span class="tag-pill tag-team">Team</span></h4>
+            <p>Every build shared across up to 8 team members in real time. Your CAB chair, your DBA, your security lead  -  all working from the same living document.</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">&#x1F91D;</div>
+          <div class="feature-text">
+            <h4>Team RAID Board <span class="tag-pill tag-team">Team</span></h4>
+            <p>Risks, issues, and decisions logged and resolved together, with role-based edit access (PM / Admin / Reviewer) instead of one person owning the whole log.</p>
+          </div>
+        </div>
         <div class="feature">
           <div class="feature-icon">&#x1F511;</div>
           <div class="feature-text">
             <h4>Single Sign-On <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Sign in with your company identity. RACI roles resolve directly from your directory groups  -  no manual assignment, no second account.</p>
-          </div>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">&#x1F3E2;</div>
-          <div class="feature-text">
-            <h4>Team Build Library <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Every build shared across your team in real time. Your CAB chair, your DBA, your security lead  -  all working from the same living document.</p>
+            <p>Sign in with your company identity via SSO/LDAP/SAML. RACI roles resolve directly from your directory groups  -  no manual assignment, no second account.</p>
           </div>
         </div>
         <div class="feature">
           <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
           <div class="feature-text">
-            <h4>Data Governance Panel <span class="tag-pill tag-ent">Enterprise</span></h4>
-            <p>Admin-defined policy for every byte: what stays local, what syncs to cloud, what is never stored. Documented and auditable.</p>
+            <h4>Compliance &amp; Governance <span class="tag-pill tag-ent">Enterprise</span></h4>
+            <p>ServiceNow/Jira/BMC integration, on-prem deployment, and a SOC2/ISO 27001 audit trail  -  documented and auditable for the largest teams.</p>
           </div>
         </div>
       </div>

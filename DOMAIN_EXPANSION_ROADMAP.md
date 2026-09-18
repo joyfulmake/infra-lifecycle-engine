@@ -3,6 +3,18 @@
 From a single-domain infra provisioning PM tool to a universal project delivery engine
 covering every major PM vertical and technology horizontal.
 
+**Status: all 16 domains listed below have shipped** (infra, Cloud Migration, DevOps,
+Cybersecurity, Network Refresh, Data & Analytics, SAP, Salesforce, Oracle EBS/Fusion,
+Dynamics 365, BFSI, Healthcare, Manufacturing, Telecom, Retail, App Dev — see
+`src/domains/registry.js`). The actual implementation took a simpler path than the
+per-domain-folder structure originally proposed below: each domain is one file
+(`src/domains/{domainId}.js`) exporting its own incident/UUM/design-section catalog,
+looked up via `src/domains/lookup.js` and swapped into the shared store by
+`src/domains/applyDomain.js` — not the `src/domains/{domain}/tasks.js` etc. folder
+layout this doc originally sketched. This file is kept as the historical record of the
+phased rollout plan and the monetization/business-model thinking below, which is still
+current; for how domains actually work today, see `CLAUDE.md`.
+
 ---
 
 ## Architecture Pattern (the same for every domain)
@@ -371,6 +383,22 @@ Multi-build dashboard: portfolio of all active projects across an org, showing a
 
 Domain add-ons are activated per-org by the admin. A PM in a bank buys the BFSI module; a PM in a hospital buys Healthcare — they're not paying for SAP compat rules they'll never use.
 
+### Team & Enterprise — buy later
+
+Billing isn't live yet — `STRIPE_CONFIGURED = false` in `src/lib/stripeConfig.js` — so
+Team and Enterprise are genuinely a "buy later" roadmap item today, not a live checkout
+flow. The plans themselves are already fully defined in `src/lib/auth.js` `PLANS`, ready
+to switch on the moment billing goes live:
+
+| Plan | Price | For | Headline features |
+|---|---|---|---|
+| **Team** | $59/mo ($590/yr) | Growing PM teams, up to 8 seats | Unlimited builds, shared build repository, role-based access (PM/Admin/Reviewer), Team RAID collaboration board, priority email support |
+| **Enterprise** | Custom | Large organisations, unlimited seats | Everything in Team, plus SSO/LDAP/SAML, ServiceNow/Jira/BMC integration, on-prem deployment bundle, SOC2/ISO 27001 compliance audit trail, dedicated support with SLA |
+
+Activation steps for when a Team/Enterprise deal is ready to close are documented in
+`CLAUDE.md`'s "Stripe / billing setup" section (Stripe products/prices, publishable key,
+Cloudflare Worker deploy, webhook wiring) — no code changes needed, just configuration.
+
 ---
 
 ## Indicative Timeline
@@ -400,7 +428,7 @@ The following are **domain-agnostic** and require no changes per domain:
 - OpsMentor UI and TTS voice layer
 - Firebase cloud sync + Dexie local storage
 - CAB approval / decline / revision workflow
-- Excel export engine (14-sheet template adapts to domain-specific section labels)
+- Excel export engine (18-sheet template adapts to domain-specific section labels)
 - Coherence engine (cross-tab alerts — just new rules per domain)
 - Billing / auth / plan system
 - MSIX / PWA / web distribution
