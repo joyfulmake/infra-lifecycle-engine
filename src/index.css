@@ -52,7 +52,7 @@
     background-color: #F1F5F9;
     color: #111827;
     font-family: 'IBM Plex Sans', system-ui, sans-serif;
-    font-size: 13.5px;
+    font-size: 15px;
     font-weight: 440;
     line-height: 1.57;
     -webkit-font-smoothing: antialiased;
@@ -60,6 +60,17 @@
     letter-spacing: -0.005em;
   }
   #root { width: 100%; height: 100vh; overflow: hidden; }
+
+  /* Readability pass: Tailwind's text-xs (12px)/text-sm (14px) utilities are
+     rem-based against the browser's 16px default, not against body's own
+     font-size above — so they were unaffected by any body-level change and
+     stayed at a size too small for a "professional, easy to read" app used
+     on real monitors and laptops all day. Rather than touch the hundreds of
+     className strings across every tab, shift the whole scale up one tier
+     app-wide: every text-xs renders at the old text-sm size and vice versa.
+     Relative hierarchy between the two is preserved, just raised. */
+  #root .text-xs { font-size: 0.875rem /* 14px */; line-height: 1.25rem; }
+  #root .text-sm { font-size: 1rem /* 16px */; line-height: 1.5rem; }
 }
 
 @layer components {
@@ -71,7 +82,7 @@
     @apply px-4 py-2.5 text-xs font-semibold text-slate-500 rounded-t-lg border-b-2 border-transparent
            whitespace-nowrap hover:text-slate-700 hover:bg-slate-50/80;
     letter-spacing: 0.025em;
-    font-size: 11.5px;
+    font-size: 13px;
     transition: color 0.18s var(--ease-premium), background-color 0.18s var(--ease-premium), border-color 0.18s var(--ease-premium);
   }
   .tab-btn-active {
@@ -152,7 +163,7 @@
 }
 .suggest-item {
   padding: 8px 14px;
-  font-size: 12.5px;
+  font-size: 14px;
   cursor: pointer;
   border-bottom: 1px solid #F1F5F9;
   color: #374151;
@@ -764,9 +775,9 @@
   transition: box-shadow 0.2s var(--ease-premium), transform 0.2s var(--ease-premium);
 }
 .ui-stat-tile:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-.ui-stat-tile-label { font-size: 11px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.ui-stat-tile-value { font-size: 18px; font-weight: 800; line-height: 1.25; margin-top: 2px; color: var(--tile-accent, var(--color-text)); }
-.ui-stat-tile-sub { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+.ui-stat-tile-label { font-size: 12px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.ui-stat-tile-value { font-size: 19px; font-weight: 800; line-height: 1.25; margin-top: 2px; color: var(--tile-accent, var(--color-text)); }
+.ui-stat-tile-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
 
 /* ── Command palette (Cmd/Ctrl+K) — src/components/CommandPalette.jsx ─────── */
 .cmdk-overlay {
