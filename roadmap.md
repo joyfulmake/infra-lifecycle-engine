@@ -39,7 +39,7 @@ Instead of scattering provisioning decisions across spreadsheets, tickets, and m
 - **Critical Path Gantt scheduling** with automatic float/slack calculation, change-freeze and holiday-aware date math.
 - **AI advisor (OpsMentor)** — a domain-grounded assistant that surfaces non-obvious risks, EOL windows, and compatibility gaps as you build, with sourced references (NIST, Red Hat, Microsoft, CVE databases).
 - **Cross-tab coherence engine** — automatically detects drift between your incident selections, system design, and RTM sign-off, and flags it before it becomes a production incident.
-- **16-sheet Excel export** and full CMDB with lifecycle tracking for audit and handoff.
+- **16-sheet Excel export** for audit and stakeholder handoff.
 - **Works offline-first** (local IndexedDB storage) with optional cloud sync for teams — your data isn't required to leave the browser unless you choose to sync it.
 
 Whether you're standing up a single Oracle/RHEL server or coordinating a multi-region platform migration, OpsManifest gives your team a repeatable, audit-ready path from "we need a server" to "signed off and closed."
@@ -53,7 +53,6 @@ Whether you're standing up a single Oracle/RHEL server or coordinating a multi-r
 - Critical Path Method Gantt scheduling with freeze/holiday-aware dates
 - AI advisor with sourced, domain-grounded infrastructure guidance
 - Cross-tab coherence engine — detects drift between design, incidents, and sign-off
-- CMDB with configuration item lifecycle tracking
 - 16-sheet styled Excel export for audit/handoff
 - Offline-first local storage with optional team cloud sync
 - RAID log (Risks, Assumptions, Issues, Decisions)
@@ -62,8 +61,8 @@ Whether you're standing up a single Oracle/RHEL server or coordinating a multi-r
 
 | Plan | Price | For |
 |---|---|---|
-| Starter | Free | 2 builds/year, full 7-phase workflow, core Excel export |
-| Professional | $19/mo ($190/yr) | 15 builds/year, CMDB, full 16-sheet export, tech review locking |
+| Starter | Free | 2 builds/year, full 7-phase workflow, core 13-sheet Excel export |
+| Professional | $19/mo ($190/yr) | 15 builds/year, full 16-sheet export, tech review locking |
 | Team | $59/mo ($590/yr) | Unlimited builds, up to 8 users, shared repository, RAID collaboration |
 | Enterprise | Custom | Unlimited users, SSO/SAML, ServiceNow/Jira/BMC integration, on-prem |
 

@@ -5,7 +5,6 @@ import { getRealTasks } from './realTasks.js';
 import { getIncidentFixTasks } from './incidentFixTasks.js';
 import { buildDesignTasks } from './designTasks.js';
 import { DESIGN_SECTIONS, FIELD_LABELS } from '../store/useStore.js';
-import { getEolInfo } from './eolData.js';
 import { buildStructuralMap, buildFunctionalFlow, buildRuleBasedMissionIntel } from './infraMap.js';
 
 // ── Colour palette ─────────────────────────────────────────────────────────
@@ -188,7 +187,7 @@ export function exportExcel(state) {
     isBuilt = true, phase2Active = false,
     cabDeclined = false, rtmStale = false,
     selRegions,
-    fullExport = false,  // Pro+ gets CMDB, Gantt, System Design, Closure Summary
+    fullExport = false,  // Pro+ gets Gantt, System Design, Closure Summary
   } = state;
 
   const wb = XLSX.utils.book_new();
@@ -409,125 +408,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 5: CMDB Register
-  // ══════════════════════════════════════════════════════════════════════════
-  {
-    // Layer key → which inc.layers / uum.layers values map to it
-    const layerKeys = {
-      'Hardware':       ['unix', 'hw'],
-      'Operating System': ['unix', 'os'],
-      'Web / HTTP':     ['web'],
-      'Application':    ['app'],
-      'Database':       ['db'],
-      'Storage':        ['storage', 'stor'],
-      'Backup / DR':    ['backup', 'bk'],
-      'Network':        ['network', 'net'],
-      'Security':       ['security', 'sec'],
-    };
-
-    const allCustom = customInc || [];
-
-    function ciIncs(layerName) {
-      const keys = layerKeys[layerName] || [];
-      return selInc.filter(code => {
-        const inc = ALL_INC.find(i => i.code === code) || allCustom.find(i => i.code === code);
-        return inc && inc.layers && keys.some(k => inc.layers.includes(k));
-      }).map(code => {
-        const inc = ALL_INC.find(i => i.code === code) || allCustom.find(i => i.code === code);
-        return inc ? inc.short : code;
-      }).join(', ') || '—';
-    }
-
-    function ciUums(layerName) {
-      const keys = layerKeys[layerName] || [];
-      return selUUM.filter(code => {
-        const uum = ALL_UUM.find(u => u.code === code);
-        return uum && uum.layers && keys.some(k => uum.layers.includes(k));
-      }).map(code => {
-        const uum = ALL_UUM.find(u => u.code === code);
-        return uum ? uum.short : code;
-      }).join(', ') || '—';
-    }
-
-    function eolBadge(comp) {
-      const info = getEolInfo(comp);
-      if (!info || info.status === 'unknown') return '—';
-      if (info.status === 'active') return 'Active until ' + info.date;
-      if (info.status === 'eos_soon') return 'EOS Soon: ' + info.date;
-      return 'EOL: ' + info.date;
-    }
-
-    function eolStyle(comp) {
-      const info = getEolInfo(comp);
-      if (!info || info.status === 'unknown' || info.status === 'active') return ST.PASS;
-      if (info.status === 'eos_soon') return ST.AMBER_V;
-      return ST.FAIL;
-    }
-
-    const ciRows = [
-      { layer: 'Hardware',         comp: ctx.hw,   config: [sysDesignData?.unix?.cpu, sysDesignData?.unix?.ram, sysDesignData?.unix?.hostname_scheme].filter(Boolean).join(' | ') || '—', owner: 'Unix Admin' },
-      { layer: 'Operating System', comp: ctx.os,   config: ['Kernel: ' + (sysDesignData?.unix?.kernel_params || '—'), 'Patch: ' + (sysDesignData?.unix?.patch_window || '—'), sysDesignData?.unix?.monitoring_agent].filter(Boolean).join(' | '), owner: 'Unix Admin' },
-      { layer: 'Web / HTTP',       comp: sysDesignData?.web?.notes || ctx.app || '—', config: ['SSL: ' + (sysDesignData?.web?.ssl_protocols || '—'), 'MaxConn: ' + (sysDesignData?.web?.max_conn || '—'), 'WAF: ' + (sysDesignData?.web?.waf || '—')].join(' | '), owner: 'Web Admin' },
-      { layer: 'Application',      comp: ctx.app,  config: ['Port: ' + (sysDesignData?.app?.app_port || '—'), 'Deploy: ' + (sysDesignData?.app?.deploy_method || '—'), 'APM: ' + (sysDesignData?.app?.apm_agent || '—')].join(' | '), owner: 'App Admin' },
-      { layer: 'Database',         comp: ctx.db,   config: ['Port: ' + (sysDesignData?.db?.listener_port || '—'), 'Pool: ' + (sysDesignData?.db?.max_conn || '—'), 'Repl: ' + (sysDesignData?.db?.replication || '—')].join(' | '), owner: 'DB Admin' },
-      { layer: 'Storage',          comp: sysDesignData?.storage?.san_fabric || 'SAN / NFS', config: ['LUN: ' + (sysDesignData?.storage?.lun_size || '—'), 'IOPS: ' + (sysDesignData?.storage?.iops_req || '—'), 'RAID: ' + (sysDesignData?.storage?.raid_level || '—')].join(' | '), owner: 'Storage Admin' },
-      { layer: 'Backup / DR',      comp: sysDesignData?.backup?.backup_tool || 'RMAN / Veeam', config: ['RPO: ' + (sysDesignData?.backup?.rpo_hours || '—') + 'h', 'RTO: ' + (sysDesignData?.backup?.rto_hours || '—') + 'h', 'Offsite: ' + (sysDesignData?.backup?.offsite_target || '—')].join(' | '), owner: 'Backup Admin' },
-      { layer: 'Network',          comp: sysDesignData?.network?.bandwidth || 'Ethernet', config: ['VLAN: ' + (sysDesignData?.network?.vlan_ids || '—'), 'Bond: ' + (sysDesignData?.network?.bond_mode || '—'), 'FW: ' + (sysDesignData?.network?.fw_rules || '—')].join(' | '), owner: 'Net Admin' },
-      { layer: 'Security',         comp: sysDesignData?.security?.compliance_framework || 'ISO 27001:2022', config: ['PatchSLA: ' + (sysDesignData?.security?.patch_sla || '—'), 'MFA: ' + (sysDesignData?.security?.mfa_required || '—'), 'SIEM: ' + (sysDesignData?.security?.siem_endpoint || '—')].join(' | '), owner: 'SecOps' },
-    ];
-
-    const sb = sheetBuilder([{ width: 5 }, { width: 20 }, { width: 35 }, { width: 22 }, { width: 60 }, { width: 28 }, { width: 28 }, { width: 18 }]);
-    sb.headerRow(projName + ' — CMDB Configuration Item Register', ST.H1, 8);
-    sb.row([c('#', ST.H2), c('Layer', ST.H2), c('Component', ST.H2), c('EOL Status', ST.H2), c('Key Configuration', ST.H2), c('Active Incidents', ST.H2), c('UUM Items', ST.H2), c('Owner', ST.H2)]);
-
-    ciRows.forEach(({ layer, comp, config, owner }, i) => {
-      const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
-      sb.row([
-        c(i + 1, ctd(ST.BOLD_L)),
-        c(layer, ST.BOLD_L),
-        c(comp || '—', bg),
-        c(eolBadge(comp), ctd(eolStyle(comp))),
-        c(config, bg),
-        c(ciIncs(layer), ciIncs(layer) !== '—' ? ctd(ST.FAIL) : ctd(bg)),
-        c(ciUums(layer), ciUums(layer) !== '—' ? ctd(ST.AMBER_V) : ctd(bg)),
-        c(owner, ctd(bg)),
-      ]);
-    });
-
-    // EOL risk summary section
-    const eolRisks = ciRows.filter(({ comp }) => {
-      const info = getEolInfo(comp);
-      return info && (info.status === 'eol' || info.status === 'eos_soon');
-    });
-
-    sb.row(['', '', '', '', '', '', '', '']);
-    sb.headerRow('EOL / EOS RISK SUMMARY (' + eolRisks.length + ' component(s) at risk)', eolRisks.length > 0 ? ST.RED_H : ST.GREEN_H, 8);
-    if (eolRisks.length === 0) {
-      sb.row([c('All components within active support lifecycle', ST.PASS), '', '', '', '', '', '', '']);
-    } else {
-      sb.row([c('Layer', ST.LABEL), c('Component', ST.LABEL), c('Status', ST.LABEL), c('Date', ST.LABEL), c('Recommended Action', ST.LABEL), '', '', '']);
-      eolRisks.forEach(({ layer, comp }, i) => {
-        const info = getEolInfo(comp);
-        const bg = i % 2 === 0 ? ST.BODY : ST.BODY_A;
-        const action = info.status === 'eol'
-          ? 'Immediate upgrade or migration required — component is out of support'
-          : 'Plan upgrade within 6 months — EOS approaching';
-        sb.row([
-          c(layer, ST.BOLD_L),
-          c(comp, bg),
-          c(info.status === 'eol' ? 'EOL' : 'EOS Soon', info.status === 'eol' ? ST.FAIL : ST.AMBER_V),
-          c(info.date || '—', bg),
-          c(action, bg),
-          '', '', '',
-        ]);
-      });
-    }
-
-    if (fullExport) XLSX.utils.book_append_sheet(wb, sb.build(), 'CMDB Register');
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 6: Incidents Register
+  // SHEET 5: Incidents Register
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
@@ -563,7 +444,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 7: UUM Items
+  // SHEET 6: UUM Items
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
@@ -617,7 +498,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 8: RTM Checklist
+  // SHEET 7: RTM Checklist
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 22 }, { width: 75 }, { width: 40 }, { width: 16 }]);
@@ -671,7 +552,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 9: Gantt Timeline
+  // SHEET 8: Gantt Timeline
   // ══════════════════════════════════════════════════════════════════════════
   {
     const ganttTasks = sdAiTasks.length > 0 ? sdAiTasks : buildDesignTasks(sysDesignData);
@@ -759,7 +640,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 10: RAID Registry
+  // SHEET 9: RAID Registry
   // ══════════════════════════════════════════════════════════════════════════
   {
     const rows = [
@@ -861,7 +742,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 11: System Design
+  // SHEET 10: System Design
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sectionColors = [ST.H2, ST.AMBER_H, ST.RED_H, ST.GREEN_H, ST.BLUE_H, ST.H2, ST.AMBER_H, ST.RED_H];
@@ -886,7 +767,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 12: RACI Matrix (20 roles)
+  // SHEET 11: RACI Matrix (20 roles)
   // ══════════════════════════════════════════════════════════════════════════
   {
     // PM, Change Manager, Tech Manager, then each function admin + lead pair
@@ -945,7 +826,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 13: Emergency Changes
+  // SHEET 12: Emergency Changes
   // ══════════════════════════════════════════════════════════════════════════
   if (emergencyChanges && emergencyChanges.length > 0) {
     const rows = [
@@ -972,7 +853,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 14: OpsMentor Tasks (custom tasks added via AI chat)
+  // SHEET 13: OpsMentor Tasks (custom tasks added via AI chat)
   // ══════════════════════════════════════════════════════════════════════════
   if (customMentorTasks.length > 0) {
     const rows = [
@@ -998,7 +879,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 15: Vulnerability Registry
+  // SHEET 14: Vulnerability Registry
   // ══════════════════════════════════════════════════════════════════════════
   if (vulnRegistry.length > 0 || stakeholderDiscussions.length > 0) {
     const rows = [
@@ -1079,7 +960,7 @@ export function exportExcel(state) {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SHEET 16: Closure Summary
+  // SHEET 15: Closure Summary
   // ══════════════════════════════════════════════════════════════════════════
   {
     const sb = sheetBuilder([{ width: 6 }, { width: 95 }, { width: 22 }]);
