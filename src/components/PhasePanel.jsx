@@ -809,6 +809,19 @@ function OnboardingWizard({
 
   return (
     <div className="w-full min-h-screen bg-navy flex flex-col items-center py-10 px-4 sm:px-8">
+      {/* Theme toggle — PhasePanel's normal header (with its own sun/moon
+          button) doesn't render at all before a build exists, so the
+          wizard needs its own, clearly-labelled one rather than relying on
+          the icon-only version reappearing later. Fixed position so it's
+          reachable from every step without scrolling back to the top. */}
+      <button
+        onClick={s.toggleTheme}
+        className="fixed top-4 right-4 sm:top-6 sm:right-6 z-10 flex items-center gap-1.5 text-xs font-medium text-white/85 bg-white/8 hover:bg-white/15 border border-white/15 rounded-full px-3 py-1.5 transition-colors"
+        title={s.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+      >
+        <span className="text-sm leading-none">{s.theme === 'dark' ? '☀' : '🌙'}</span>
+        {s.theme === 'dark' ? 'Light' : 'Dark'}
+      </button>
       <div className="w-full max-w-4xl">
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-2 mb-8">
