@@ -355,6 +355,24 @@
    catch elements carrying that literal Tailwind class name. Override directly. */
 [data-theme="light"] .sidebar-root .section-hdr { color: #1E293B !important; border-bottom-color: #E2E8F0 !important; }
 
+/* Tailwind's build for this project (3.4.19, no custom plugins, no dark-mode
+   config) emits an unexplained, non-!important rule for every button variant
+   — [data-theme=light] .sidebar-root .btn-primary{color:#1e293b}, and the
+   same for .btn-teal/.btn-red/.btn-amber/.btn-green — that does not appear
+   as literal text anywhere in this repo (checked exhaustively: every .jsx/
+   .js/.css file, all git history, byte-level file search). Whatever
+   generates it, it overrides these buttons' own `text-white` back to dark
+   slate in light theme, making .btn-primary (dark navy bg) nearly
+   unreadable — found 2026-09-18 on the onboarding wizard's "← Back" button.
+   Fix pragmatically with a later, !important rule rather than chasing the
+   mystery further; !important always wins over a non-important rule
+   regardless of specificity, so this is deterministic regardless of cause. */
+[data-theme="light"] .sidebar-root .btn-primary,
+[data-theme="light"] .sidebar-root .btn-teal,
+[data-theme="light"] .sidebar-root .btn-red,
+[data-theme="light"] .sidebar-root .btn-amber,
+[data-theme="light"] .sidebar-root .btn-green { color: #FFFFFF !important; }
+
 /* ══════════════════════════════════════════════════════════════════════════════
    Dark theme — full-page main area overrides
    Target: .main-root (the right panel wrapper)

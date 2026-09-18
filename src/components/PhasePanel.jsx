@@ -808,7 +808,7 @@ function OnboardingWizard({
   }
 
   return (
-    <div className="w-full min-h-screen flex flex-col items-center py-10 px-4 sm:px-8">
+    <div className="w-full min-h-screen bg-navy flex flex-col items-center py-10 px-4 sm:px-8">
       <div className="w-full max-w-4xl">
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-2 mb-8">
@@ -849,13 +849,18 @@ function OnboardingWizard({
                       <button
                         key={d.id}
                         onClick={() => pickDomain(d)}
-                        className="text-left rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/25 transition-colors p-3 flex flex-col gap-1.5"
+                        className="group text-left rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/30 hover:-translate-y-0.5 hover:shadow-lg transition-all p-4 flex flex-col gap-3"
                       >
-                        <div className="flex items-center gap-2">
-                          <Icon className="w-5 h-5 flex-shrink-0" style={{ color: d.accent }} />
-                          <span className="text-sm font-semibold text-white/90">{d.shortLabel}</span>
+                        <div
+                          className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105"
+                          style={{ background: `${d.accent}26`, border: `1px solid ${d.accent}55` }}
+                        >
+                          <Icon className="w-7 h-7" style={{ color: d.accent }} />
                         </div>
-                        <div className="text-xs text-white/62 leading-snug">{d.description}</div>
+                        <div>
+                          <div className="text-sm font-semibold text-white/90 mb-1">{d.shortLabel}</div>
+                          <div className="text-xs text-white/62 leading-snug">{d.description}</div>
+                        </div>
                       </button>
                     );
                   })}
