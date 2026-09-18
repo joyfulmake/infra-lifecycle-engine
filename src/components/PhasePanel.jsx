@@ -765,6 +765,288 @@ function ScanModal({ onClose, onComplete }) {
   );
 }
 
+// Full-screen onboarding wizard — shown instead of the normal sidebar+tabs
+// layout while `!s.isBuilt` (see App.jsx, which mounts this full-viewport
+// and nothing else — no phase-nav pills, no locked sidebar sections, no
+// 16-tab bar, no ExecOverview, no OpsMentor strip; none of that is
+// meaningful before a build exists). Three screens — domain, then stack/
+// scope, then a review step before Build — replacing the old always-visible
+// "Phase 1" sidebar section that showed the domain picker, all 4 stack
+// selects, regions, and dates crammed into a 360px column all at once.
+// Takes all its state/handlers as props from PhasePanel — nothing here is
+// duplicated, it's the exact same hwSel/domainConfirmed/handleBuild etc.
+// PhasePanel already owns, just presented one step at a time and at full
+// page width instead of sidebar width. 2026-09-18.
+function OnboardingWizard({
+  s, savedBuilds, handleLoadBuild, handleBuild,
+  domainConfirmed, setDomainConfirmed,
+  hwSel, setHwSel, hwCustom, setHwCustom,
+  osSel, setOsSel, osCustom, setOsCustom,
+  dbSel, setDbSel, dbCustom, setDbCustom,
+  appSel, setAppSel, appCustom, setAppCustom,
+}) {
+  const [wizardStep, setWizardStep] = useState(domainConfirmed ? 'scope' : 'domain');
+  const [showLoadBuild, setShowLoadBuild] = useState(false);
+  const domainMeta = getDomainMeta(s.activeDomain);
+  const axisLabels = domainMeta.axisLabels;
+
+  // Same completeness rule as handleBuild's own check below — kept in sync
+  // deliberately rather than re-derived, so "Next" never disagrees with Build.
+  const hwVal = hwCustom || (hwSel !== '' && hwSel !== '__custom' ? hwSel : '');
+  const osVal = osCustom || (osSel !== '' && osSel !== '__custom' ? osSel : '');
+  const dbVal = dbCustom || (dbSel !== '' && dbSel !== '__custom' ? dbSel : '');
+  const appVal = appCustom || (appSel !== '' && appSel !== '__custom' ? appSel : '');
+  const stackFilled = !!(hwVal && osVal && dbVal && appVal);
+
+  function pickDomain(d) {
+    if (s.activeDomain !== d.id) {
+      if (s.isDirty && !window.confirm(`Switch to ${d.label}? This clears the current in-progress build.`)) return;
+      s.setActiveDomain(d.id);
+    }
+    setDomainConfirmed(true);
+    setWizardStep('scope');
+  }
+
+  return (
+    <div className="w-full min-h-screen flex flex-col items-center py-10 px-4 sm:px-8">
+      <div className="w-full max-w-4xl">
+        {/* Progress dots */}
+        <div className="flex items-center justify-center gap-2 mb-8">
+          {['domain', 'scope', 'review'].map(step => (
+            <div key={step} className={`h-1.5 rounded-full transition-all ${wizardStep === step ? 'w-10 bg-teal' : 'w-6 bg-white/15'}`} />
+          ))}
+        </div>
+
+        {wizardStep === 'domain' && (
+          <div className="fade-in">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white/95 text-center mb-3">OpsManifest — Guided Delivery Platform</h1>
+            <p className="text-sm text-white/72 text-center max-w-2xl mx-auto mb-6 leading-relaxed">
+              Structured pre-work for 16 project domains — the questions that prevent delivery chaos, answered before work starts.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto mb-10">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+                <div className="text-xs font-semibold text-teal mb-1">For you</div>
+                <div className="text-xs text-white/72 leading-snug">Never miss a step — guided scope, risk, and sign-off in one flow.</div>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+                <div className="text-xs font-semibold text-teal mb-1">For your team</div>
+                <div className="text-xs text-white/72 leading-snug">Shared visibility — RACI, RAID, and task ownership everyone can see.</div>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+                <div className="text-xs font-semibold text-teal mb-1">For your enterprise</div>
+                <div className="text-xs text-white/72 leading-snug">Audit-ready CAB/RTM governance and Excel export for stakeholders.</div>
+              </div>
+            </div>
+
+            <h2 className="text-sm font-semibold text-white/85 text-center mb-4">Choose the domain that matches your project</h2>
+            {getDomainsByCategory().map(cat => (
+              <div key={cat.id} className="mb-6">
+                <div className="text-xs text-white/52 uppercase tracking-wide font-semibold mb-2 text-center">{cat.label}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {cat.domains.map(d => {
+                    const Icon = d.icon;
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => pickDomain(d)}
+                        className="text-left rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/25 transition-colors p-3 flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-5 h-5 flex-shrink-0" style={{ color: d.accent }} />
+                          <span className="text-sm font-semibold text-white/90">{d.shortLabel}</span>
+                        </div>
+                        <div className="text-xs text-white/62 leading-snug">{d.description}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {savedBuilds && savedBuilds.length > 0 && (
+              <div className="text-center mt-4">
+                <button onClick={() => setShowLoadBuild(o => !o)} className="text-xs text-white/62 hover:text-white/85 underline">
+                  {showLoadBuild ? '▾' : '▸'} Continue a saved build instead
+                </button>
+                {showLoadBuild && (
+                  <div className="mt-3 max-w-md mx-auto space-y-1.5 fade-in">
+                    {savedBuilds.map(b => (
+                      <div key={b.id} className="flex items-center justify-between gap-2 rounded border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="text-left min-w-0">
+                          <div className="text-xs font-medium text-white/85 truncate">{b.name}</div>
+                          <div className="text-xs text-white/52">{new Date(b.savedAt).toLocaleDateString()}</div>
+                        </div>
+                        <button onClick={() => handleLoadBuild(b)} className="btn-teal text-xs px-3 py-1 flex-shrink-0">Load</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {wizardStep === 'scope' && (
+          <div className="fade-in max-w-lg mx-auto">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              {(() => { const Icon = domainMeta.icon; return <Icon className="w-5 h-5" style={{ color: domainMeta.accent }} />; })()}
+              <span className="text-sm font-semibold" style={{ color: domainMeta.accent }}>{domainMeta.shortLabel}</span>
+            </div>
+            <h1 className="text-xl font-bold text-white/95 text-center mb-1">Set up your project</h1>
+            <button onClick={() => setWizardStep('domain')} className="block mx-auto text-xs text-white/62 hover:text-white/85 underline mb-6">← Change domain</button>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-white/82 block mb-1">{axisLabels[0]}</label>
+                <select
+                  className="w-full text-sm bg-white/10 text-white border border-white/25 rounded px-3 py-2 mb-1 focus:outline-none focus:bg-white/15"
+                  value={hwSel}
+                  onChange={e => { setHwSel(e.target.value); setHwCustom(''); setOsSel(''); setOsCustom(''); }}
+                >
+                  <option value="">— Select {axisLabels[0]} —</option>
+                  {HW_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
+                  <option value="__custom">+ Custom...</option>
+                </select>
+                {hwSel === '__custom' && (
+                  <FilteredSuggestInput options={HW_OPTIONS} value={hwCustom} onChange={setHwCustom} placeholder={`Type ${axisLabels[0].toLowerCase()}...`} />
+                )}
+              </div>
+
+              <div>
+                {(() => {
+                  const effectiveHW = hwCustom || (hwSel !== '__custom' ? hwSel : '');
+                  const compatOS = HW_OS_COMPAT[effectiveHW] || OS_OPTIONS;
+                  const isFiltered = !!HW_OS_COMPAT[effectiveHW];
+                  return (
+                    <>
+                      <label className="text-xs font-medium text-white/82 block mb-1">
+                        {axisLabels[1]}
+                        {isFiltered && <span className="ml-1 text-teal/80 font-normal text-xs">(filtered for {effectiveHW.split(' ')[0]} {effectiveHW.split(' ')[1] || ''})</span>}
+                      </label>
+                      <select
+                        className="w-full text-sm bg-white/10 text-white border border-white/25 rounded px-3 py-2 mb-1 focus:outline-none focus:bg-white/15"
+                        value={osSel}
+                        onChange={e => { setOsSel(e.target.value); setOsCustom(''); }}
+                      >
+                        <option value="">— Select {axisLabels[1]} —</option>
+                        {compatOS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
+                        {!isFiltered && <option value="__custom">+ Custom...</option>}
+                        {isFiltered && <option value="__custom">+ Other (custom)...</option>}
+                      </select>
+                      {osSel === '__custom' && (
+                        <FilteredSuggestInput options={OS_OPTIONS} value={osCustom} onChange={setOsCustom} placeholder={`Type ${axisLabels[1].toLowerCase()}...`} />
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-white/82 block mb-1">{axisLabels[2]}</label>
+                <select
+                  className="w-full text-sm bg-white/10 text-white border border-white/25 rounded px-3 py-2 mb-1 focus:outline-none focus:bg-white/15"
+                  value={dbSel}
+                  onChange={e => { setDbSel(e.target.value); setDbCustom(''); }}
+                >
+                  <option value="">— Select {axisLabels[2]} —</option>
+                  {DB_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
+                  <option value="__custom">+ Custom...</option>
+                </select>
+                {dbSel === '__custom' && (
+                  <FilteredSuggestInput options={DB_OPTIONS} value={dbCustom} onChange={setDbCustom} placeholder={`Type ${axisLabels[2].toLowerCase()}...`} />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-white/82 block mb-1">{axisLabels[3]}</label>
+                <select
+                  className="w-full text-sm bg-white/10 text-white border border-white/25 rounded px-3 py-2 mb-1 focus:outline-none focus:bg-white/15"
+                  value={appSel}
+                  onChange={e => { setAppSel(e.target.value); setAppCustom(''); }}
+                >
+                  <option value="">— Select {axisLabels[3]} —</option>
+                  {APP_OPTIONS.map(o => <option key={o} value={o}>{eolLabel(o)}</option>)}
+                  <option value="__custom">+ Custom...</option>
+                </select>
+                {appSel === '__custom' && (
+                  <FilteredSuggestInput options={APP_OPTIONS} value={appCustom} onChange={setAppCustom} placeholder={`Type ${axisLabels[3].toLowerCase()}...`} />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-white/82 block mb-1.5">Regions in Scope</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: 'Production', label: 'Production', color: 'border-red-500/50 text-red-300' },
+                    { id: 'Model', label: 'Model', color: 'border-amber-500/50 text-amber-300' },
+                    { id: 'QA/Dev', label: 'QA / Dev', color: 'border-blue-500/50 text-blue-300' },
+                    { id: 'Integration', label: 'Integration', color: 'border-green-500/50 text-green-300' },
+                  ].map(({ id, label, color }) => {
+                    const active = s.selRegions.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          const next = active ? s.selRegions.filter(r => r !== id) : [...s.selRegions, id];
+                          s.setSelRegions(next.length ? next : [id]);
+                        }}
+                        className={['text-xs rounded border px-2 py-0.5 transition-colors', active ? `${color} bg-white/10 font-semibold` : 'border-white/10 text-white/52'].join(' ')}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-white/82 block mb-1">Project Name</label>
+                <input
+                  className="w-full text-sm bg-white/10 text-white border border-white/25 rounded px-3 py-2 placeholder:text-white/52 focus:outline-none focus:bg-white/15"
+                  value={s.requirements.projectName || ''}
+                  onChange={e => s.setRequirements({ ...s.requirements, projectName: e.target.value })}
+                  placeholder="What the CAB board will recognise this build as"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-white/82 block mb-1">Go-Live Date</label>
+                <input
+                  type="date"
+                  className="w-full text-sm bg-white/10 text-white border border-white/25 rounded px-3 py-2 focus:outline-none"
+                  value={s.requirements.goLiveDate || ''}
+                  onChange={e => s.setRequirements({ ...s.requirements, goLiveDate: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <button className="btn-primary w-full mt-6" disabled={!stackFilled} onClick={() => setWizardStep('review')}>Next →</button>
+          </div>
+        )}
+
+        {wizardStep === 'review' && (
+          <div className="fade-in max-w-lg mx-auto">
+            <h1 className="text-xl font-bold text-white/95 text-center mb-6">Review &amp; Build</h1>
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-2 mb-6">
+              <div className="flex justify-between text-sm"><span className="text-white/62">Domain</span><span className="text-white/90 font-medium">{domainMeta.label}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-white/62">{axisLabels[0]}</span><span className="text-white/90 font-medium">{hwVal}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-white/62">{axisLabels[1]}</span><span className="text-white/90 font-medium">{osVal}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-white/62">{axisLabels[2]}</span><span className="text-white/90 font-medium">{dbVal}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-white/62">{axisLabels[3]}</span><span className="text-white/90 font-medium">{appVal}</span></div>
+              {s.requirements.projectName && <div className="flex justify-between text-sm"><span className="text-white/62">Project</span><span className="text-white/90 font-medium">{s.requirements.projectName}</span></div>}
+              {s.requirements.goLiveDate && <div className="flex justify-between text-sm"><span className="text-white/62">Go-Live</span><span className="text-white/90 font-medium">{s.requirements.goLiveDate}</span></div>}
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-primary px-4" onClick={() => setWizardStep('scope')}>← Back</button>
+              <button className="btn-teal flex-1" onClick={handleBuild}>Build Environment →</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PhasePanel() {
   const s = useStore();
   const { authUser, setAuthUser, openAuthModal } = useAuth();
@@ -1167,6 +1449,23 @@ export default function PhasePanel() {
     ['PM Email', 'pmEmail', 'text', null, null],
     ['PM Backup Email', 'pmBackupEmail', 'text', null, null],
   ];
+
+  // Full-screen onboarding wizard replaces the entire sidebar+tabs layout
+  // until a build exists — see OnboardingWizard above and App.jsx (which
+  // mounts only this, full-viewport, and none of ExecOverview/PmTabs/
+  // OrchestratorPanel while !s.isBuilt).
+  if (!s.isBuilt) {
+    return (
+      <OnboardingWizard
+        s={s} savedBuilds={savedBuilds} handleLoadBuild={handleLoadBuild} handleBuild={handleBuild}
+        domainConfirmed={domainConfirmed} setDomainConfirmed={setDomainConfirmed}
+        hwSel={hwSel} setHwSel={setHwSel} hwCustom={hwCustom} setHwCustom={setHwCustom}
+        osSel={osSel} setOsSel={setOsSel} osCustom={osCustom} setOsCustom={setOsCustom}
+        dbSel={dbSel} setDbSel={setDbSel} dbCustom={dbCustom} setDbCustom={setDbCustom}
+        appSel={appSel} setAppSel={setAppSel} appCustom={appCustom} setAppCustom={setAppCustom}
+      />
+    );
+  }
 
   return (
     <div className="w-full bg-navy text-white flex flex-col overflow-hidden" style={{ height: '100vh' }}>

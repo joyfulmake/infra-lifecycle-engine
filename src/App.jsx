@@ -24,6 +24,7 @@ export default function App() {
   // button (see onClick below), regardless of this desktop default.
   const [mentorCollapsed, setMentorCollapsed] = useState(true);
   const ctx = useStore(s => s.ctx);
+  const isBuilt = useStore(s => s.isBuilt);
 
   useEffect(() => {
     const db = (ctx?.db || '').toLowerCase();
@@ -58,6 +59,23 @@ export default function App() {
       return () => { document.body.style.overflow = prev; };
     }
   }, [sidebarOpen, mentorOpen]);
+
+  // Before a build exists, PhasePanel renders a full-screen onboarding
+  // wizard (domain → stack/scope → review) instead of its normal sidebar
+  // content — none of ExecOverview's KPI strip, PmTabs' 16-tab bar, or
+  // OpsMentor are meaningful yet, so none of them mount. 2026-09-18.
+  if (!isBuilt) {
+    return (
+      <>
+        <div className="sidebar-root h-screen w-full overflow-y-auto">
+          <PhasePanel />
+        </div>
+        {showAuthModal && <AuthModal reason={authModalReason} onClose={() => setShowAuthModal(false)} />}
+        <DemoTour />
+        <CommandPalette />
+      </>
+    );
+  }
 
   return (
     <>

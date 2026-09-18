@@ -36,7 +36,7 @@ function isCommandMessage(tl) {
   if (COMMAND_PREFIXES.has(words[0]) && tl.length > 10) return true;
   return false;
 }
-import { useStore, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS } from '../store/useStore.js';
+import { useStore, HW_OPTIONS, OS_OPTIONS, DB_OPTIONS, APP_OPTIONS, DESIGN_SECTIONS } from '../store/useStore.js';
 import { getDomainMeta } from '../domains/registry.js';
 import { useAuth } from '../lib/AuthContext.jsx';
 import { useBuildsDb } from '../lib/useBuildsDb.js';
@@ -379,7 +379,7 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
     const goLive = r.goLiveDate ? ` — go-live ${r.goLiveDate}` : '';
 
     if (st.promoted)
-      return `Hypercare window is open${proj ? ` for "${proj}"` : ''}. The first 48 hours are the highest-risk window — watch for connection pool exhaustion, job scheduler drift, and CMDB sync gaps. Those are the most common post-cutover surprises. Closure tab tracks every sign-off; export the audit trail once every item is green.`;
+      return `Hypercare window is open${proj ? ` for "${proj}"` : ''}. The first 48 hours are the highest-risk window — watch closely for anything that drifted from what RTM signed off on. Closure tab tracks every sign-off; export the audit trail once every item is green.`;
     if (st.rtmSigned && st.cabApproved)
       return `Every gate is cleared${goLive}. Before initiating cutover: confirm the bridge team is assembled, the rollback plan is rehearsed, and the change window is formally open with the CAB chair. The "Promote to Live" action in the sidebar is the point of no return.`;
     if (st.rtmSigned && !st.cabApproved)
@@ -392,8 +392,10 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       return `Phase 2 is active — incident and change tasks are now on the schedule. Before going to CAB: open the Gantt and look at tasks flagged CP (critical path). Any delay on those propagates directly to the go-live date.`;
     if (st.designApplied)
       return `Design is the locked baseline — every downstream RTM row traces back to a field you just set. Phase 2 maps your incident codes and UUM items to real change tasks; that's what populates the Gantt and the full RTM requirement list.`;
-    if (st.scanComplete)
-      return `Scan complete. System Design is next — all 8 sections (Network, Security, Storage, Backup, DR, Compliance, HA, Monitoring) set fields that downstream RTM rows will trace to. Gaps here become FAIL rows at sign-off, so go through each section deliberately.`;
+    if (st.scanComplete) {
+      const sectionCount = DESIGN_SECTIONS.length;
+      return `Scan complete. System Design is next — all ${sectionCount} section${sectionCount !== 1 ? 's' : ''} set fields that downstream RTM rows will trace to. Gaps here become FAIL rows at sign-off, so go through each section deliberately.`;
+    }
     if (st.isBuilt) {
       if (/oracle/i.test(db) && /power|ppc/i.test(hw))
         return `For this platform and database combination, the scan will surface ppc64le Oracle certification gaps and fix-pack currency issues — those are the two most common CAB blockers for Power migrations. Run it before touching the design.`;
@@ -406,41 +408,26 @@ export default function OrchestratorPanel({ docked = false, onCollapsedChange, i
       return `The scan cross-checks this stack against live CVE feeds and EOL timelines — run it before locking 240+ fields of system design. Findings auto-populate the incident scope for Phase 2.`;
     }
 
-    if (!hw)
-      return `I'm OpsMentor — I guide the delivery team through the full provisioning lifecycle from platform selection to production cutover. Start with the hardware platform — AIX, IBM Power, and x86 each have fundamentally different middleware constraints, EOL timelines, and migration playbooks.`;
-    if (!os) {
-      const isAIX = /aix/i.test(hw);
-      return isAIX
-        ? `AIX is selected — the OS version will determine the extended support window and migration scope. AIX 7.1 is well into extended support; flag it early because the CAB board will ask.`
-        : `OS version anchors the patch cycle, EOL timeline, and middleware compatibility. It's the foundation every other selection sits on — pick deliberately.`;
-    }
-    if (!db)
-      return `Database engine is the next critical layer — it determines the maintenance window, backup strategy, and migration complexity. Oracle RAC and legacy Sybase have the longest change tails.`;
-    if (!app)
-      return `Last layer — application or middleware determines TLS configuration, clustering requirements, and session management approach. WebSphere and JBoss have specific fix-pack dependencies worth knowing upfront.`;
-    if (!r.projectName)
-      return `Give this build a name the CAB board will recognise — typically system name, environment, and purpose in one phrase. It appears on every export and every sign-off document.`;
-    if (!r.envType)
-      return `Environment type changes the approval path: Production means full CAB review and strict change windows. QA and Dev have faster tracks but different SLA thresholds and different RTM scrutiny.`;
-    if (!r.projectStartDate)
-      return `Project start date anchors the Gantt. The critical path calculation needs it to determine whether the go-live window is achievable given the full task scope.`;
-    if (!r.goLiveDate)
-      return `Go-live date sets the constraint everything is measured against. Add it now — the Gantt will immediately show whether the window is comfortable or dangerously tight.`;
-    if (!r.sla)
-      return `SLA tier sets incident response targets and shapes CAB criteria. High-SLA builds get more RTM scrutiny — the board will verify every row matches the declared SLA.`;
-
-    return `All fields are set${proj ? ` for "${proj}"` : ''}. Click Build in the sidebar to lock the stack and start the AI scan workflow.`;
+    // Everything below only ever ran while `st.isBuilt` was false — i.e.
+    // during stack/scope selection, before a build exists. Since 2026-09-18
+    // that phase is a dedicated full-screen onboarding wizard instead
+    // (App.jsx mounts OrchestratorPanel only once s.isBuilt is true — see
+    // PhasePanel.jsx's OnboardingWizard), so this is no longer reachable in
+    // normal use. Kept as one short generic line rather than deleted, in
+    // case OpsMentor is ever mounted before a build again — the previous
+    // version of this branch hardcoded infra product names (AIX/WebSphere/
+    // JBoss/Oracle RAC) regardless of the active PM domain, which is the
+    // exact bug this comment exists to prevent recurring.
+    return `I'm OpsMentor — pick your stack in the sidebar and click Build to get started; I'll have specific guidance once your project exists.`;
   }
 
   // ── Quick actions — contextual buttons for the current workflow phase ──────
 
   function getQuickActions() {
-    if (!s.isBuilt) return [
-      { id: 'set_hw',  label: 'Set Hardware',    fill: !!s.ctx?.hw },
-      { id: 'set_os',  label: 'Set OS',          fill: !!s.ctx?.os },
-      { id: 'set_db',  label: 'Set Database',    fill: !!s.ctx?.db },
-      { id: 'set_app', label: 'Set App / MW',    fill: !!s.ctx?.app },
-    ];
+    // Stack/scope selection now happens in the full-screen onboarding wizard
+    // (PhasePanel.jsx's OnboardingWizard) before OpsMentor ever mounts — see
+    // buildWelcome() above for the same 2026-09-18 change. No "Set Hardware"-
+    // style quick actions are needed here any more.
     if (!s.scanComplete) return [
       { id: 'run_scan', label: '▶ Run AI Scan', primary: true },
     ];
@@ -1052,7 +1039,7 @@ Rules:
           ? `System Design${n} — temporarily unlocked for CAB revision. Address the board's concerns, then resubmit. Changes here will mark the Gantt tasks stale.`
           : `System Design${n} — locked. Use the Tech Review toggle to make targeted field corrections without breaking the schedule. Any full re-open will require Gantt regeneration.`
         : s.scanComplete
-          ? `System Design${n}. Scan defaults are loaded for your stack. Step through all 8 sections — Network, Storage, Security, Backup, Compliance, Monitoring, DR, HA — and verify every field. Click "Generate Task Plan" to lock the design and build your Gantt in one step.`
+          ? `System Design${n}. ${s.activeDomain === 'infra' ? 'Scan defaults are loaded for your stack. ' : ''}Step through all ${DESIGN_SECTIONS.length} section${DESIGN_SECTIONS.length !== 1 ? 's' : ''} and verify every field. Click "Generate Task Plan" to lock the design and build your Gantt in one step.`
           : `System Design${n}. Run the AI Smart Scan from the sidebar first — it auto-fills defaults from your stack and flags EOL and CVE issues before you touch the design.`,
 
       gantt: !s.phase2Active
@@ -1073,17 +1060,23 @@ Rules:
             ? `RTM${n} — scope drifted after sign-off. Review every row against the updated scope, update dispositions, and re-sign before proceeding.`
             : `RTM${n}. ${failRtm > 0 ? `${failRtm} FAIL row${failRtm !== 1 ? 's' : ''} — each needs a mitigation and owner in RAID before sign-off.` : pendingRtm > 0 ? `${pendingRtm} PENDING row${pendingRtm !== 1 ? 's' : ''} remaining.` : 'All rows set.'} Every row must be PASS or NA before you can sign off.`,
 
-      matrix:  `Cross-Stack Dependency Matrix${n}. 8 swimlane layers — Hardware through Security. Use this to identify blocking chains between roles and verify no single owner is overloaded in the critical change window.`,
+      matrix:  `Cross-Stack Dependency Matrix${n}. ${s.activeDomain === 'infra' ? '8 swimlane layers — Hardware through Security.' : 'One swimlane per design section, plus Validation and Governance.'} Use this to identify blocking chains between roles and verify no single owner is overloaded in the critical change window.`,
 
       raid: `RAID Log${n}. ${(s.raidLog || []).filter(r => r.status === 'OPEN' && r.severity === 'CRITICAL').length > 0 ? `${(s.raidLog || []).filter(r => r.status === 'OPEN' && r.severity === 'CRITICAL').length} critical open item${(s.raidLog || []).filter(r => r.status === 'OPEN' && r.severity === 'CRITICAL').length !== 1 ? 's' : ''} need mitigation and an owner before CAB. ` : ''}Log every known risk, assumption, issue, and decision — this is your formal change governance record. CAB boards examine the RAID log as part of their approval review.`,
 
-      roles: `Roles and RACI${n}. ${rolesWithEmail < 5 ? 'Critical contacts missing — CAB boards ask for PM, DBA, Unix Admin, SecOps, and App Admin at minimum. Add email contacts before submission.' : rolesWithEmail < 15 ? `${rolesWithEmail}/20 roles assigned. Confirm all key leads have contacts and backup names.` : 'Team is fully assigned. Verify email addresses — these are used for RTM attribution and sign-off.'}`,
+      roles: `Roles and RACI${n}. ${rolesWithEmail < 5
+        ? (s.activeDomain === 'infra'
+            ? 'Critical contacts missing — CAB boards ask for PM, DBA, Unix Admin, SecOps, and App Admin at minimum. Add email contacts before submission.'
+            : 'Critical contacts missing — CAB boards ask for the PM and each design-section owner at minimum. Add email contacts before submission.')
+        : rolesWithEmail < 15
+          ? `${rolesWithEmail} role${rolesWithEmail !== 1 ? 's' : ''} assigned so far. Confirm all key leads have contacts and backup names.`
+          : 'Team is fully assigned. Verify email addresses — these are used for RTM attribution and sign-off.'}`,
 
       closure: !s.promoted
-        ? `Closure${n} — this tab activates after go-live. Complete the cutover first, then return here for hypercare monitoring, CMDB updates, lessons learned, and formal team sign-off.`
+        ? `Closure${n} — this tab activates after go-live. Complete the cutover first, then return here for hypercare monitoring, lessons learned, and formal team sign-off.`
         : closureTotal > 0
           ? `Closure${n} — ${closureDone}/${closureTotal} items complete. ${closureDone >= closureTotal ? 'All items done — export the audit trail from the sidebar to formally close the project.' : 'Work through every item before declaring the project closed. The lessons-learned section is required for the audit record.'}`
-          : `Closure${n}. Tick off every post-go-live item — hypercare monitoring, CMDB updates, lessons learned, and team sign-off — then export the full audit trail.`,
+          : `Closure${n}. Tick off every post-go-live item — hypercare monitoring, lessons learned, and team sign-off — then export the full audit trail.`,
 
       diagram: `Infrastructure Diagram${n}. Three views: Visual topology (layered stack), ASCII Map (copy directly into your CAB document), Mission Intel (business, functional, and technical analysis). The ASCII Map view is the fastest way to add architecture context to a change request.`,
 
@@ -1225,11 +1218,14 @@ Rules:
       return;
     }
 
-    // ctx fields: hw / os / db / app
-    const CTX_LABEL = { hw: 'Hardware', os: 'OS', db: 'Database', app: 'Application' };
+    // ctx fields: hw / os / db / app — FIELD_DISPLAY_LABEL (defined below in
+    // this same component) is domain-aware (reads getDomainMeta(activeDomain)
+    // .axisLabels); this used to duplicate it with a second, infra-only
+    // hardcoded map ('Hardware'/'OS'/'Database'/'Application' regardless of
+    // domain) that showed the wrong label for the other 15 PM domains.
     applyActionsWithRefs([{
       type: 'SET_CTX',
-      description: `Set ${CTX_LABEL[field] || field} to ${value}`,
+      description: `Set ${FIELD_DISPLAY_LABEL[field] || field} to ${value}`,
       params: { key: field, value },
       requiresConfirmation: false,
     }]);

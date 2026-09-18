@@ -463,7 +463,7 @@ ADD_UUM_ITEM       { short, txt, type: "upgrade"|"migration"|"patch", layer: "os
 ADD_RAID_ENTRY     { type: "RISK"|"ASSUMPTION"|"ISSUE"|"DECISION", description, severity: "CRITICAL"|"HIGH"|"MED"|"LOW", owner, mitigation }
 ADD_CUSTOM_TASK    { title, est_hours, notes }
 ADD_VULNERABILITY  { title, component, severity: "CRITICAL"|"HIGH"|"MEDIUM"|"LOW", description }
-NAVIGATE_TAB       { tab: "exec"|"design"|"gantt"|"rtm"|"matrix"|"raid"|"roles"|"closure"|${isInfraDomain ? '"diagram"|"cmdb"|' : ''}"vuln"|"risks"|"cost" }  -- "diagram" and "cmdb" only exist in the infra domain; never target them otherwise
+NAVIGATE_TAB       { tab: "exec"|"design"|"gantt"|"rtm"|"matrix"|"raid"|"roles"|"closure"|${isInfraDomain ? '"diagram"|' : ''}"vuln"|"risks"|"cost" }  -- "diagram" only exists in the infra domain; never target it otherwise ("cmdb" was removed from the app 2026-09-17 and no longer exists in any domain)
 UNLOCK_FOR_REVISION {}  requiresConfirmation ALWAYS
 RESUBMIT_CAB       {}  requiresConfirmation ALWAYS
 APPLY_DESIGN       {}  requiresConfirmation ALWAYS
