@@ -72,11 +72,11 @@ Whether you're standing up a single Oracle/RHEL server or coordinating a multi-r
 ServiceNow, Jira (Atlassian), Microsoft Project, Confluence, Monday.com
 
 **Screenshots to upload:**
-1. Phase 1 build screen (hardware/OS/DB/app selection)
-2. System Design tab (8-section form with AI suggestions)
+1. Phase 1 build screen (PM domain picker + stack selection)
+2. System Design tab (form with AI suggestions)
 3. Gantt tab (critical path + FSM panel)
 4. RTM tab (pass/fail matrix)
-5. CMDB tab (live EOL tracking)
+5. Matrix tab (cross-stack dependency swimlanes)
 
 **Logo:** `public/icon-512.png`
 

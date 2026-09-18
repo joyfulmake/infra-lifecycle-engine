@@ -1290,13 +1290,16 @@ export default function PhasePanel() {
                                 setDomainConfirmed(true);
                                 setDomainPickerOpen(false);
                               }}
-                              className="w-full text-left rounded-md px-2 py-1.5 border transition-colors flex items-center gap-2"
-                              style={active
-                                ? { background: `${d.accent}1A`, borderColor: `${d.accent}55` }
-                                : { background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}
+                              className={`w-full text-left rounded-md px-2 py-1.5 border transition-colors flex items-center gap-2 ${active ? '' : 'bg-white/3 border-white/8'}`}
+                              style={active ? { background: `${d.accent}1A`, borderColor: `${d.accent}55` } : undefined}
                             >
-                              <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? d.accent : 'rgba(255,255,255,0.62)' }} />
-                              <span className="min-w-0 flex-1 text-xs font-medium truncate" style={{ color: active ? d.accent : 'rgba(255,255,255,0.82)' }}>{d.shortLabel}</span>
+                              {/* Inactive state uses text-white/NN classes (not inline rgba) so the
+                                  [data-theme="light"] .sidebar-root override in index.css can repaint
+                                  it to a dark, readable color — an inline style can't be caught by
+                                  that selector, which is exactly why this rendered as unreadable pale
+                                  text on a pale background in light theme before this fix. */}
+                              <Icon className={`w-4 h-4 flex-shrink-0 ${active ? '' : 'text-white/62'}`} style={active ? { color: d.accent } : undefined} />
+                              <span className={`min-w-0 flex-1 text-xs font-medium truncate ${active ? '' : 'text-white/82'}`} style={active ? { color: d.accent } : undefined}>{d.shortLabel}</span>
                               {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: d.accent }} />}
                             </button>
                           );
@@ -2265,19 +2268,22 @@ export default function PhasePanel() {
         </div>
       </div>
 
-      {/* Disclaimer */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.10)', padding: '12px 16px 14px', marginTop: 'auto' }}>
-        <p style={{ fontSize: '10.5px', lineHeight: '1.6', color: 'rgba(255,255,255,0.72)', margin: 0 }}>
+      {/* Disclaimer — colors are text-white/NN classes, not inline rgba(255,255,255,..),
+          so [data-theme="light"] .sidebar-root's override in index.css can repaint them
+          to dark, readable colors. An inline style is invisible to that selector, which
+          is why this footer used to render pale-on-pale in light theme. */}
+      <div className="border-t border-white/10" style={{ padding: '12px 16px 14px', marginTop: 'auto' }}>
+        <p className="text-white/72" style={{ fontSize: '10.5px', lineHeight: '1.6', margin: 0 }}>
           OpsManifest guides delivery teams through structured governance workflows across {getDomainsByCategory().reduce((n, c) => n + c.domains.length, 0)} PM domains — not a replacement for ITSM, CMDB, or platforms such as ServiceNow, Jira, or Confluence.
         </p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '5px', flexWrap: 'wrap' }}>
-          <a href="/slides.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(13,148,136,0.70)', textDecoration: 'none' }}>About ↗</a>
-          <a href="/privacy.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>Privacy</a>
-          <a href="/tos.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>Terms</a>
-          <a href="/sla.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>SLA</a>
-          <a href="/msa.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>MSA</a>
-          <a href="/dpa.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>DPA</a>
-          <a href="/aup.html" target="_blank" rel="noopener" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.40)', textDecoration: 'none' }}>AUP</a>
+          <a href="/slides.html" target="_blank" rel="noopener" className="text-teal" style={{ fontSize: '10.5px', textDecoration: 'none' }}>About ↗</a>
+          <a href="/privacy.html" target="_blank" rel="noopener" className="text-white/40" style={{ fontSize: '10.5px', textDecoration: 'none' }}>Privacy</a>
+          <a href="/tos.html" target="_blank" rel="noopener" className="text-white/40" style={{ fontSize: '10.5px', textDecoration: 'none' }}>Terms</a>
+          <a href="/sla.html" target="_blank" rel="noopener" className="text-white/40" style={{ fontSize: '10.5px', textDecoration: 'none' }}>SLA</a>
+          <a href="/msa.html" target="_blank" rel="noopener" className="text-white/40" style={{ fontSize: '10.5px', textDecoration: 'none' }}>MSA</a>
+          <a href="/dpa.html" target="_blank" rel="noopener" className="text-white/40" style={{ fontSize: '10.5px', textDecoration: 'none' }}>DPA</a>
+          <a href="/aup.html" target="_blank" rel="noopener" className="text-white/40" style={{ fontSize: '10.5px', textDecoration: 'none' }}>AUP</a>
         </div>
       </div>
 

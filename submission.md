@@ -106,33 +106,34 @@ Fill in the following fields in the Partner Center listing form:
 
 **Description (up to 10,000 chars — suggested):**
 ```
-OpsManifest is a guided infrastructure lifecycle engine for IT teams and infrastructure PMs.
+OpsManifest is a guided delivery platform for project managers and delivery teams — covering 16 PM domains from infrastructure provisioning to SAP, Salesforce, cloud migration, healthcare, retail, and more.
 
-Walk through the complete server provisioning workflow — hardware and OS selection, system design, incident triage, CAB approval, RTM sign-off, and project closure — in one structured tool.
+Walk through the complete change delivery workflow — stack/scope selection, system design, known-issue triage, CAB approval, RTM sign-off, and project closure — in one structured tool that speaks your domain's own language.
 
 Key features:
+• 16 PM domains, one workflow engine — pick the domain that matches your project
 • Phase-gated workflow from design to production go-live
-• System design form with AI-assisted suggestions
-• Infrastructure topology diagram (layered: HW → OS → App/DB → Storage → Network)
+• System design form with AI-assisted, domain-aware suggestions
 • CAB approval and revision workflow
 • Requirements Traceability Matrix (RTM) with sign-off
 • Gantt chart with change-freeze periods and buffer scheduling
 • RAID log (Risks, Assumptions, Issues, Decisions)
+• Deploy pipeline tracking and a vendor/services register, cross-domain
 • Role-based access (PM, backup PM, QA Lead)
 • Cloud sync via Firebase (Pro plan)
-• Excel export across 15 sheets
+• Excel export across up to 18 sheets
 
 Not a CMDB or replacement for ServiceNow/Jira/Confluence — a structured pre-work guide that makes those systems more accurate.
 ```
 
 **Short description (up to 200 chars):**
 ```
-Guided infrastructure provisioning workflow for IT teams — system design, CAB approval, RTM sign-off, Gantt scheduling, RAID log, and Excel export.
+Guided delivery workflow for 16 PM domains — system design, CAB approval, RTM sign-off, Gantt scheduling, RAID log, and Excel export.
 ```
 
 **Keywords (comma-separated):**
 ```
-infrastructure, ITSM, provisioning, CAB, RTM, system design, Gantt, RAID log, IT operations, server lifecycle
+project management, delivery, provisioning, CAB, RTM, system design, Gantt, RAID log, SAP, infrastructure
 ```
 
 **Privacy policy URL:** `https://opsmanifest.pages.dev/privacy.html`
